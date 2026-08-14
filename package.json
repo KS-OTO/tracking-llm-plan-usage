@@ -1,0 +1,55 @@
+{
+  "name": "tracking-llm-plan-usage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "dev:all": "run-p server dev",
+    "server": "bun run server/index.ts",
+    "deploy": "bun run build && wrangler deploy",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vp preview",
+    "test:unit": "vp test",
+    "build-only": "vp build",
+    "type-check": "vue-tsc --build",
+    "lint": "vp lint . --fix",
+    "format": "vp fmt"
+  },
+  "dependencies": {
+    "tdesign-mobile-vue": "^1.16.0",
+    "vue": "^3.5.40"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.4",
+    "@types/bun": "^1.3.14",
+    "@types/jsdom": "^28.0.3",
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.4.11",
+    "@vue/tsconfig": "^0.9.1",
+    "jiti": "^2.7.0",
+    "jsdom": "^29.1.1",
+    "npm-run-all2": "^9.0.2",
+    "typescript": "~6.0.0",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.7",
+    "vite-plugin-vue-devtools": "^8.1.5",
+    "vite-plus": "0.2.7",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.3.7",
+    "wrangler": "^4.119.0"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.3.14",
+      "onFail": "download"
+    }
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.7"
+  }
+}

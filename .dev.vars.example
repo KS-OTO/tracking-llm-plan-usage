@@ -1,0 +1,9 @@
+# Cloudflare Workers 本地调试变量（.dev.vars，勿提交）
+# 生产环境请用 wrangler secret put <NAME> 配置
+DEEPSEEK_API_KEY=sk-xxxx
+VOLC_ACCESS_KEY_ID=AKLTxxxx
+VOLC_SECRET_KEY=xxxx
+ZHIPU_API_KEY=xxxxx.xxxxx
+ALIYUN_ACCESS_KEY_ID=LTAIxxxx
+ALIYUN_SECRET_KEY=xxxx
+GITEE_AI_API_KEY=UC03xxxxxxxxxxxxxxxxxxxxxxxxxxxx
