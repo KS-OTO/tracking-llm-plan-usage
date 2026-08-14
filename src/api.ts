@@ -1,8 +1,8 @@
 import type {
   AliyunPackagesResponse,
-  DeepSeekBalance,
+  DeepSeekBalanceResponse,
   ExtrasResponse,
-  GiteePackageBalance,
+  GiteeBalanceResponse,
   InferenceUsageResponse,
   StatusResponse,
   TokenPlanResponse,
@@ -59,7 +59,7 @@ async function get<T>(path: string, params?: Record<string, string | number>): P
 
 export const api = {
   status: () => get<StatusResponse>('/api/status'),
-  deepseekBalance: () => get<DeepSeekBalance>('/api/deepseek/balance'),
+  deepseekBalance: () => get<DeepSeekBalanceResponse>('/api/deepseek/balance'),
   volcPlan: (days: number) => get<VolcPlanResponse>('/api/volc/plan', { days }),
   volcInference: (days: number, model?: string) =>
     get<InferenceUsageResponse>('/api/volc/inference-usage', model ? { days, model } : { days }),
@@ -67,6 +67,6 @@ export const api = {
   aliyunPackages: (productCode?: string) =>
     get<AliyunPackagesResponse>('/api/aliyun/packages', productCode ? { productCode } : undefined),
   aliyunTokenPlan: () => get<TokenPlanResponse>('/api/aliyun/tokenplan'),
-  giteeBalance: () => get<GiteePackageBalance>('/api/gitee/balance'),
+  giteeBalance: () => get<GiteeBalanceResponse>('/api/gitee/balance'),
   extras: () => get<ExtrasResponse>('/api/extras'),
 }
