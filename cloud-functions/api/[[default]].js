@@ -10,7 +10,7 @@ import { createAppHandler } from '../../server/app.ts'
 
 export async function onRequest(context) {
   const { request, env } = context
-  const appHandler = createAppHandler((key: string) => env[key] ?? undefined)
+  const appHandler = createAppHandler((key) => env[key] ?? undefined)
   const response = await appHandler(request)
   return response ?? new Response('Not Found', { status: 404 })
 }
