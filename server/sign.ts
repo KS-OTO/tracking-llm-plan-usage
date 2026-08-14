@@ -99,7 +99,7 @@ export async function signVolcRequest(input: VolcSignInput): Promise<VolcSignRes
     ...input.extraHeaders,
   }
   const names = Object.keys(headerValues).sort()
-  const canonicalHeaders = names.map((name) => `${name}:${headerValues[name].trim()}\n`).join('')
+  const canonicalHeaders = names.map((name) => `${name}:${headerValues[name]!.trim()}\n`).join('')
   const signedHeaders = names.join(';')
 
   const queryString = Object.entries(input.query ?? {})
