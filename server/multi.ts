@@ -57,3 +57,29 @@ export function readKeyPairs(keyPrefix: string, secretPrefix: string, env?: EnvG
   }
   return pairs
 }
+
+/**
+ * 按编号前缀读取两组变量的配对映射（如 GITEE_AI_API_KEY ↔ GITEE_AI_SESSION_COOKIE）。
+ * 两组序列独立连续编号：base 变量存在而对应 `_N` 缺失时，该组 value 为 undefined；
+ * 两组同编号都缺失时停止。避免数组索引配对在序列缺口时错位。
+ */
+export function readPairedMap(
+  keyPrefix: string,
+  valuePrefix: string,
+  env?: EnvGetter,
+): Map<string, string> {
+  const get = envOf(env)
+  const map = new Map<string, string>()
+  for (let i = 1; ; i++) {
+    const suffix = i === 1 ? '' : `_${i}`
+    const key = get(`${keyPrefix}${suffix}`)?.trim()
+    const value = get(`${valuePrefix}${suffix}`)?.trim()
+    if (!key && !value) {
+      break
+    }
+    if (key) {
+      map.set(key, value ?? '')
+    }
+  }
+  return map
+}

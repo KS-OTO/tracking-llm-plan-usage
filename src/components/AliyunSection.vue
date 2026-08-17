@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import type { AliyunPackagesResponse } from '../types'
+import { isFailedAccount } from '../types'
+
+import AccountSection from './AccountSection.vue'
 
 defineProps<{
   data: AliyunPackagesResponse | null
@@ -33,33 +36,53 @@ function rowsOf(
     totalCount?: number
   },
 ) {
-  return (account.packages ?? []).map((pkg) => ({
-    ...pkg,
-    _key: pkg.instanceId,
-    _name: pkg.commodityCode || pkg.packageType || pkg.instanceId,
-  }))
+  return (account.packages ?? []).map((pkg) =>
+    Object.assign({}, pkg, {
+      _key: pkg.instanceId,
+      _name: pkg.commodityCode || pkg.packageType || pkg.instanceId,
+    }),
+  )
 }
 </script>
 
 <template>
-  <t-cell-group :title="`阿里云百炼 资源包（${data?.accounts.length ?? 0} 账号）`" theme="card">
-    <t-skeleton v-if="loading" animation="gradient" :row="2" />
-    <t-cell v-else-if="error" title="查询失败" :note="error" />
-    <template v-else-if="data">
-      <template v-for="(account, index) in data.accounts" :key="account.keyHint">
-        <t-divider v-if="index > 0" />
-        <t-cell v-if="account.error" :title="`账号 ${account.keyHint}`" :note="account.error" />
-        <div v-else class="td-card">
-          <t-tag size="small" variant="light-outline" theme="primary"
-            >账号 {{ account.keyHint }}</t-tag
-          >
-          <div class="table-scroll account-gap">
+  <AccountSection
+    title="阿里云百炼 资源包"
+    :subtitle="`账号 ${data?.accounts.length ?? 0}`"
+    :loading="loading"
+    :error="error"
+    :empty="data?.accounts.length === 0"
+    empty-text="未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY"
+  >
+    <template v-if="data">
+      <t-space direction="vertical" size="medium" class="accounts">
+        <t-card
+          v-for="account in data.accounts"
+          :key="account.keyHint"
+          size="small"
+          header-bordered
+        >
+          <template #header>
+            <t-tag size="small" variant="light-outline" theme="primary">
+              {{ account.keyHint }}
+            </t-tag>
+          </template>
+
+          <t-alert
+            v-if="isFailedAccount(account)"
+            theme="error"
+            :title="`账号 ${account.keyHint} 查询失败`"
+            :message="account.error"
+            :max-line="5"
+          />
+          <template v-else>
             <t-table
               :data="rowsOf(account)"
               :columns="columns"
               row-key="_key"
               max-height="360"
-              :bordered="true"
+              bordered
+              size="small"
             >
               <template #name="{ row }">{{ row._name }}</template>
               <template #total="{ row }">
@@ -81,20 +104,25 @@ function rowsOf(
                 </t-tag>
               </template>
             </t-table>
-          </div>
-          <t-empty v-if="account.totalCount === 0" description="该账号下没有资源包实例" />
-        </div>
-      </template>
-      <t-empty
-        v-if="data.accounts.length === 0"
-        description="未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY"
-      />
+            <t-empty v-if="account.totalCount === 0" description="该账号下没有资源包实例" />
+          </template>
+        </t-card>
+      </t-space>
     </template>
-  </t-cell-group>
+  </AccountSection>
 </template>
 
 <style scoped>
-.account-gap {
-  margin-top: 12px;
+.accounts {
+  width: 100%;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

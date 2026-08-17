@@ -15,8 +15,15 @@ export interface StatusResponse {
   now: number
 }
 
-/** 多账号响应包裹：每个账号一条记录，keyHint 为掩码凭据。 */
-export type AccountEnvelope<T> = T & { keyHint: string; error?: string }
+/** 多账号响应包裹：成功账号携带数据字段，失败账号仅含错误信息（服务端 runAccounts 契约）。 */
+export type AccountEnvelope<T> = (T & { keyHint: string }) | { keyHint: string; error: string }
+
+/** 账号查询是否失败（失败账号不含数据字段）。 */
+export function isFailedAccount<T>(
+  account: AccountEnvelope<T>,
+): account is { keyHint: string; error: string } {
+  return 'error' in account && account.error !== undefined
+}
 
 export interface BalanceEntry {
   currency: string
@@ -224,7 +231,30 @@ export interface GiteePackageBalance {
   usedAmount: number
   balance: number
   details: GiteePackageDetail[]
+  /** 配置了 GITEE_AI_SESSION_COOKIE 时返回的代金券数据（独立容错）。 */
+  voucher?: GiteeVoucherSlice
 }
+
+export interface GiteeVoucherCoupon {
+  id: number
+  catalog: string
+  type: string
+  amount: number
+  balance: number
+  expiredAt: number
+  status: number
+  serviceTypes: string[]
+}
+
+export interface GiteeVoucher {
+  namespace: string
+  couponCashBalance: number
+  couponComputeBalance: number
+  coupons: GiteeVoucherCoupon[]
+}
+
+/** 代金券子查询（独立容错）：成功携带 data，失败仅含 error（判别联合，二者互斥）。 */
+export type GiteeVoucherSlice = { data: GiteeVoucher } | { error: string }
 
 export interface GiteeBalanceResponse {
   accounts: AccountEnvelope<GiteePackageBalance>[]

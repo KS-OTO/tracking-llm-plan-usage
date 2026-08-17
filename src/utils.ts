@@ -57,3 +57,17 @@ export const PLAN_WINDOW_LABELS: Record<string, string> = {
   weekly: '每周',
   monthly: '每月',
 }
+
+/**
+ * 进度条状态：基于使用百分比映射 TDesign 桌面端 Progress status。
+ * 桌面端 status 可选值 success/warning/error/active（无 danger）。
+ */
+export function progressStatus(percent: number): 'success' | 'warning' | 'error' {
+  if (percent >= 90) {
+    return 'error'
+  }
+  if (percent >= 70) {
+    return 'warning'
+  }
+  return 'success'
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 
-import { formatMoney, formatReset, formatTokens, maskKey, ratioOf } from '../utils'
+import { formatMoney, formatReset, formatTokens, maskKey, progressStatus, ratioOf } from '../utils'
 
 describe('maskKey', () => {
   it('keeps only the first and last 4 characters', () => {
@@ -61,5 +61,22 @@ describe('formatReset', () => {
   it('reports days for far away resets', () => {
     const in3Days = Date.now() + 3 * 24 * 3_600_000
     expect(formatReset(in3Days)).toBe('3 天后重置')
+  })
+})
+
+describe('progressStatus', () => {
+  it('maps healthy usage to success', () => {
+    expect(progressStatus(0)).toBe('success')
+    expect(progressStatus(69.9)).toBe('success')
+  })
+
+  it('maps heavy usage to warning', () => {
+    expect(progressStatus(70)).toBe('warning')
+    expect(progressStatus(89.9)).toBe('warning')
+  })
+
+  it('maps critical usage to error (desktop Progress has no danger)', () => {
+    expect(progressStatus(90)).toBe('error')
+    expect(progressStatus(100)).toBe('error')
   })
 })
