@@ -43,10 +43,10 @@ test.describe('dashboard smoke', () => {
 
   test('page renders header, tabs and empty states without crashing', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: 'LLM 用量监控' })).toBeVisible()
+    await expect(page.getByText('LLM 用量监控', { exact: true }).first()).toBeVisible()
     await expect(page.getByText('套餐订阅')).toBeVisible()
     // 默认总览 Tab；切到套餐订阅验证区块空态
-    await page.getByText('套餐订阅', { exact: true }).click()
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
     // 未配置密钥 → 区块展示未配置提示（VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY）
     await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
       { timeout: 30_000 },
@@ -54,7 +54,7 @@ test.describe('dashboard smoke', () => {
   })
   test('tab switching exposes balance sections', async ({ page }) => {
     await page.goto('/')
-    await page.getByText('余额账户').click()
+    await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
     await expect(page.getByText('未配置 DEEPSEEK_API_KEY')).toBeVisible({ timeout: 30_000 })
   })
 
@@ -76,27 +76,27 @@ test.describe('dashboard smoke', () => {
 
   test('responsive: subscription grid reflows between desktop and mobile', async ({ page }) => {
     await page.goto('/')
-    await page.getByText('套餐订阅', { exact: true }).click()
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
     await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
       { timeout: 30_000 },
     )
 
-    // 桌面（≥992px）：两个套餐区块并排（同一行）
+    // 桌面（≥992px）：区块卡片渲染（限定可见面板，v-show 隐藏面板的卡片不算）
     await page.setViewportSize({ width: 1440, height: 900 })
-    const cards = page.locator('.t-card')
-    await expect(cards.first()).toBeVisible()
+    const cards = page.locator('.t-card:visible')
+    await expect(cards.first()).toBeVisible({ timeout: 10_000 })
     const desktopCount = await cards.count()
     expect(desktopCount).toBeGreaterThan(0)
 
     // 手机（<768px）：单列布局，页面仍可用
     await page.setViewportSize({ width: 375, height: 667 })
-    await expect(page.getByRole('heading', { name: 'LLM 用量监控' })).toBeVisible()
+    await expect(page.getByText('LLM 用量监控', { exact: true }).first()).toBeVisible()
   })
 
   test('back-to-top appears after scrolling and returns to top', async ({ page }) => {
     await page.goto('/')
     await page.setViewportSize({ width: 375, height: 667 })
-    await page.getByText('套餐订阅', { exact: true }).click()
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
     await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
       { timeout: 30_000 },
     )

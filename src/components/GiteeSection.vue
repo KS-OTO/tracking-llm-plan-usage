@@ -74,18 +74,13 @@ function formatDate(ms: number): string {
   >
     <template v-if="data">
       <t-space direction="vertical" size="medium" class="accounts">
-        <t-card
-          v-for="(account, i) in data.accounts"
-          :key="account.keyHint"
-          size="small"
-          header-bordered
-        >
-          <template #header>
+        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+          <div class="account-head">
             <t-tag size="small" variant="light-outline" theme="primary">{{
               accountName(account, i)
             }}</t-tag>
             <span class="muted key-hint">{{ account.keyHint }}</span>
-          </template>
+          </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
@@ -95,7 +90,7 @@ function formatDate(ms: number): string {
             :max-line="5"
           />
           <template v-else>
-            <t-row :gutter="[16, 12]">
+            <t-row :gutter="[16, 16]">
               <t-col :xs="24" :sm="8">
                 <t-statistic
                   title="剩余余额"
@@ -129,7 +124,6 @@ function formatDate(ms: number): string {
               :columns="columns"
               row-key="ident"
               max-height="360"
-              bordered
               size="small"
             >
               <template #name="{ row }">{{ row.name || row.ident || '未命名资源包' }}</template>
@@ -155,7 +149,7 @@ function formatDate(ms: number): string {
                 :max-line="5"
               />
               <template v-else-if="voucherOk(account.voucher)">
-                <t-row :gutter="[16, 12]">
+                <t-row :gutter="[16, 16]">
                   <t-col :xs="24" :sm="12">
                     <t-statistic
                       title="现金代金券余额"
@@ -179,7 +173,6 @@ function formatDate(ms: number): string {
                   :columns="voucherColumns"
                   row-key="id"
                   max-height="300"
-                  bordered
                   size="small"
                 >
                   <template #catalog="{ row }">
@@ -199,7 +192,7 @@ function formatDate(ms: number): string {
               </template>
             </template>
           </template>
-        </t-card>
+        </div>
       </t-space>
     </template>
   </AccountSection>
@@ -218,5 +211,18 @@ function formatDate(ms: number): string {
 .scene {
   max-width: 200px;
   white-space: normal;
+}
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 </style>

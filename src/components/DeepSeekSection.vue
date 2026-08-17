@@ -25,13 +25,8 @@ defineProps<{
   >
     <template v-if="data">
       <t-space direction="vertical" size="medium" class="accounts">
-        <t-card
-          v-for="(account, i) in data.accounts"
-          :key="account.keyHint"
-          size="small"
-          header-bordered
-        >
-          <template #header>
+        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+          <div class="account-head">
             <t-space align="center" size="small">
               <t-tag size="small" variant="light-outline" theme="primary">{{
                 accountName(account, i)
@@ -46,7 +41,7 @@ defineProps<{
                 {{ account.isAvailable ? '可用' : '不可用' }}
               </t-tag>
             </t-space>
-          </template>
+          </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
@@ -55,7 +50,7 @@ defineProps<{
             :message="account.error"
             :max-line="5"
           />
-          <t-row v-else :gutter="[16, 12]">
+          <t-row v-else :gutter="[16, 16]">
             <t-col v-for="entry in account.balances" :key="entry.currency" :xs="24" :sm="12">
               <t-statistic
                 :title="`${entry.currency} 总余额`"
@@ -73,7 +68,7 @@ defineProps<{
               </t-descriptions>
             </t-col>
           </t-row>
-        </t-card>
+        </div>
       </t-space>
     </template>
   </AccountSection>
@@ -86,5 +81,18 @@ defineProps<{
 
 .balance-detail {
   margin-top: 8px;
+}
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 </style>

@@ -58,18 +58,13 @@ function rowsOf(
   >
     <template v-if="data">
       <t-space direction="vertical" size="medium" class="accounts">
-        <t-card
-          v-for="(account, i) in data.accounts"
-          :key="account.keyHint"
-          size="small"
-          header-bordered
-        >
-          <template #header>
+        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+          <div class="account-head">
             <t-tag size="small" variant="light-outline" theme="primary">{{
               accountName(account, i)
             }}</t-tag>
             <span class="muted key-hint">{{ account.keyHint }}</span>
-          </template>
+          </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
@@ -84,7 +79,6 @@ function rowsOf(
               :columns="columns"
               row-key="_key"
               max-height="360"
-              bordered
               size="small"
             >
               <template #name="{ row }">{{ row._name }}</template>
@@ -109,7 +103,7 @@ function rowsOf(
             </t-table>
             <t-empty v-if="account.totalCount === 0" description="该账号下没有资源包实例" />
           </template>
-        </t-card>
+        </div>
       </t-space>
     </template>
   </AccountSection>
@@ -127,5 +121,18 @@ function rowsOf(
 .muted {
   color: var(--td-text-color-placeholder);
   font-size: 12px;
+}
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 </style>

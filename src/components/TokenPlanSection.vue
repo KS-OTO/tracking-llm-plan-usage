@@ -111,13 +111,8 @@ function packageRows(
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
-        <t-card
-          v-for="(account, i) in data.accounts"
-          :key="account.keyHint"
-          size="small"
-          header-bordered
-        >
-          <template #header>
+        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+          <div class="account-head">
             <t-space align="center" size="small" break-line>
               <t-tag size="small" variant="light-outline" theme="primary">{{
                 accountName(account, i)
@@ -133,7 +128,7 @@ function packageRows(
                 <span class="muted num">UID {{ account.account?.aliyunUid }}</span>
               </template>
             </t-space>
-          </template>
+          </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
@@ -150,7 +145,6 @@ function packageRows(
               :columns="seatColumns"
               row-key="_key"
               max-height="300"
-              bordered
               size="small"
             >
               <template #instance="{ row }">
@@ -180,7 +174,6 @@ function packageRows(
               :columns="packageColumns"
               row-key="_key"
               max-height="300"
-              bordered
               size="small"
             >
               <template #instance="{ row }">
@@ -203,7 +196,7 @@ function packageRows(
             </t-table>
             <t-empty v-if="(account.sharedPackages?.total ?? 0) === 0" description="没有共享包" />
           </template>
-        </t-card>
+        </div>
       </t-space>
     </template>
   </AccountSection>
@@ -226,5 +219,18 @@ function packageRows(
 .muted {
   color: var(--td-text-color-placeholder);
   font-size: 12px;
+}
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 </style>

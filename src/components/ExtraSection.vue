@@ -33,7 +33,7 @@ const WINDOW_LABELS: Record<string, string> = {
             <strong>{{ group.provider }}</strong>
             <span class="muted">账户余额 · {{ group.accounts.length }} 账号</span>
           </div>
-          <t-row :gutter="[12, 12]">
+          <t-row :gutter="[16, 16]">
             <t-col
               v-for="account in group.accounts"
               :key="account.keyHint"
@@ -89,7 +89,7 @@ const WINDOW_LABELS: Record<string, string> = {
               <span class="muted">Token Plan · {{ group.accounts.length }} 账号</span>
             </t-space>
           </t-divider>
-          <t-row :gutter="[12, 12]">
+          <t-row :gutter="[16, 16]">
             <t-col
               v-for="account in group.accounts"
               :key="account.keyHint"
@@ -111,7 +111,7 @@ const WINDOW_LABELS: Record<string, string> = {
                   :max-line="5"
                 />
                 <template v-else>
-                  <t-row v-if="account.windows.length > 0" :gutter="[12, 12]">
+                  <t-row v-if="account.windows.length > 0" :gutter="[16, 16]">
                     <t-col v-for="window in account.windows" :key="window.window" :xs="24">
                       <div class="window-block">
                         <t-space align="center" justify="space-between" class="window-head">
@@ -158,8 +158,8 @@ const WINDOW_LABELS: Record<string, string> = {
 }
 
 .window-block {
-  padding: 12px;
-  border: 1px solid var(--td-component-stroke);
+  padding: var(--td-size-5) var(--td-size-6);
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: var(--td-radius-medium);
 }
 
