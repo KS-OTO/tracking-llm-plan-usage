@@ -1,3 +1,12 @@
+/**
+ * Volcengine Ark control-plane clients.
+ *
+ * - GetAFPUsage / GetUsageDetails / GetCodingPlanUsage / GetInferenceUsage
+ * - 签名走 sign.ts（火山 v4，Web Crypto）
+ * - 响应结构经 zod schema 在边界统一解析
+ */
+import { z } from 'zod'
+
 import { signVolcRequest } from './sign.ts'
 
 const textEncoder = new TextEncoder()
@@ -8,18 +17,6 @@ async function sha256Hex(input: string): Promise<string> {
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')
 }
-
-/**
- * Volcengine Ark control-plane clients.
- *
- * - GetAFPUsage (Agent Plan AFP quota):     https://console.volcengine.com/ark/region:cn-beijing/docs/82379/2479847
- * - GetUsageDetails (Agent Plan usage):     https://console.volcengine.com/ark/region:cn-beijing/docs/82379/2479849
- * - GetInferenceUsage (Coding Plan usage):  https://console.volcengine.com/ark/region:cn-beijing/docs/82379/2116766
- * - Base URL & auth:                        https://console.volcengine.com/ark/region:cn-beijing/docs/82379/1298459
- *
- * All are control-plane APIs authenticated with Access Key ID + Secret Access Key
- * (HMAC-SHA256 signature v4, service = ark, region = cn-beijing).
- */
 
 export const ARK_API_VERSION = '2024-01-01'
 // 管控面 API 网关（文档 1298459 Base URL）；GetAFPUsage/GetUsageDetails 文档示例中的
@@ -42,13 +39,15 @@ export class VolcApiError extends Error {
   }
 }
 
-interface ArkResponse {
-  Result?: unknown
-  ResponseMetadata?: {
-    RequestId?: string
-    Error?: { Code?: string; Message?: string }
-  }
-}
+const ArkResponse = z.object({
+  ResponseMetadata: z
+    .object({
+      Error: z.object({ Code: z.string().optional(), Message: z.string().optional() }).optional(),
+    })
+    .optional(),
+  Result: z.unknown().optional(),
+  error: z.unknown().optional(),
+})
 
 async function arkCall(
   creds: VolcCredentials,
@@ -56,7 +55,7 @@ async function arkCall(
   action: string,
   body: unknown,
   region?: string,
-): Promise<ArkResponse> {
+): Promise<z.infer<typeof ArkResponse>> {
   const bodyText = JSON.stringify(body)
   const payloadHash = await sha256Hex(bodyText)
 
@@ -95,9 +94,9 @@ async function arkCall(
   }
 
   const text = await res.text()
-  let json: ArkResponse
+  let json: unknown
   try {
-    json = JSON.parse(text) as ArkResponse
+    json = JSON.parse(text)
   } catch {
     throw new VolcApiError(
       res.status,
@@ -105,26 +104,26 @@ async function arkCall(
       `响应不是合法 JSON: ${text.slice(0, 200)}`,
     )
   }
+  const parsed = ArkResponse.safeParse(json)
+  if (!parsed.success) {
+    throw new VolcApiError(res.status, 'InvalidResponse', `响应结构无法解析: ${text.slice(0, 200)}`)
+  }
 
-  if (!res.ok || json.ResponseMetadata?.Error) {
-    const metaError = json.ResponseMetadata?.Error
-    let gatewayCode: string | undefined
-    let gatewayMessage: string | undefined
-    if ('error' in json && json.error && typeof json.error === 'object') {
-      const error = json.error
-      if ('code' in error && typeof error.code === 'string') {
-        gatewayCode = error.code
-      }
-      if ('message' in error && typeof error.message === 'string') {
-        gatewayMessage = error.message
-      }
-    }
-    const code = metaError?.Code ?? gatewayCode ?? `HTTP_${res.status}`
-    const message = metaError?.Message ?? gatewayMessage ?? text.slice(0, 200)
+  const result = parsed.data
+  if (!res.ok || result.ResponseMetadata?.Error) {
+    const metaError = result.ResponseMetadata?.Error
+    const gatewayError = ArkGatewayError.safeParse(result.error)
+    const code = metaError?.Code ?? gatewayError.data?.code ?? `HTTP_${res.status}`
+    const message = metaError?.Message ?? gatewayError.data?.message ?? text.slice(0, 200)
     throw new VolcApiError(res.status, code, message)
   }
-  return json
+  return result
 }
+
+const ArkGatewayError = z.object({
+  code: z.string().optional(),
+  message: z.string().optional(),
+})
 
 // ---------------------------------------------------------------------------
 // GetAFPUsage - Agent Plan 五小时/每日/每周/每月 AFP 额度
@@ -140,37 +139,52 @@ export interface PlanWindow {
   resetTime: number
 }
 
-interface AfpWindowShape {
-  Quota?: number
-  Used?: number
-  SubscribeTime?: number
-  ResetTime?: number
+const AfpWindowShape = z
+  .object({
+    Quota: z.coerce.number().catch(0),
+    Used: z.coerce.number().catch(0),
+    SubscribeTime: z.coerce.number().catch(0),
+    ResetTime: z.coerce.number().catch(0),
+  })
+  .nullish()
+
+function warnSchemaFallback(label: string, value: unknown): void {
+  console.warn(`[volc] ${label} 响应契约漂移，已降级解析（原始值见日志）`, value)
 }
+
+const AfpResult = z
+  .object({
+    PlanType: z.string().optional(),
+    AFPFiveHour: AfpWindowShape,
+    AFPDaily: AfpWindowShape,
+    AFPWeekly: AfpWindowShape,
+    AFPMonthly: AfpWindowShape,
+  })
+  .nullable()
+  .catch(null)
 
 export interface AfpUsage {
   planType?: string
   windows: PlanWindow[]
 }
 
-function toWindow(window: PlanWindowName, shape: AfpWindowShape | undefined): PlanWindow {
+function toWindow(window: PlanWindowName, shape: z.infer<typeof AfpWindowShape>): PlanWindow {
   return {
     window,
-    quota: Number(shape?.Quota ?? 0),
-    used: Number(shape?.Used ?? 0),
-    subscribeTime: Number(shape?.SubscribeTime ?? 0),
-    resetTime: Number(shape?.ResetTime ?? 0),
+    quota: shape?.Quota ?? 0,
+    used: shape?.Used ?? 0,
+    subscribeTime: shape?.SubscribeTime ?? 0,
+    resetTime: shape?.ResetTime ?? 0,
   }
 }
 
 export async function getAfpUsage(creds: VolcCredentials): Promise<AfpUsage> {
   const response = await arkCall(creds, ARK_PLAN_HOST, 'GetAFPUsage', {})
-  const result = response.Result as {
-    PlanType?: string
-    AFPFiveHour?: AfpWindowShape
-    AFPDaily?: AfpWindowShape
-    AFPWeekly?: AfpWindowShape
-    AFPMonthly?: AfpWindowShape
-  } | null
+  const parsedAfp = AfpResult.safeParse(response.Result)
+  if (!parsedAfp.success) {
+    warnSchemaFallback('GetAFPUsage', response.Result)
+  }
+  const result = parsedAfp.success ? parsedAfp.data : null
 
   return {
     planType: result?.PlanType,
@@ -197,6 +211,23 @@ export interface UsageDetail {
   billingType: BillingType
 }
 
+const UsageDetailsResult = z
+  .object({
+    Details: z
+      .array(
+        z.object({
+          Time: z.coerce.number().catch(0),
+          ObjectName: z.string().catch(''),
+          Usage: z.coerce.number().catch(0),
+          Unit: z.string().catch('Tokens'),
+          BillingType: z.string().catch('WithinPlan'),
+        }),
+      )
+      .catch([]),
+  })
+  .nullable()
+  .catch(null)
+
 export async function getUsageDetails(
   creds: VolcCredentials,
   startDate: string,
@@ -209,22 +240,19 @@ export async function getUsageDetails(
       EndTime: endDate,
     },
   })
-  const details =
-    (response.Result as { Details?: Array<Record<string, unknown>> } | null)?.Details ?? []
+  const parsedDetails = UsageDetailsResult.safeParse(response.Result)
+  if (!parsedDetails.success) {
+    warnSchemaFallback('GetUsageDetails', response.Result)
+  }
+  const details = parsedDetails.success ? (parsedDetails.data?.Details ?? []) : []
 
-  return details.map((entry) => {
-    const objectName = typeof entry.ObjectName === 'string' ? entry.ObjectName : ''
-    const unit = typeof entry.Unit === 'string' ? entry.Unit : 'Tokens'
-    return {
-      time: Number(entry.Time ?? 0),
-      objectName,
-      usage: Number(entry.Usage ?? 0),
-      unit,
-      billingType: (entry.BillingType === 'OutsideOfPlan'
-        ? 'OutsideOfPlan'
-        : 'WithinPlan') as BillingType,
-    }
-  })
+  return details.map((entry) => ({
+    time: entry.Time,
+    objectName: entry.ObjectName,
+    usage: entry.Usage,
+    unit: entry.Unit,
+    billingType: entry.BillingType === 'OutsideOfPlan' ? 'OutsideOfPlan' : 'WithinPlan',
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +271,30 @@ export interface CodingPlanUsage {
   windows: CodingPlanWindow[]
 }
 
+const CodingPlanQuotaItem = z
+  .object({
+    Level: z.string().catch(''),
+    Type: z.string().catch(''),
+    Period: z.string().catch(''),
+    Percent: z.coerce.number().nullish(),
+    UsedPercent: z.coerce.number().nullish(),
+    UsagePercent: z.coerce.number().nullish(),
+    ResetTime: z.coerce.number().nullish(),
+    ResetTimestamp: z.coerce.number().nullish(),
+  })
+  .nullish()
+
+const CodingPlanResult = z
+  .object({
+    QuotaUsage: z.array(CodingPlanQuotaItem).nullish().catch(null),
+    Usages: z.array(CodingPlanQuotaItem).nullish().catch(null),
+    Details: z.array(CodingPlanQuotaItem).nullish().catch(null),
+    Status: z.string().catch(''),
+    UpdateTimestamp: z.coerce.number().catch(0),
+  })
+  .nullable()
+  .catch(null)
+
 /**
  * Coding Plan 额度查询（实现参考开源项目 cc-switch 的 src-tauri/services/coding_plan.rs）：
  * - POST open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01&Region=cn-beijing
@@ -251,36 +303,33 @@ export interface CodingPlanUsage {
  */
 export async function getCodingPlanUsage(creds: VolcCredentials): Promise<CodingPlanUsage> {
   const response = await arkCall(creds, ARK_OPEN_HOST, 'GetCodingPlanUsage', {}, 'cn-beijing')
-  const result = response.Result as Record<string, unknown> | null
+  const parsedCoding = CodingPlanResult.safeParse(response.Result)
+  if (!parsedCoding.success) {
+    warnSchemaFallback('GetCodingPlanUsage', response.Result)
+  }
+  const result = parsedCoding.success ? parsedCoding.data : null
 
   const windows: CodingPlanWindow[] = []
-  const quotaUsage =
-    (Array.isArray(result?.QuotaUsage) ? result.QuotaUsage : undefined) ??
-    (Array.isArray(result?.Usages) ? result.Usages : undefined) ??
-    (Array.isArray(result?.Details) ? result.Details : undefined)
+  const quotaUsage = result?.QuotaUsage ?? result?.Usages ?? result?.Details
   if (quotaUsage) {
-    for (const item of quotaUsage) {
-      if (item === null || typeof item !== 'object') {
+    for (const raw of quotaUsage) {
+      if (!raw) {
         continue
       }
-      const entry = item as Record<string, unknown>
-      const level =
-        (typeof entry.Level === 'string' ? entry.Level : '') ||
-        (typeof entry.Type === 'string' ? entry.Type : '') ||
-        (typeof entry.Period === 'string' ? entry.Period : '')
+      const entry = raw
+      const level = entry.Level || entry.Type || entry.Period
       if (!level) {
         continue
       }
-      const percent = Number(entry.Percent ?? entry.UsedPercent ?? entry.UsagePercent ?? 0)
-      const rawReset = entry.ResetTime ?? entry.ResetTimestamp
-      const resetTime = Number(rawReset ?? 0)
+      const percent = entry.Percent ?? entry.UsedPercent ?? entry.UsagePercent ?? 0
+      const resetTime = entry.ResetTime ?? entry.ResetTimestamp ?? 0
       windows.push({ level, percent, resetTime: resetTime > 1e12 ? resetTime : resetTime * 1000 })
     }
   }
 
   return {
-    status: typeof result?.Status === 'string' ? result.Status : '',
-    updateTimestamp: Number(result?.UpdateTimestamp ?? 0),
+    status: result?.Status ?? '',
+    updateTimestamp: result?.UpdateTimestamp ?? 0,
     windows,
   }
 }
@@ -305,6 +354,14 @@ export interface InferenceUsage {
   columns: string[]
 }
 
+const InferenceResult = z
+  .object({
+    Fields: z.array(z.object({ Name: z.string().catch('') })).catch([]),
+    Data: z.array(z.array(z.union([z.string(), z.number(), z.null()]).catch(''))).catch([]),
+  })
+  .nullable()
+  .catch(null)
+
 export async function getInferenceUsage(
   creds: VolcCredentials,
   startDate: string,
@@ -317,20 +374,25 @@ export async function getInferenceUsage(
     EndTime: endDate,
     ...(filters && filters.length > 0 ? { Filters: filters } : {}),
   })
-  const result = response.Result as {
-    Fields?: Array<{ Name?: string }>
-    Data?: string[][]
-  } | null
+  const parsedInference = InferenceResult.safeParse(response.Result)
+  if (!parsedInference.success) {
+    warnSchemaFallback('GetInferenceUsage', response.Result)
+  }
+  const result = parsedInference.success ? parsedInference.data : null
 
-  const fields = (result?.Fields ?? []).map((field) => field.Name ?? '')
+  const fields = (result?.Fields ?? []).map((field) => field.Name)
   const indexOf = (name: string) => fields.indexOf(name)
-  const numberAt = (row: string[], name: string) => {
+  const numberAt = (row: Array<string | number | null>, name: string) => {
     const index = indexOf(name)
     return index >= 0 ? Number(row[index] ?? 0) : 0
   }
-  const stringAt = (row: string[], name: string): string | undefined => {
+
+  const stringAt = (row: Array<string | number | null>, name: string): string | undefined => {
     const index = indexOf(name)
-    return index >= 0 ? (row[index] ?? undefined) : undefined
+    if (index < 0 || row[index] === null) {
+      return undefined
+    }
+    return String(row[index])
   }
 
   const rows: InferenceRow[] = (result?.Data ?? []).map((row) => ({

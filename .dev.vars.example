@@ -1,5 +1,6 @@
 # Cloudflare Workers 本地调试变量（.dev.vars，勿提交）
 # 生产环境请用 wrangler secret put <NAME> 配置
+# 多账号：变量名加 _2/_3 后缀（连续编号）
 DEEPSEEK_API_KEY=sk-xxxx
 VOLC_ACCESS_KEY_ID=AKLTxxxx
 VOLC_SECRET_KEY=xxxx
@@ -7,3 +8,13 @@ ZHIPU_API_KEY=xxxxx.xxxxx
 ALIYUN_ACCESS_KEY_ID=LTAIxxxx
 ALIYUN_SECRET_KEY=xxxx
 GITEE_AI_API_KEY=UC03xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# 代金券查询（可选）：ai.gitee.com 会话 Cookie（约 30 天过期）
+# GITEE_AI_SESSION_COOKIE=__Secure-next-auth.session-token=xxxx-xxxx
+
+# 扩展平台（可选，配置哪个显示哪个）
+STEPFUN_API_KEY=
+SILICONFLOW_API_KEY=
+OPENROUTER_API_KEY=
+NOVITA_API_KEY=
+KIMI_API_KEY=
+MINIMAX_API_KEY=

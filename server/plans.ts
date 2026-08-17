@@ -10,6 +10,7 @@
  *     current_interval_remaining_percent + end_time（5h 桶）
  *     current_weekly_status==1 时 current_weekly_remaining_percent + weekly_end_time（周桶）
  */
+import { z } from 'zod'
 
 export class PlanApiError extends Error {
   constructor(
@@ -31,11 +32,11 @@ export interface TokenPlanInfo {
   windows: TokenPlanWindow[]
 }
 
-async function planGet(
-  url: string,
-  apiKey: string,
-  provider: string,
-): Promise<Record<string, unknown>> {
+const ErrorEnvelope = z.object({
+  error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional(),
+})
+
+async function planGet(url: string, apiKey: string, provider: string): Promise<unknown> {
   let res: Response
   try {
     res = await fetch(url, {
@@ -48,7 +49,7 @@ async function planGet(
   const text = await res.text()
   let json: unknown
   try {
-    json = JSON.parse(text) as Record<string, unknown>
+    json = JSON.parse(text)
   } catch {
     throw new PlanApiError(
       'InvalidResponse',
@@ -56,24 +57,24 @@ async function planGet(
     )
   }
 
-  const body = json as Record<string, unknown>
   if (!res.ok) {
-    const error = body.error
-    const code =
-      error && typeof error === 'object' && 'code' in error
-        ? String(error.code)
-        : `HTTP_${res.status}`
-    const message =
-      error && typeof error === 'object' && 'message' in error
-        ? String(error.message)
-        : text.slice(0, 200)
-    throw new PlanApiError(`${provider}_${code}`, message)
+    const envelope = ErrorEnvelope.safeParse(json)
+    const error = envelope.success ? envelope.data.error : undefined
+    throw new PlanApiError(
+      `${provider}_${error?.code ?? `HTTP_${res.status}`}`,
+      error?.message ?? text.slice(0, 200),
+    )
   }
-  return body
+  return json
 }
 
-function toNumber(value: unknown): number {
-  return typeof value === 'number' ? value : typeof value === 'string' ? Number(value) || 0 : 0
+/** 解析失败 → 域错误（避免裸 ZodError 直接暴露给 UI）。 */
+function parsePlanBody<T>(schema: z.ZodType<T>, body: unknown): T {
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) {
+    throw new PlanApiError('InvalidResponse', '响应结构无法解析')
+  }
+  return parsed.data
 }
 
 function utilization(limit: number, remaining: number): number {
@@ -85,40 +86,53 @@ function utilization(limit: number, remaining: number): number {
 
 /** Kimi For Coding Token Plan。 */
 export async function fetchKimiPlan(apiKey: string): Promise<TokenPlanInfo> {
-  const body = await planGet('https://api.kimi.com/coding/v1/usages', apiKey, 'Kimi')
-  return parseKimiPlan(body)
+  return parseKimiPlan(await planGet('https://api.kimi.com/coding/v1/usages', apiKey, 'Kimi'))
 }
 
-export function parseKimiPlan(body: Record<string, unknown>): TokenPlanInfo {
-  const windows: TokenPlanWindow[] = []
+const KimiBody = z.object({
+  limits: z
+    .array(
+      z.object({
+        detail: z
+          .object({
+            limit: z.coerce.number().catch(0),
+            remaining: z.coerce.number().catch(0),
+            resetTime: z.coerce.number().catch(0),
+          })
+          .nullish(),
+      }),
+    )
+    .catch([]),
+  usage: z
+    .object({
+      limit: z.coerce.number().catch(0),
+      remaining: z.coerce.number().catch(0),
+      resetTime: z.coerce.number().catch(0),
+    })
+    .nullish(),
+})
 
-  const limits = Array.isArray(body.limits) ? (body.limits as Array<Record<string, unknown>>) : []
-  for (const limitItem of limits) {
-    const detail =
-      limitItem.detail && typeof limitItem.detail === 'object'
-        ? (limitItem.detail as Record<string, unknown>)
-        : null
+export function parseKimiPlan(body: unknown): TokenPlanInfo {
+  const windows: TokenPlanWindow[] = []
+  const parsed = parsePlanBody(KimiBody, body)
+
+  for (const limitItem of parsed.limits) {
+    const detail = limitItem.detail
     if (!detail) {
       continue
     }
-    const limit = toNumber(detail.limit)
-    const remaining = toNumber(detail.remaining)
     windows.push({
       window: 'fiveHour',
-      percent: utilization(limit, remaining),
-      resetTime: Number(detail.resetTime ?? 0),
+      percent: utilization(detail.limit, detail.remaining),
+      resetTime: detail.resetTime,
     })
   }
 
-  const usage =
-    body.usage && typeof body.usage === 'object' ? (body.usage as Record<string, unknown>) : null
-  if (usage) {
-    const limit = toNumber(usage.limit)
-    const remaining = toNumber(usage.remaining)
+  if (parsed.usage) {
     windows.push({
       window: 'weekly',
-      percent: utilization(limit, remaining),
-      resetTime: Number(usage.resetTime ?? 0),
+      percent: utilization(parsed.usage.limit, parsed.usage.remaining),
+      resetTime: parsed.usage.resetTime,
     })
   }
 
@@ -127,45 +141,60 @@ export function parseKimiPlan(body: Record<string, unknown>): TokenPlanInfo {
 
 /** MiniMax Token Plan。 */
 export async function fetchMiniMaxPlan(apiKey: string): Promise<TokenPlanInfo> {
-  const body = await planGet(
-    'https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains',
-    apiKey,
-    'MiniMax',
+  return parseMiniMaxPlan(
+    await planGet(
+      'https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains',
+      apiKey,
+      'MiniMax',
+    ),
   )
-  return parseMiniMaxPlan(body)
 }
 
-export function parseMiniMaxPlan(body: Record<string, unknown>): TokenPlanInfo {
-  const baseResp =
-    body.base_resp && typeof body.base_resp === 'object'
-      ? (body.base_resp as Record<string, unknown>)
-      : null
-  if (baseResp && toNumber(baseResp.status_code) !== 0) {
-    const statusMessage = typeof baseResp.status_msg === 'string' ? baseResp.status_msg : ''
-    throw new PlanApiError('MiniMax_BUSINESS', `MiniMax 返回错误: ${statusMessage}`)
+const MiniMaxBody = z.object({
+  base_resp: z
+    .object({
+      status_code: z.coerce.number().catch(0),
+      status_msg: z.string().catch(''),
+    })
+    .nullish(),
+  model_remains: z
+    .array(
+      z.object({
+        model_name: z.string().nullish(),
+        current_interval_remaining_percent: z.coerce.number().optional(),
+        current_weekly_status: z.coerce.number().catch(0),
+        current_weekly_remaining_percent: z.coerce.number().catch(0),
+        end_time: z.coerce.number().catch(0),
+        weekly_end_time: z.coerce.number().catch(0),
+      }),
+    )
+    .catch([]),
+})
+
+export function parseMiniMaxPlan(body: unknown): TokenPlanInfo {
+  const parsed = parsePlanBody(MiniMaxBody, body)
+
+  if (parsed.base_resp && parsed.base_resp.status_code !== 0) {
+    throw new PlanApiError('MiniMax_BUSINESS', `MiniMax 返回错误: ${parsed.base_resp.status_msg}`)
   }
 
   const windows: TokenPlanWindow[] = []
-  const modelRemains = Array.isArray(body.model_remains)
-    ? (body.model_remains as Array<Record<string, unknown>>)
-    : []
-  const general = modelRemains.find((item) => item.model_name === 'general')
+  const general = parsed.model_remains.find((item) => item.model_name === 'general')
 
   if (general) {
-    const fiveHourRemainPct = toNumber(general.current_interval_remaining_percent)
-    if (fiveHourRemainPct > 0 || 'current_interval_remaining_percent' in general) {
+    const fiveHourRemainPct = general.current_interval_remaining_percent ?? 0
+    if (fiveHourRemainPct > 0 || general.current_interval_remaining_percent !== undefined) {
       windows.push({
         window: 'fiveHour',
         percent: Math.max(0, 100 - fiveHourRemainPct),
-        resetTime: Number(general.end_time ?? 0),
+        resetTime: general.end_time,
       })
     }
-    if (toNumber(general.current_weekly_status) === 1) {
-      const weeklyRemainPct = toNumber(general.current_weekly_remaining_percent)
+    if (general.current_weekly_status === 1) {
       windows.push({
         window: 'weekly',
-        percent: Math.max(0, 100 - weeklyRemainPct),
-        resetTime: Number(general.weekly_end_time ?? 0),
+        percent: Math.max(0, 100 - general.current_weekly_remaining_percent),
+        resetTime: general.weekly_end_time,
       })
     }
   }

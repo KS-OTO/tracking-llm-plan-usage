@@ -1,3 +1,5 @@
+import type { NextFunction } from 'connect'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig, lazyPlugins, type Plugin } from 'vite-plus'
@@ -17,15 +19,33 @@ function apiMiddleware(): Plugin {
     configureServer(server) {
       const env = { ...loadEnv(process.cwd(), '', ''), ...process.env }
       const handler = createAppHandler((key) => env[key])
-      server.middlewares.use(async (req, res, next) => {
+      server.middlewares.use((req, res, next) => {
         if (!req.url || !req.url.startsWith('/api/')) {
           next()
           return
         }
+        void handleApi(req, res, next)
+      })
+
+      async function handleApi(
+        req: IncomingMessage,
+        res: ServerResponse,
+        next: NextFunction,
+      ): Promise<void> {
         try {
+          const headers = new Headers()
+          for (const [name, value] of Object.entries(req.headers)) {
+            if (typeof value === 'string') {
+              headers.set(name, value)
+            } else if (Array.isArray(value)) {
+              for (const item of value) {
+                headers.append(name, item)
+              }
+            }
+          }
           const request = new Request(`http://localhost${req.url}`, {
             method: req.method,
-            headers: req.headers as HeadersInit,
+            headers,
           })
           const response = await handler(request)
           if (!response) {
@@ -42,7 +62,7 @@ function apiMiddleware(): Plugin {
           res.statusCode = 500
           res.end(JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: String(error) } }))
         }
-      })
+      }
     },
   }
 }
@@ -53,6 +73,8 @@ export default defineConfig({
     plugins: ['eslint', 'typescript', 'unicorn', 'oxc', 'vue', 'vitest'],
     categories: {
       correctness: 'error',
+      suspicious: 'error',
+      perf: 'error',
     },
     env: {
       browser: true,
