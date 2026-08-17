@@ -24,6 +24,8 @@ import type {
 export interface Slice<T> {
   data: T | null
   error: string | null
+  /** 服务端 503 NOT_CONFIGURED：未配置密钥（中性空态，非故障）。 */
+  notConfigured: boolean
 }
 
 const REFRESH_INTERVAL_MS = 60_000
@@ -32,26 +34,44 @@ const VOLC_DETAILS_DAYS = 7
 
 function applyResult<T>(result: PromiseSettledResult<T>, target: Ref<Slice<T>>): void {
   if (result.status === 'fulfilled') {
-    target.value = { data: result.value, error: null }
-  } else {
-    const reason = result.reason
-    target.value = {
-      data: target.value.data,
-      error: reason instanceof ApiError ? reason.message : String(reason),
-    }
+    target.value = { data: result.value, error: null, notConfigured: false }
+    return
+  }
+  const reason = result.reason
+  // NOT_CONFIGURED 是正常初始状态：中性空态而非红色错误
+  if (reason instanceof ApiError && reason.code === 'NOT_CONFIGURED') {
+    target.value = { data: null, error: null, notConfigured: true }
+    return
+  }
+  target.value = {
+    data: target.value.data,
+    error: reason instanceof ApiError ? reason.message : String(reason),
+    notConfigured: false,
   }
 }
 
 export const useDashboardStore = defineStore('dashboard', () => {
-  const status = ref<Slice<StatusResponse>>({ data: null, error: null })
-  const deepseek = ref<Slice<DeepSeekBalanceResponse>>({ data: null, error: null })
-  const volcPlan = ref<Slice<VolcPlanResponse>>({ data: null, error: null })
-  const volcInference = ref<Slice<InferenceUsageResponse>>({ data: null, error: null })
-  const zhipu = ref<Slice<ZhipuPackagesResponse>>({ data: null, error: null })
-  const aliyun = ref<Slice<AliyunPackagesResponse>>({ data: null, error: null })
-  const tokenPlan = ref<Slice<TokenPlanResponse>>({ data: null, error: null })
-  const gitee = ref<Slice<GiteeBalanceResponse>>({ data: null, error: null })
-  const extras = ref<Slice<ExtrasResponse>>({ data: null, error: null })
+  const status = ref<Slice<StatusResponse>>({ data: null, error: null, notConfigured: false })
+  const deepseek = ref<Slice<DeepSeekBalanceResponse>>({
+    data: null,
+    error: null,
+    notConfigured: false,
+  })
+  const volcPlan = ref<Slice<VolcPlanResponse>>({ data: null, error: null, notConfigured: false })
+  const volcInference = ref<Slice<InferenceUsageResponse>>({
+    data: null,
+    error: null,
+    notConfigured: false,
+  })
+  const zhipu = ref<Slice<ZhipuPackagesResponse>>({ data: null, error: null, notConfigured: false })
+  const aliyun = ref<Slice<AliyunPackagesResponse>>({
+    data: null,
+    error: null,
+    notConfigured: false,
+  })
+  const tokenPlan = ref<Slice<TokenPlanResponse>>({ data: null, error: null, notConfigured: false })
+  const gitee = ref<Slice<GiteeBalanceResponse>>({ data: null, error: null, notConfigured: false })
+  const extras = ref<Slice<ExtrasResponse>>({ data: null, error: null, notConfigured: false })
 
   const loading = ref(false)
   const lastUpdated = ref<Date | null>(null)
@@ -110,8 +130,15 @@ export const useDashboardStore = defineStore('dashboard', () => {
     modelFilter.value = value
     clearTimeout(filterTimer)
     filterTimer = setTimeout(() => {
-      void refresh()
+      void refreshInference()
     }, FILTER_DEBOUNCE_MS)
+  }
+
+  /** 模型过滤局部刷新：只重拉火山推理接口，不打扰其余平台。 */
+  async function refreshInference(): Promise<void> {
+    const model = modelFilter.value.trim() || undefined
+    const result = await Promise.allSettled([api.volcInference(VOLC_DETAILS_DAYS, model)])
+    applyResult(result[0], volcInference)
   }
 
   function onVisibilityChange(): void {
@@ -170,6 +197,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     autoRefresh,
     modelFilter,
     refresh,
+    refreshInference,
     onFilterInput,
   }
 })

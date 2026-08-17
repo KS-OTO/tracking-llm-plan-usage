@@ -1,21 +1,18 @@
 <script setup lang="ts">
 /**
- * 区块统一外壳：TDesign Card 承载，统一 loading / error / empty 状态。
+ * 区块统一外壳：TDesign Card 承载，统一 loading / error / notConfigured / empty 状态。
  *
- * 每个 ProviderSection 用本组件包裹，保持展示型组件契约（data/loading/error props）。
- * - loading → Skeleton 骨架
- * - error   → Alert 告警（theme=error）
- * - empty   → Empty 空状态（由调用方通过 empty 明确传入，避免依赖插槽探测）
- * - 正常     → 默认插槽
+ * 状态优先级：loading → error(有数据时降级为顶部横幅) → 未配置(中性空态) → 空数据 → 内容。
  */
 defineProps<{
   title: string
   subtitle?: string
   loading?: boolean
   error?: string | null
-  /** 是否展示空状态（如「未配置 XXX_KEY」）。 */
+  /** 未配置密钥（服务端 503 NOT_CONFIGURED）：中性空态而非红色错误。 */
+  notConfigured?: boolean
+  /** 数据为空（已配置但无记录）。 */
   empty?: boolean
-  /** 空状态文案。 */
   emptyText?: string
 }>()
 </script>
@@ -27,13 +24,16 @@ defineProps<{
     </template>
 
     <t-skeleton v-if="loading" :loading="true" animation="gradient" :row-col="[1, 2, 3]" />
-    <template v-else-if="error && empty">
+    <template v-else-if="error && (empty || notConfigured)">
       <t-alert theme="error" :message="error" :max-line="5" />
+    </template>
+    <template v-else-if="notConfigured">
+      <t-empty :description="emptyText ?? '未配置密钥'" />
     </template>
     <template v-else>
       <!-- 刷新失败但仍有历史数据：错误横幅置顶，保留内容不闪断 -->
       <t-alert v-if="error" theme="error" :message="error" :max-line="5" />
-      <t-empty v-if="empty" :description="emptyText" />
+      <t-empty v-if="empty" :description="emptyText ?? '暂无数据'" />
       <slot v-else />
     </template>
   </t-card>

@@ -58,6 +58,31 @@ export function readKeyPairs(keyPrefix: string, secretPrefix: string, env?: EnvG
   return pairs
 }
 
+/** 检测成对凭据的半配置组：返回单边存在的变量名（如只配了 AccessKey 没配 SecretKey）。 */
+export function readIncompletePairs(
+  keyPrefix: string,
+  secretPrefix: string,
+  env?: EnvGetter,
+): string[] {
+  const get = envOf(env)
+  const incomplete: string[] = []
+  for (let i = 1; ; i++) {
+    const suffix = i === 1 ? '' : `_${i}`
+    const key = get(`${keyPrefix}${suffix}`)?.trim()
+    const secret = get(`${secretPrefix}${suffix}`)?.trim()
+    if (!key && !secret) {
+      break
+    }
+    if (key && !secret) {
+      incomplete.push(`${secretPrefix}${suffix}`)
+    }
+    if (!key && secret) {
+      incomplete.push(`${keyPrefix}${suffix}`)
+    }
+  }
+  return incomplete
+}
+
 /**
  * 按编号前缀读取两组变量的配对映射（如 GITEE_AI_API_KEY ↔ GITEE_AI_SESSION_COOKIE）。
  * 两组序列独立连续编号：base 变量存在而对应 `_N` 缺失时，该组 value 为 undefined；

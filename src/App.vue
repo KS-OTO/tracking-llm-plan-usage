@@ -7,6 +7,7 @@ import AliyunSection from './components/AliyunSection.vue'
 import DeepSeekSection from './components/DeepSeekSection.vue'
 import ExtraSection from './components/ExtraSection.vue'
 import GiteeSection from './components/GiteeSection.vue'
+import OverviewTab from './components/OverviewTab.vue'
 import TokenPlanSection from './components/TokenPlanSection.vue'
 import VolcPlanSection from './components/VolcPlanSection.vue'
 import VolcUsageSection from './components/VolcUsageSection.vue'
@@ -36,7 +37,22 @@ const theme = useThemeStore()
 const { isDark } = storeToRefs(theme)
 const { toggle: toggleTheme } = theme
 
-const activeTab = ref<string>('subscription')
+const activeTab = ref<string>('overview')
+
+/** 锚点跳转：切 Tab → 等渲染 → 平滑滚动到卡片 → 高亮闪烁。 */
+function jumpToAnchor(tab: string, anchor: string): void {
+  activeTab.value = tab
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`anchor-${anchor}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        el.classList.add('anchor-flash')
+        window.setTimeout(() => el.classList.remove('anchor-flash'), 1600)
+      }
+    })
+  })
+}
 
 const providerTags = computed(() => {
   const providers = status.value.data?.providers
@@ -130,36 +146,45 @@ const lastUpdatedText = computed(() => {
 
     <main class="app-main">
       <t-tabs v-model="activeTab" theme="card">
+        <t-tab-panel value="overview" label="总览">
+          <OverviewTab @jump="jumpToAnchor" />
+        </t-tab-panel>
+
         <t-tab-panel value="subscription" label="套餐订阅">
           <t-row :gutter="[16, 16]" class="grid-row">
-            <t-col :xs="24" :lg="12">
+            <t-col :xs="24" :lg="12" :id="'anchor-volc-plan'">
               <VolcPlanSection
                 :data="volcPlan.data"
                 :loading="loading && volcPlan.data === null"
                 :error="volcPlan.error"
+                :not-configured="volcPlan.notConfigured"
               />
             </t-col>
-            <t-col :xs="24" :lg="12">
+            <t-col :xs="24" :lg="12" id="anchor-volc-usage">
               <VolcUsageSection
                 :data="volcInference.data"
                 :loading="loading && volcInference.data === null"
                 :error="volcInference.error"
+                :not-configured="volcInference.notConfigured"
                 :model="modelFilter"
                 @update:model="onFilterInput"
               />
             </t-col>
-            <t-col :xs="24" :lg="12">
+            <t-col :xs="24" :lg="12" id="anchor-zhipu">
               <ZhipuSection
+                variant="plan"
                 :data="zhipu.data"
                 :loading="loading && zhipu.data === null"
                 :error="zhipu.error"
+                :not-configured="zhipu.notConfigured"
               />
             </t-col>
-            <t-col :xs="24" :lg="12">
+            <t-col :xs="24" :lg="12" id="anchor-tokenplan">
               <TokenPlanSection
                 :data="tokenPlan.data"
                 :loading="loading && tokenPlan.data === null"
                 :error="tokenPlan.error"
+                :not-configured="tokenPlan.notConfigured"
               />
             </t-col>
           </t-row>
@@ -167,36 +192,51 @@ const lastUpdatedText = computed(() => {
 
         <t-tab-panel value="balance" label="余额账户">
           <t-row :gutter="[16, 16]" class="grid-row">
-            <t-col :xs="24" :md="12" :lg="8">
+            <t-col :xs="24" :md="12" :lg="8" id="anchor-zhipu-balance">
+              <ZhipuSection
+                variant="balance"
+                :data="zhipu.data"
+                :loading="loading && zhipu.data === null"
+                :error="zhipu.error"
+                :not-configured="zhipu.notConfigured"
+              />
+            </t-col>
+            <t-col :xs="24" :md="12" :lg="8" id="anchor-deepseek">
               <DeepSeekSection
                 :data="deepseek.data"
                 :loading="loading && deepseek.data === null"
                 :error="deepseek.error"
+                :not-configured="deepseek.notConfigured"
               />
             </t-col>
-            <t-col :xs="24" :md="12" :lg="8">
+            <t-col :xs="24" :md="12" :lg="8" id="anchor-aliyun">
               <AliyunSection
                 :data="aliyun.data"
                 :loading="loading && aliyun.data === null"
                 :error="aliyun.error"
+                :not-configured="aliyun.notConfigured"
               />
             </t-col>
-            <t-col :xs="24" :md="12" :lg="8">
+            <t-col :xs="24" :md="12" :lg="8" id="anchor-gitee">
               <GiteeSection
                 :data="gitee.data"
                 :loading="loading && gitee.data === null"
                 :error="gitee.error"
+                :not-configured="gitee.notConfigured"
               />
             </t-col>
           </t-row>
         </t-tab-panel>
 
         <t-tab-panel value="extras" label="扩展平台">
-          <ExtraSection
-            :data="extras.data"
-            :loading="loading && extras.data === null"
-            :error="extras.error"
-          />
+          <div id="anchor-extras">
+            <ExtraSection
+              :data="extras.data"
+              :loading="loading && extras.data === null"
+              :error="extras.error"
+              :not-configured="extras.notConfigured"
+            />
+          </div>
         </t-tab-panel>
       </t-tabs>
 
@@ -276,5 +316,11 @@ const lastUpdatedText = computed(() => {
   color: var(--td-text-color-placeholder);
   text-align: center;
   padding: 32px 0 8px;
+}
+
+.anchor-flash :deep(.t-card) {
+  outline: 2px solid var(--td-brand-color);
+  outline-offset: 2px;
+  transition: outline 0.3s ease;
 }
 </style>
