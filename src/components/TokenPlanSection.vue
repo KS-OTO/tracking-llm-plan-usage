@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TokenPlanResponse } from '../types'
-import { isFailedAccount } from '../types'
+import { accountName, isFailedAccount } from '../types'
 import { formatTokens } from '../utils'
 
 import AccountSection from './AccountSection.vue'
@@ -9,6 +9,7 @@ defineProps<{
   data: TokenPlanResponse | null
   loading: boolean
   error: string | null
+  notConfigured?: boolean
 }>()
 
 function cycleLabel(start: number, end: number): string {
@@ -22,16 +23,16 @@ const seatColumns = [
   { colKey: 'instance', title: '实例', width: 130, cell: 'instance' },
   { colKey: 'spec', title: '规格', width: 70, cell: 'spec' },
   { colKey: 'cycle', title: '额度周期', width: 200, cell: 'cycle' },
-  { colKey: 'total', title: '总额度', align: 'right' as const, cell: 'total' },
-  { colKey: 'remaining', title: '剩余', align: 'right' as const, cell: 'remaining' },
+  { colKey: 'total', title: '总额度 (CREDITS)', align: 'right' as const, cell: 'total' },
+  { colKey: 'remaining', title: '剩余 (CREDITS)', align: 'right' as const, cell: 'remaining' },
   { colKey: 'status', title: '状态', width: 90, cell: 'status' },
 ]
 
 const packageColumns = [
   { colKey: 'instance', title: '实例', width: 130, cell: 'instance' },
   { colKey: 'cycle', title: '额度周期', width: 200, cell: 'cycle' },
-  { colKey: 'total', title: '总额度', align: 'right' as const, cell: 'total' },
-  { colKey: 'remaining', title: '剩余', align: 'right' as const, cell: 'remaining' },
+  { colKey: 'total', title: '总额度 (CREDITS)', align: 'right' as const, cell: 'total' },
+  { colKey: 'remaining', title: '剩余 (CREDITS)', align: 'right' as const, cell: 'remaining' },
   { colKey: 'status', title: '状态', width: 90, cell: 'status' },
 ]
 
@@ -104,22 +105,24 @@ function packageRows(
     :subtitle="`账号 ${data?.accounts.length ?? 0}`"
     :loading="loading"
     :error="error"
+    :not-configured="notConfigured"
     :empty="data?.accounts.length === 0"
     empty-text="未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY"
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
         <t-card
-          v-for="account in data.accounts"
+          v-for="(account, i) in data.accounts"
           :key="account.keyHint"
           size="small"
           header-bordered
         >
           <template #header>
             <t-space align="center" size="small" break-line>
-              <t-tag size="small" variant="light-outline" theme="primary">
-                {{ account.keyHint }}
-              </t-tag>
+              <t-tag size="small" variant="light-outline" theme="primary">{{
+                accountName(account, i)
+              }}</t-tag>
+              <span class="muted key-hint">{{ account.keyHint }}</span>
               <template v-if="!isFailedAccount(account)">
                 <t-tag size="small" variant="light-outline" theme="warning">
                   {{ account.account?.accountType || 'ALIYUN' }}

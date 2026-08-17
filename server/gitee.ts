@@ -209,7 +209,8 @@ async function giteeInternalGet(url: string, cookie: string): Promise<unknown> {
  * userinfo → namespace_path → wallet + coupons。
  * Cookie 约 30 天过期，过期时抛 CookieExpired（由调用方降级展示）。
  */
-export async function fetchGiteeVoucher(cookie: string): Promise<GiteeVoucherInfo> {
+export async function fetchGiteeVoucher(rawCookie: string): Promise<GiteeVoucherInfo> {
+  const cookie = normalizeSessionCookie(rawCookie)
   const userinfoJson = await giteeInternalGet('https://ai.gitee.com/api/base/userinfo', cookie)
   const namespace = parseVoucherPart(GiteeUserInfo, userinfoJson, 'userinfo').namespace_path
   if (!namespace) {
@@ -223,6 +224,25 @@ export async function fetchGiteeVoucher(cookie: string): Promise<GiteeVoucherInf
     ),
   ])
   return parseGiteeVoucher(userinfoJson, walletJson, couponsJson)
+}
+
+/**
+ * 会话 Cookie 归一化：
+ * EdgeOne Makers EnvVars 拒绝含空格/分号的原文，只能存 encodeURIComponent 后的值；
+ * 本地 .env 两种格式均可。启发式：含「%」且解码后出现「=」与「;」→ 视为编码值。
+ */
+export function normalizeSessionCookie(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed.includes('%')) {
+    return trimmed
+  }
+  try {
+    const decoded = decodeURIComponent(trimmed)
+    return decoded.includes('=') && decoded.includes(';') ? decoded : trimmed
+  } catch {
+    // 非法百分号序列（如 token%invalid）不是编码 Cookie，按原文使用
+    return trimmed
+  }
 }
 
 /** voucher 关键字段解析失败 → 域错误（而非裸 ZodError 或假零值）。 */

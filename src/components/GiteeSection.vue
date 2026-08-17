@@ -5,7 +5,7 @@ import type {
   GiteeVoucherCoupon,
   GiteeVoucherSlice,
 } from '../types'
-import { isFailedAccount } from '../types'
+import { accountName, isFailedAccount } from '../types'
 import { formatMoney, formatTokens } from '../utils'
 
 import AccountSection from './AccountSection.vue'
@@ -14,6 +14,7 @@ defineProps<{
   data: GiteeBalanceResponse | null
   loading: boolean
   error: string | null
+  notConfigured?: boolean
 }>()
 
 const columns = [
@@ -67,21 +68,23 @@ function formatDate(ms: number): string {
     :subtitle="`账号 ${data?.accounts.length ?? 0}`"
     :loading="loading"
     :error="error"
+    :not-configured="notConfigured"
     :empty="data?.accounts.length === 0"
     empty-text="未配置 GITEE_AI_API_KEY"
   >
     <template v-if="data">
       <t-space direction="vertical" size="medium" class="accounts">
         <t-card
-          v-for="account in data.accounts"
+          v-for="(account, i) in data.accounts"
           :key="account.keyHint"
           size="small"
           header-bordered
         >
           <template #header>
-            <t-tag size="small" variant="light-outline" theme="primary">
-              {{ account.keyHint }}
-            </t-tag>
+            <t-tag size="small" variant="light-outline" theme="primary">{{
+              accountName(account, i)
+            }}</t-tag>
+            <span class="muted key-hint">{{ account.keyHint }}</span>
           </template>
 
           <t-alert

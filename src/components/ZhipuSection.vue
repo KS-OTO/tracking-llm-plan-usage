@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ZhipuPackagesResponse } from '../types'
-import { isFailedAccount } from '../types'
+import { accountName, isFailedAccount } from '../types'
 import { formatDateTime, formatReset, formatTokens, progressStatus } from '../utils'
 
 import AccountSection from './AccountSection.vue'
@@ -10,6 +10,9 @@ const props = defineProps<{
   data: ZhipuPackagesResponse | null
   loading: boolean
   error: string | null
+  notConfigured?: boolean
+  /** 卡片变体：plan = Coding Plan 额度（套餐订阅 Tab）；balance = 余额/资源包（余额账户 Tab）。 */
+  variant?: 'plan' | 'balance'
 }>()
 
 const WINDOW_LABELS: Record<string, string> = {
@@ -87,28 +90,30 @@ const packageRowsByHint = computed(() => {
 
 <template>
   <AccountSection
-    title="智谱 GLM"
+    :title="variant === 'balance' ? '智谱 GLM 余额' : '智谱 GLM Coding Plan'"
     :subtitle="`账号 ${data?.accounts.length ?? 0}`"
     :loading="loading"
     :error="error"
+    :not-configured="notConfigured"
     :empty="data?.accounts.length === 0"
     empty-text="未配置 ZHIPU_API_KEY"
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
         <t-card
-          v-for="account in data.accounts"
+          v-for="(account, i) in data.accounts"
           :key="account.keyHint"
           size="small"
           header-bordered
         >
           <template #header>
             <t-space align="center" size="small" break-line>
-              <t-tag size="small" variant="light-outline" theme="primary">
-                {{ account.keyHint }}
-              </t-tag>
+              <t-tag size="small" variant="light-outline" theme="primary">{{
+                accountName(account, i)
+              }}</t-tag>
+              <span class="muted key-hint">{{ account.keyHint }}</span>
               <t-tag
-                v-if="!isFailedAccount(account)"
+                v-if="variant !== 'balance' && !isFailedAccount(account)"
                 size="small"
                 variant="light-outline"
                 theme="warning"
@@ -127,7 +132,13 @@ const packageRowsByHint = computed(() => {
           />
 
           <template v-else>
-            <t-space align="center" size="small" break-line class="account-head">
+            <t-space
+              v-if="variant !== 'balance'"
+              align="center"
+              size="small"
+              break-line
+              class="account-head"
+            >
               <a
                 class="muted"
                 href="https://www.bigmodel.cn/coding-plan/personal/usage"
@@ -139,7 +150,9 @@ const packageRowsByHint = computed(() => {
             </t-space>
 
             <t-row
-              v-if="account.codingPlan && account.codingPlan.windows.length > 0"
+              v-if="
+                variant !== 'balance' && account.codingPlan && account.codingPlan.windows.length > 0
+              "
               :gutter="[12, 12]"
             >
               <t-col
@@ -171,10 +184,13 @@ const packageRowsByHint = computed(() => {
                 </div>
               </t-col>
             </t-row>
-            <t-empty v-else description="未查询到 Coding Plan 额度（可能未订阅）" />
+            <t-empty
+              v-else-if="variant !== 'balance'"
+              description="未查询到 Coding Plan 额度（可能未订阅）"
+            />
 
-            <t-divider align="left">余额</t-divider>
-            <t-row :gutter="[12, 12]">
+            <t-divider v-if="variant !== 'plan'" align="left">余额</t-divider>
+            <t-row v-if="variant !== 'plan'" :gutter="[12, 12]">
               <t-col :xs="12" :sm="8" :lg="4">
                 <t-statistic
                   title="可用余额"
@@ -217,10 +233,11 @@ const packageRowsByHint = computed(() => {
               </t-col>
             </t-row>
 
-            <t-divider align="left"
+            <t-divider v-if="variant !== 'plan'" align="left"
               >资源包（{{ packageRowsByHint.get(account.keyHint)?.length ?? 0 }}）</t-divider
             >
             <t-table
+              v-if="variant !== 'plan'"
               :data="packageRowsByHint.get(account.keyHint) ?? []"
               :columns="packageColumns"
               row-key="_key"

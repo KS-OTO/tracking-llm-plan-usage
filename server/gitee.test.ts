@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
 import { ZodError } from 'zod'
 
-import { parseGiteeVoucher } from './gitee.ts'
+import { normalizeSessionCookie, parseGiteeVoucher } from './gitee.ts'
 
 /** 响应样本取自 docs/参考资料.md（真实控制台抓包）。 */
 const userinfoJson = {
@@ -73,5 +73,21 @@ describe('parseGiteeVoucher', () => {
     expect(() =>
       parseGiteeVoucher({ namespace_path: 'ns-x' }, { coupon_cash_balance: '0E-8' }, {}),
     ).toThrow(ZodError)
+  })
+})
+
+describe('normalizeSessionCookie', () => {
+  it('passes through plain cookie text unchanged', () => {
+    const raw = 'a=1; session-token=xyz'
+    expect(normalizeSessionCookie(raw)).toBe(raw)
+  })
+
+  it('decodes percent-encoded cookie values (EdgeOne EnvVars format)', () => {
+    const encoded = encodeURIComponent('a=1; session-token=xyz; ns=example-ns')
+    expect(normalizeSessionCookie(encoded)).toBe('a=1; session-token=xyz; ns=example-ns')
+  })
+
+  it('leaves percent signs alone when the value is not an encoded cookie', () => {
+    expect(normalizeSessionCookie('token%invalid')).toBe('token%invalid')
   })
 })
