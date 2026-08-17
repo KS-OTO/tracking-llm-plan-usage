@@ -11,18 +11,29 @@ export interface StatusResponse {
     zhipu: ProviderStatus
     aliyun: ProviderStatus
     gitee: ProviderStatus
+    tokenplan: ProviderStatus
+    extras: ProviderStatus
   }
+  /** 半配置的成对凭据变量名（只配了 Key 没配 SecretKey）。 */
+  incomplete?: string[]
   now: number
 }
 
 /** 多账号响应包裹：成功账号携带数据字段，失败账号仅含错误信息（服务端 runAccounts 契约）。 */
-export type AccountEnvelope<T> = (T & { keyHint: string }) | { keyHint: string; error: string }
+export type AccountEnvelope<T> =
+  | (T & { keyHint: string; label?: string })
+  | { keyHint: string; label?: string; error: string }
 
 /** 账号查询是否失败（失败账号不含数据字段）。 */
 export function isFailedAccount<T>(
   account: AccountEnvelope<T>,
-): account is { keyHint: string; error: string } {
+): account is { keyHint: string; label?: string; error: string } {
   return 'error' in account && account.error !== undefined
+}
+
+/** 账号显示名：别名优先，无别名退化为「账号 N」。 */
+export function accountName(account: { keyHint: string; label?: string }, index: number): string {
+  return account.label || `账号 ${index + 1}`
 }
 
 export interface BalanceEntry {

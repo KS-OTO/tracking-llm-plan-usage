@@ -27,10 +27,26 @@ test.describe('dashboard smoke', () => {
     expect(body.error.code).toBe('NOT_CONFIGURED')
   })
 
+  test('overview is the default tab with alert, reset and nav cards', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByText('套餐订阅')).toBeVisible()
+    await expect(page.getByText('额度预警')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('最近重置')).toBeVisible()
+    await expect(page.getByText('平台导航（点击直达）')).toBeVisible()
+    // 无密钥密封环境：展示未配置空态而非错误墙
+    await expect(page.getByText('未配置任何平台密钥').first()).toBeVisible()
+  })
+
+  test('nav card click jumps to anchored section in the right tab', async () => {
+    test.skip(true, 'needs configured providers; hermetic env has no nav cards')
+  })
+
   test('page renders header, tabs and empty states without crashing', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('heading', { name: 'LLM 用量监控' })).toBeVisible()
     await expect(page.getByText('套餐订阅')).toBeVisible()
+    // 默认总览 Tab；切到套餐订阅验证区块空态
+    await page.getByText('套餐订阅', { exact: true }).click()
     // 未配置密钥 → 区块展示未配置提示（VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY）
     await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
       { timeout: 30_000 },
@@ -60,6 +76,7 @@ test.describe('dashboard smoke', () => {
 
   test('responsive: subscription grid reflows between desktop and mobile', async ({ page }) => {
     await page.goto('/')
+    await page.getByText('套餐订阅', { exact: true }).click()
     await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
       { timeout: 30_000 },
     )
@@ -79,6 +96,7 @@ test.describe('dashboard smoke', () => {
   test('back-to-top appears after scrolling and returns to top', async ({ page }) => {
     await page.goto('/')
     await page.setViewportSize({ width: 375, height: 667 })
+    await page.getByText('套餐订阅', { exact: true }).click()
     await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
       { timeout: 30_000 },
     )

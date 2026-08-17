@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { VolcPlanResponse } from '../types'
-import { isFailedAccount } from '../types'
+import { accountName, isFailedAccount } from '../types'
 import {
   formatDateTime,
   formatReset,
@@ -16,6 +16,7 @@ defineProps<{
   data: VolcPlanResponse | null
   loading: boolean
   error: string | null
+  notConfigured?: boolean
 }>()
 
 function codingWindowLabel(level: string): string {
@@ -70,22 +71,24 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
     :subtitle="`账号 ${data?.accounts.length ?? 0}`"
     :loading="loading"
     :error="error"
+    :not-configured="notConfigured"
     :empty="data?.accounts.length === 0"
     empty-text="未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY"
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
         <t-card
-          v-for="account in data.accounts"
+          v-for="(account, i) in data.accounts"
           :key="account.keyHint"
           size="small"
           header-bordered
         >
           <template #header>
             <t-space align="center" size="small" break-line>
-              <t-tag size="small" variant="light-outline" theme="primary">
-                {{ account.keyHint }}
-              </t-tag>
+              <t-tag size="small" variant="light-outline" theme="primary">{{
+                accountName(account, i)
+              }}</t-tag>
+              <span class="muted key-hint">{{ account.keyHint }}</span>
               <t-tag
                 v-if="!isFailedAccount(account)"
                 size="small"

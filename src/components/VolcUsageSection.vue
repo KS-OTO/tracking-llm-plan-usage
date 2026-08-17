@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { InferenceUsageData, InferenceUsageResponse } from '../types'
-import { isFailedAccount } from '../types'
+import { accountName, isFailedAccount } from '../types'
 import { formatTokens } from '../utils'
 
 import AccountSection from './AccountSection.vue'
@@ -10,6 +10,7 @@ const props = defineProps<{
   data: InferenceUsageResponse | null
   loading: boolean
   error: string | null
+  notConfigured?: boolean
   model: string
 }>()
 
@@ -42,9 +43,14 @@ function rowsOf(account: NonNullable<InferenceUsageResponse['accounts']>[number]
 }
 
 type AccountCard =
-  | { account: { keyHint: string; error: string }; failed: true; totals: null; rows: [] }
   | {
-      account: InferenceUsageData & { keyHint: string }
+      account: { keyHint: string; label?: string; error: string }
+      failed: true
+      totals: null
+      rows: []
+    }
+  | {
+      account: InferenceUsageData & { keyHint: string; label?: string }
       failed: false
       totals: AccountTotals
       rows: ReturnType<typeof rowsOf>
@@ -78,6 +84,7 @@ const accountCards = computed<AccountCard[]>(() =>
     :subtitle="`账号 ${data?.accounts.length ?? 0}`"
     :loading="loading"
     :error="error"
+    :not-configured="notConfigured"
     :empty="data?.accounts.length === 0"
     empty-text="未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY"
   >
@@ -94,15 +101,16 @@ const accountCards = computed<AccountCard[]>(() =>
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
         <t-card
-          v-for="card in accountCards"
+          v-for="(card, i) in accountCards"
           :key="card.account.keyHint"
           size="small"
           header-bordered
         >
           <template #header>
             <t-tag size="small" variant="light-outline" theme="primary">
-              {{ card.account.keyHint }}
+              {{ accountName(card.account, i) }}
             </t-tag>
+            <span class="muted key-hint">{{ card.account.keyHint }}</span>
           </template>
 
           <t-alert
@@ -154,5 +162,9 @@ const accountCards = computed<AccountCard[]>(() =>
 <style scoped>
 .accounts {
   width: 100%;
+}
+.key-hint {
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
 }
 </style>
