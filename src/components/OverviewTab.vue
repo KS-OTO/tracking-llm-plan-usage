@@ -160,7 +160,7 @@ const summaries = computed<PlatformSummary[]>(() => {
   // 火山：Agent Plan 最紧窗口 + Coding Plan 状态
   const volcAll = volcPlan.value.data?.accounts ?? []
   const volcAccounts = okAccounts(volcAll)
-  if (volcAll.length > 0) {
+  if (volcAll.length > 0 || volcPlan.value.error) {
     let worstPercent = 0
     let worstReset = 0
     for (const account of volcAccounts) {
@@ -189,7 +189,7 @@ const summaries = computed<PlatformSummary[]>(() => {
   // 智谱：Coding Plan 等级 + 最紧窗口
   const zhipuAll = zhipu.value.data?.accounts ?? []
   const zhipuAccounts = okAccounts(zhipuAll)
-  if (zhipuAll.length > 0) {
+  if (zhipuAll.length > 0 || zhipu.value.error) {
     const level = zhipuAccounts[0]?.codingPlan?.level || '—'
     let worstPercent = 0
     for (const account of zhipuAccounts) {
@@ -214,7 +214,7 @@ const summaries = computed<PlatformSummary[]>(() => {
   // Token Plan 座席剩余
   const tpAll = tokenPlan.value.data?.accounts ?? []
   const tpAccounts = okAccounts(tpAll)
-  if (tpAll.length > 0) {
+  if (tpAll.length > 0 || tokenPlan.value.error) {
     let seats = 0
     let remaining = 0
     for (const account of tpAccounts) {
@@ -239,7 +239,7 @@ const summaries = computed<PlatformSummary[]>(() => {
   // DeepSeek 余额
   const dsAll = deepseek.value.data?.accounts ?? []
   const dsAccounts = okAccounts(dsAll)
-  if (dsAll.length > 0) {
+  if (dsAll.length > 0 || deepseek.value.error) {
     const total = dsAccounts.reduce(
       (sum, account) => sum + account.balances.reduce((s, entry) => s + entry.total, 0),
       0,
@@ -260,7 +260,7 @@ const summaries = computed<PlatformSummary[]>(() => {
   // 模力方舟：余额 + 代金券
   const giteeAll = gitee.value.data?.accounts ?? []
   const giteeAccounts = okAccounts(giteeAll)
-  if (giteeAll.length > 0) {
+  if (giteeAll.length > 0 || gitee.value.error) {
     const balance = giteeAccounts.reduce((sum, account) => sum + account.balance, 0)
     const voucher = giteeAccounts.reduce(
       (sum, account) =>
@@ -284,7 +284,7 @@ const summaries = computed<PlatformSummary[]>(() => {
   // 阿里资源包
   const aliyunAll = aliyun.value.data?.accounts ?? []
   const aliyunAccounts = okAccounts(aliyunAll)
-  if (aliyunAll.length > 0) {
+  if (aliyunAll.length > 0 || aliyun.value.error) {
     const packages = aliyunAccounts.reduce((sum, account) => sum + (account.totalCount ?? 0), 0)
     push(
       {
@@ -376,40 +376,35 @@ function jump(tab: string, anchor: string): void {
             :row-col="[1, 1, 1]"
           />
           <template v-else>
-            <div v-if="alerts.length > 0" class="alert-list">
-              <div
+            <t-list v-if="alerts.length > 0" :split="true">
+              <t-list-item
                 v-for="(alert, index) in alerts.slice(0, 8)"
                 :key="`${alert.platform}-${alert.account}-${index}`"
-                class="alert-row"
-                role="button"
-                tabindex="0"
-                @click="
-                  jump(
-                    alert.platform.includes('Coding') ? 'subscription' : 'subscription',
-                    alert.platform.includes('智谱') ? 'zhipu' : 'volc-plan',
-                  )
-                "
-                @keydown.enter="
-                  jump('subscription', alert.platform.includes('智谱') ? 'zhipu' : 'volc-plan')
-                "
+                @click="jumpFromAlert(alert)"
               >
-                <t-tag
-                  size="small"
-                  :theme="alert.percent >= 90 ? 'danger' : 'warning'"
-                  variant="light"
-                >
-                  {{ alert.percent.toFixed(0) }}%
-                </t-tag>
-                <span class="alert-platform">{{ alert.platform }}</span>
-                <span class="alert-account">{{ alert.account }}</span>
-                <span class="alert-window">{{ alert.window }}</span>
-                <span class="alert-reset">{{ alert.resetText }}</span>
-              </div>
-              <div v-if="alerts.length > 8" class="muted more-hint">
-                还有 {{ alerts.length - 8 }} 项，点击任一行跳转详情
-              </div>
+                <template #content>
+                  <t-space size="small" align="center">
+                    <t-tag
+                      size="small"
+                      :theme="alert.percent >= 90 ? 'danger' : 'warning'"
+                      variant="light"
+                    >
+                      {{ alert.percent.toFixed(0) }}%
+                    </t-tag>
+                    <span>{{ alert.platform }}</span>
+                    <span class="alert-meta">{{ alert.account }}</span>
+                    <span class="alert-meta">{{ alert.window }}</span>
+                  </t-space>
+                </template>
+                <template #action>
+                  <span class="alert-meta">{{ alert.resetText }}</span>
+                </template>
+              </t-list-item>
+            </t-list>
+            <div v-if="alerts.length > 8" class="muted more-hint">
+              还有 {{ alerts.length - 8 }} 项预警未展示
             </div>
-            <t-empty v-else description="无 ≥70% 的额度窗口" />
+            <t-empty v-if="alerts.length === 0" description="无 ≥70% 的额度窗口" />
           </template>
         </t-card>
       </t-col>
@@ -418,9 +413,13 @@ function jump(tab: string, anchor: string): void {
       <t-col :xs="24" :sm="12" :lg="7">
         <t-card title="最近重置" header-bordered size="small">
           <t-empty v-if="!earliestReset" description="无重置窗口" />
-          <div v-else class="reset-block">
-            <div class="reset-countdown">{{ formatReset(earliestReset.resetTime) }}</div>
-            <div class="muted">
+          <template v-else>
+            <t-statistic
+              title="最近一次窗口重置"
+              :value="earliestReset.resetTime"
+              :format="() => formatReset(earliestReset?.resetTime ?? 0)"
+            />
+            <div class="muted reset-meta">
               {{ earliestReset.platform }} · {{ earliestReset.account }} ·
               {{
                 earliestReset.window === 'fiveHour'
@@ -430,7 +429,7 @@ function jump(tab: string, anchor: string): void {
                     : earliestReset.window
               }}
             </div>
-          </div>
+          </template>
           <template #footer>
             <span class="muted">数据更新于 {{ updatedText || '—' }}</span>
           </template>
@@ -508,10 +507,10 @@ function jump(tab: string, anchor: string): void {
 }
 
 .nav-primary {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--td-font-size-title-medium);
+  font-family: var(--td-font-family-medium);
   font-variant-numeric: tabular-nums;
-  margin-top: 2px;
+  margin-top: var(--td-size-2);
 }
 
 .nav-secondary {
