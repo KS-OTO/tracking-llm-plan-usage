@@ -6,6 +6,7 @@
  * - OpenRouter:   GET https://openrouter.ai/api/v1/credits → { data: { total_credits, total_usage } }（USD）
  * - Novita AI:    GET https://api.novita.ai/v3/user/balance → { availableBalance }（单位 0.0001 USD）
  */
+import { z } from 'zod'
 
 export class BalanceApiError extends Error {
   constructor(
@@ -25,11 +26,12 @@ export interface BalanceInfo {
   note?: string
 }
 
-async function balanceGet(
-  url: string,
-  apiKey: string,
-  provider: string,
-): Promise<Record<string, unknown>> {
+/** 通用错误信封：各平台非 2xx 时的常见错误结构。 */
+const ErrorEnvelope = z.object({
+  error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional(),
+})
+
+async function balanceGet(url: string, apiKey: string, provider: string): Promise<unknown> {
   let res: Response
   try {
     res = await fetch(url, {
@@ -42,7 +44,7 @@ async function balanceGet(
   const text = await res.text()
   let json: unknown
   try {
-    json = JSON.parse(text) as Record<string, unknown>
+    json = JSON.parse(text)
   } catch {
     throw new BalanceApiError(
       'InvalidResponse',
@@ -50,67 +52,84 @@ async function balanceGet(
     )
   }
 
-  const body = json as Record<string, unknown>
   if (!res.ok) {
-    const error = body.error
-    const code =
-      error && typeof error === 'object' && 'code' in error
-        ? String(error.code)
-        : `HTTP_${res.status}`
-    const message =
-      error && typeof error === 'object' && 'message' in error
-        ? String(error.message)
-        : text.slice(0, 200)
-    throw new BalanceApiError(`${provider}_${code}`, message)
+    const envelope = ErrorEnvelope.safeParse(json)
+    const error = envelope.success ? envelope.data.error : undefined
+    throw new BalanceApiError(
+      `${provider}_${error?.code ?? `HTTP_${res.status}`}`,
+      error?.message ?? text.slice(0, 200),
+    )
   }
-  return body
-}
-
-function toNumber(value: unknown): number {
-  return typeof value === 'number' ? value : typeof value === 'string' ? Number(value) || 0 : 0
+  return json
 }
 
 /** StepFun：GET /v1/accounts → balance（CNY）。 */
 export async function fetchStepFunBalance(apiKey: string): Promise<BalanceInfo> {
-  const body = await balanceGet('https://api.stepfun.com/v1/accounts', apiKey, 'StepFun')
-  return parseStepFunBalance(body)
+  return parseStepFunBalance(
+    await balanceGet('https://api.stepfun.com/v1/accounts', apiKey, 'StepFun'),
+  )
 }
 
-export function parseStepFunBalance(body: Record<string, unknown>): BalanceInfo {
+const StepFunBody = z.object({ balance: z.coerce.number().catch(0) })
+
+export function parseStepFunBalance(body: unknown): BalanceInfo {
   return {
     provider: 'StepFun 阶跃星辰',
-    balance: toNumber(body.balance),
+    balance: safeParse(StepFunBody, body).balance,
     unit: 'CNY',
   }
 }
 
-/** SiliconFlow：GET /v1/user/info → data.totalBalance（CNY）。 */
-export async function fetchSiliconFlowBalance(apiKey: string): Promise<BalanceInfo> {
-  const body = await balanceGet('https://api.siliconflow.cn/v1/user/info', apiKey, 'SiliconFlow')
-  return parseSiliconFlowBalance(body)
+/** 解析失败 → 域错误（避免裸 ZodError 直接暴露给 UI）。 */
+function safeParse<T>(schema: z.ZodType<T>, body: unknown): T {
+  const parsed = schema.safeParse(body)
+  if (!parsed.success) {
+    throw new BalanceApiError('InvalidResponse', '响应结构无法解析')
+  }
+  return parsed.data
 }
 
-export function parseSiliconFlowBalance(body: Record<string, unknown>): BalanceInfo {
-  const data =
-    body.data && typeof body.data === 'object' ? (body.data as Record<string, unknown>) : null
+/** SiliconFlow：GET /v1/user/info → data.totalBalance（CNY）。 */
+export async function fetchSiliconFlowBalance(apiKey: string): Promise<BalanceInfo> {
+  return parseSiliconFlowBalance(
+    await balanceGet('https://api.siliconflow.cn/v1/user/info', apiKey, 'SiliconFlow'),
+  )
+}
+
+const SiliconFlowBody = z.object({
+  data: z.object({ totalBalance: z.coerce.number().catch(0) }).catch({ totalBalance: 0 }),
+})
+
+export function parseSiliconFlowBalance(body: unknown): BalanceInfo {
   return {
     provider: 'SiliconFlow 硅基流动',
-    balance: toNumber(data?.totalBalance),
+    balance: safeParse(SiliconFlowBody, body).data.totalBalance,
     unit: 'CNY',
   }
 }
 
 /** OpenRouter：GET /api/v1/credits → data.total_credits - total_usage（USD）。 */
 export async function fetchOpenRouterBalance(apiKey: string): Promise<BalanceInfo> {
-  const body = await balanceGet('https://openrouter.ai/api/v1/credits', apiKey, 'OpenRouter')
-  return parseOpenRouterBalance(body)
+  return parseOpenRouterBalance(
+    await balanceGet('https://openrouter.ai/api/v1/credits', apiKey, 'OpenRouter'),
+  )
 }
 
-export function parseOpenRouterBalance(body: Record<string, unknown>): BalanceInfo {
-  const data =
-    body.data && typeof body.data === 'object' ? (body.data as Record<string, unknown>) : body
-  const total = toNumber(data.total_credits)
-  const used = toNumber(data.total_usage)
+const OpenRouterData = z.object({
+  total_credits: z.coerce.number().catch(0),
+  total_usage: z.coerce.number().catch(0),
+})
+const OpenRouterBody = z.union([
+  z.object({ data: OpenRouterData }),
+  // 部分错误/兼容形态把字段直接放在顶层
+  OpenRouterData,
+])
+
+export function parseOpenRouterBalance(body: unknown): BalanceInfo {
+  const parsed = safeParse(OpenRouterBody, body)
+  const data = 'data' in parsed ? parsed.data : parsed
+  const total = data.total_credits
+  const used = data.total_usage
   return {
     provider: 'OpenRouter',
     balance: total - used,
@@ -122,14 +141,17 @@ export function parseOpenRouterBalance(body: Record<string, unknown>): BalanceIn
 
 /** Novita AI：GET /v3/user/balance → availableBalance，单位 0.0001 USD。 */
 export async function fetchNovitaBalance(apiKey: string): Promise<BalanceInfo> {
-  const body = await balanceGet('https://api.novita.ai/v3/user/balance', apiKey, 'Novita')
-  return parseNovitaBalance(body)
+  return parseNovitaBalance(
+    await balanceGet('https://api.novita.ai/v3/user/balance', apiKey, 'Novita'),
+  )
 }
 
-export function parseNovitaBalance(body: Record<string, unknown>): BalanceInfo {
+const NovitaBody = z.object({ availableBalance: z.coerce.number().catch(0) })
+
+export function parseNovitaBalance(body: unknown): BalanceInfo {
   return {
     provider: 'Novita AI',
-    balance: toNumber(body.availableBalance) / 10000,
+    balance: safeParse(NovitaBody, body).availableBalance / 10000,
     unit: 'USD',
     note: '金额单位 0.0001 USD，已换算',
   }

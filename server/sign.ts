@@ -8,7 +8,7 @@
  * Ark control-plane requests additionally sign the `x-content-sha256` header
  * (see GetAFPUsage / GetUsageDetails request examples).
  *
- * 使用 Web Crypto（crypto.subtle）实现，兼容 Bun / Node 18+ / Cloudflare Workers。
+ * 使用 Web Crypto（crypto.subtle）实现，兼容 Bun / Node 20+ / Cloudflare Workers。
  */
 
 export const VOLC_SIGNATURE_ALGORITHM = 'HMAC-SHA256'
@@ -98,13 +98,15 @@ export async function signVolcRequest(input: VolcSignInput): Promise<VolcSignRes
     'x-date': xDate,
     ...input.extraHeaders,
   }
-  const names = Object.keys(headerValues).sort()
-  const canonicalHeaders = names.map((name) => `${name}:${headerValues[name]!.trim()}\n`).join('')
+  const names = Object.keys(headerValues).toSorted()
+  const canonicalHeaders = names
+    .map((name) => `${name}:${(headerValues[name] ?? '').trim()}\n`)
+    .join('')
   const signedHeaders = names.join(';')
 
   const queryString = Object.entries(input.query ?? {})
     .map(([key, value]) => `${encodeRfc3986(key)}=${encodeRfc3986(value)}`)
-    .sort()
+    .toSorted()
     .join('&')
 
   const canonicalRequest = [

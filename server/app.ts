@@ -17,9 +17,9 @@ import {
 } from './balances.ts'
 import { queryResourcePackageInstances, type AliyunCredentials } from './aliyun.ts'
 import { fetchDeepSeekBalance } from './deepseek.ts'
-import { fetchGiteePackageBalance } from './gitee.ts'
+import { fetchGiteePackageBalance, fetchGiteeVoucher } from './gitee.ts'
 import { fetchKimiPlan, fetchMiniMaxPlan, type TokenPlanInfo } from './plans.ts'
-import { readKeyPairs, readKeys, type EnvGetter } from './multi.ts'
+import { readKeyPairs, readKeys, readPairedMap, type EnvGetter } from './multi.ts'
 import { getTokenPlanAccount, getTokenPlanSeats, getTokenPlanSharedPackages } from './tokenplan.ts'
 import { getZhipuAccountBalance, getZhipuCodingPlanQuota, getZhipuTokenPackages } from './zhipu.ts'
 import {
@@ -46,12 +46,89 @@ import {
  * Dev mode: run `vp dev` (Vite proxies /api to this server).
  */
 
+function maskKey(key: string): string {
+  if (key.length <= 8) {
+    return '****'
+  }
+  return `${key.slice(0, 4)}****${key.slice(-4)}`
+}
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  })
+}
+
+/** 常见错误码的中文说明，原始英文信息保留在 message 中供诊断。 */
+const ERROR_HINTS: Record<string, string> = {
+  NOT_CONFIGURED: '未配置对应密钥',
+  NetworkError: '网络请求失败',
+  NotAuthorized: '无访问权限（RAM 策略不足）',
+  InvalidAccessKeyId: 'AccessKey 不存在或无效',
+  'InvalidAccessKeyId.NotFound': 'AccessKey 不存在或无效',
+  SignatureDoesNotMatch: '签名不匹配',
+  InvalidResponse: '供应商返回了无法解析的响应',
+  ENDPOINT_GONE: '接口已下线',
+}
+
+function errorResponse(status: number, code: string, message: string): Response {
+  const hint = ERROR_HINTS[code]
+  const displayMessage = hint && hint !== message ? `${hint}：${message}` : message
+  return json({ error: { code, message: displayMessage } }, status)
+}
+
+function formatDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function dateRange(daysParam: string | null): { start: string; end: string } {
+  const days = Math.min(90, Math.max(1, Number(daysParam ?? 7) || 7))
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(start.getDate() - (days - 1))
+  return { start: formatDate(start), end: formatDate(end) }
+}
+
+interface AccountEntry<T> {
+  keyHint: string
+  run: () => Promise<T>
+}
+
+type AccountResult<T> = (T & { keyHint: string }) | { keyHint: string; error: string }
+
+/** 并行执行多账号查询，每个账号独立容错，返回含 keyHint 的结果数组。 */
+async function runAccounts<T>(entries: AccountEntry<T>[]): Promise<AccountResult<T>[]> {
+  const results = await Promise.allSettled(entries.map((entry) => entry.run()))
+  return results.map((result, index) => {
+    const { keyHint } = entries[index]
+    if (result.status === 'fulfilled') {
+      return Object.assign({}, result.value, { keyHint })
+    }
+    const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
+    return { keyHint, error: reason }
+  })
+}
+
+function providerStatus(keyHints: string[]): {
+  configured: boolean
+  count: number
+  keyHints: string[]
+} {
+  return { configured: keyHints.length > 0, count: keyHints.length, keyHints }
+}
+
 // 多账号：每个平台支持 N 组凭据（基础变量为第 1 组，`_2`、`_3`… 为后续组）
 export function createAppHandler(env: EnvGetter) {
   // 多账号：每个平台支持 N 组凭据（基础变量为第 1 组，`_2`、`_3`… 为后续组）
   const DEEPSEEK_KEYS = readKeys('DEEPSEEK_API_KEY', env)
   const ZHIPU_KEYS = readKeys('ZHIPU_API_KEY', env)
   const GITEE_AI_KEYS = readKeys('GITEE_AI_API_KEY', env)
+  // 代金券查询用的 Web 控制台会话 Cookie（可选；按 _N 后缀与同序号 API Key 精确配对，缺口不错位）
+  const GITEE_AI_COOKIE_BY_KEY = readPairedMap('GITEE_AI_API_KEY', 'GITEE_AI_SESSION_COOKIE', env)
   const STEPFUN_KEYS = readKeys('STEPFUN_API_KEY', env)
   const SILICONFLOW_KEYS = readKeys('SILICONFLOW_API_KEY', env)
   const OPENROUTER_KEYS = readKeys('OPENROUTER_API_KEY', env)
@@ -71,83 +148,9 @@ export function createAppHandler(env: EnvGetter) {
     env,
   ).map((pair) => ({ accessKey: pair.key, secretKey: pair.secret }))
 
-  function maskKey(key: string): string {
-    if (key.length <= 8) {
-      return '****'
-    }
-    return `${key.slice(0, 4)}****${key.slice(-4)}`
-  }
-
-  function json(data: unknown, status = 200): Response {
-    return new Response(JSON.stringify(data), {
-      status,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-    })
-  }
-
-  /** 常见错误码的中文说明，原始英文信息保留在 message 中供诊断。 */
-  const ERROR_HINTS: Record<string, string> = {
-    NOT_CONFIGURED: '未配置对应密钥',
-    NetworkError: '网络请求失败',
-    NotAuthorized: '无访问权限（RAM 策略不足）',
-    InvalidAccessKeyId: 'AccessKey 不存在或无效',
-    'InvalidAccessKeyId.NotFound': 'AccessKey 不存在或无效',
-    SignatureDoesNotMatch: '签名不匹配',
-    InvalidResponse: '供应商返回了无法解析的响应',
-    ENDPOINT_GONE: '接口已下线',
-  }
-
-  function errorResponse(status: number, code: string, message: string): Response {
-    const hint = ERROR_HINTS[code]
-    const displayMessage = hint && hint !== message ? `${hint}：${message}` : message
-    return json({ error: { code, message: displayMessage } }, status)
-  }
-
-  function dateRange(daysParam: string | null): { start: string; end: string } {
-    const days = Math.min(90, Math.max(1, Number(daysParam ?? 7) || 7))
-    const end = new Date()
-    const start = new Date(end)
-    start.setDate(start.getDate() - (days - 1))
-    const format = (date: Date) => {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      return `${year}-${month}-${day}`
-    }
-    return { start: format(start), end: format(end) }
-  }
-
   // ---------------------------------------------------------------------------
   // API handlers
   // ---------------------------------------------------------------------------
-
-  interface AccountEntry<T> {
-    keyHint: string
-    run: () => Promise<T>
-  }
-
-  type AccountResult<T> = T & { keyHint: string; error?: string }
-
-  /** 并行执行多账号查询，每个账号独立容错，返回含 keyHint 的结果数组。 */
-  async function runAccounts<T>(entries: AccountEntry<T>[]): Promise<AccountResult<T>[]> {
-    const results = await Promise.allSettled(entries.map((entry) => entry.run()))
-    return results.map((result, index) => {
-      const { keyHint } = entries[index]
-      if (result.status === 'fulfilled') {
-        return { keyHint, ...result.value }
-      }
-      const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
-      return { keyHint, error: reason } as AccountResult<T>
-    })
-  }
-
-  function providerStatus(keyHints: string[]): {
-    configured: boolean
-    count: number
-    keyHints: string[]
-  } {
-    return { configured: keyHints.length > 0, count: keyHints.length, keyHints }
-  }
 
   function handleStatus(): Response {
     return json({
@@ -237,7 +240,22 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       GITEE_AI_KEYS.map((apiKey) => ({
         keyHint: maskKey(apiKey),
-        run: () => fetchGiteePackageBalance(apiKey),
+        run: async () => {
+          // 代金券与资源包并行查询、独立容错：Cookie 未配置 → voucher 缺省；过期/失败 → voucher.error
+          const cookie = GITEE_AI_COOKIE_BY_KEY.get(apiKey)
+          const [balance, voucher] = await Promise.all([
+            fetchGiteePackageBalance(apiKey),
+            cookie
+              ? fetchGiteeVoucher(cookie).then(
+                  (data) => ({ data }),
+                  (cause: unknown) => ({
+                    error: cause instanceof Error ? cause.message : String(cause),
+                  }),
+                )
+              : Promise.resolve(undefined),
+          ])
+          return Object.assign({}, balance, { voucher })
+        },
       })),
     )
     return json({ accounts })

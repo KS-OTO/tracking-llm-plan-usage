@@ -5,8 +5,9 @@
  *   https://help.aliyun.com/zh/bssopenapi/developer-reference/api-bssopenapi-2017-12-14-queryresourcepackageinstances
  * - RPC 签名机制（HMAC-SHA1）：参数名 ASCII 排序 -> RFC3986 编码 -> StringToSign
  * - 字段结构取自官方 Go/Python SDK（alibaba-cloud-sdk-go services/bssopenapi）。
- * - 使用 Web Crypto（crypto.subtle），兼容 Bun / Node 18+ / Cloudflare Workers。
+ * - 使用 Web Crypto（crypto.subtle），兼容 Bun / Node 20+ / Cloudflare Workers。
  */
+import { z } from 'zod'
 
 const textEncoder = new TextEncoder()
 
@@ -46,7 +47,7 @@ export function aliyunEncode(value: string): string {
  */
 export function aliyunStringToSign(params: Record<string, string>): string {
   const canonicalQuery = Object.entries(params)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, value]) => `${aliyunEncode(key)}=${aliyunEncode(value)}`)
     .join('&')
 
@@ -81,11 +82,11 @@ export async function signAliyunRoa(opts: {
 }): Promise<string> {
   const canonicalHeaders =
     Object.keys(opts.xAcsHeaders)
-      .sort()
+      .toSorted()
       .map((name) => `${name}:${opts.xAcsHeaders[name]}`)
       .join('\n') + '\n'
 
-  const queryEntries = Object.entries(opts.query ?? {}).sort(([a], [b]) =>
+  const queryEntries = Object.entries(opts.query ?? {}).toSorted(([a], [b]) =>
     a < b ? -1 : a > b ? 1 : 0,
   )
   const canonicalQuery = queryEntries.map(([key, value]) => `${key}=${value}`).join('&')
@@ -130,6 +131,43 @@ export interface AliyunPackagesResult {
   totalCount: number
 }
 
+const BssInstance = z.object({
+  InstanceId: z.string().catch(''),
+  CommodityCode: z.string().catch(''),
+  PackageType: z.string().catch(''),
+  Region: z.string().catch(''),
+  Status: z.string().catch(''),
+  EffectiveTime: z.string().catch(''),
+  ExpiryTime: z.string().catch(''),
+  TotalAmount: z.string().catch(''),
+  TotalAmountUnit: z.string().catch(''),
+  RemainingAmount: z.string().catch(''),
+  RemainingAmountUnit: z.string().catch(''),
+  Remark: z.string().catch(''),
+  ApplicableProducts: z
+    .object({
+      Product: z.array(z.object({ ProductCode: z.string().catch('') })).catch([]),
+    })
+    .optional()
+    .catch(undefined),
+})
+
+const BssResponse = z.object({
+  Success: z.boolean().catch(false),
+  Code: z.string().optional(),
+  Message: z.string().optional(),
+  Data: z
+    .object({
+      TotalCount: z.coerce.number().catch(0),
+      Instances: z
+        .object({
+          Instance: z.array(BssInstance).catch([]),
+        })
+        .optional(),
+    })
+    .optional(),
+})
+
 export async function queryResourcePackageInstances(
   creds: AliyunCredentials,
   opts?: { productCode?: string; pageSize?: number },
@@ -168,66 +206,43 @@ export async function queryResourcePackageInstances(
   const text = await res.text()
   let json: unknown
   try {
-    json = JSON.parse(text) as Record<string, unknown>
+    json = JSON.parse(text)
   } catch {
     throw new AliyunApiError('InvalidResponse', `响应不是合法 JSON: ${text.slice(0, 200)}`)
   }
 
-  const body = json as {
-    Success?: boolean
-    Code?: string
-    Message?: string
-    Data?: {
-      TotalCount?: string
-      Instances?: {
-        Instance?: Array<Record<string, unknown>>
-      }
-    }
+  const parsed = BssResponse.safeParse(json)
+  if (!parsed.success) {
+    throw new AliyunApiError('InvalidResponse', `响应结构无法解析: ${text.slice(0, 200)}`)
   }
+  const body = parsed.data
 
   if (!body.Success) {
     throw new AliyunApiError(body.Code ?? `HTTP_${res.status}`, body.Message ?? text.slice(0, 200))
   }
 
-  const instances = body.Data?.Instances?.Instance ?? []
-  const packages: AliyunResourcePackage[] = instances.map((instance) => {
-    const stringAt = (name: string, fallback = '') => {
-      const value = instance[name]
-      return typeof value === 'string' ? value : fallback
-    }
-    const productsValue = instance.ApplicableProducts
-    let applicableProducts: string[] = []
-    if (productsValue && typeof productsValue === 'object' && 'Product' in productsValue) {
-      const productList = productsValue.Product
-      if (Array.isArray(productList)) {
-        applicableProducts = productList
-          .filter((p): p is Record<string, unknown> => p !== null && typeof p === 'object')
-          .map((p) =>
-            'ProductCode' in p && typeof p.ProductCode === 'string' ? p.ProductCode : undefined,
-          )
-          .filter((p): p is string => p !== undefined)
-      }
-    }
-
-    return {
-      instanceId: stringAt('InstanceId'),
-      commodityCode: stringAt('CommodityCode'),
-      packageType: stringAt('PackageType'),
-      region: stringAt('Region'),
-      status: stringAt('Status'),
-      effectiveTime: stringAt('EffectiveTime'),
-      expiryTime: stringAt('ExpiryTime'),
-      totalAmount: stringAt('TotalAmount'),
-      totalAmountUnit: stringAt('TotalAmountUnit'),
-      remainingAmount: stringAt('RemainingAmount'),
-      remainingAmountUnit: stringAt('RemainingAmountUnit'),
-      remark: stringAt('Remark'),
-      applicableProducts,
-    }
-  })
+  const packages: AliyunResourcePackage[] = (body.Data?.Instances?.Instance ?? []).map(
+    (instance) => ({
+      instanceId: instance.InstanceId,
+      commodityCode: instance.CommodityCode,
+      packageType: instance.PackageType,
+      region: instance.Region,
+      status: instance.Status,
+      effectiveTime: instance.EffectiveTime,
+      expiryTime: instance.ExpiryTime,
+      totalAmount: instance.TotalAmount,
+      totalAmountUnit: instance.TotalAmountUnit,
+      remainingAmount: instance.RemainingAmount,
+      remainingAmountUnit: instance.RemainingAmountUnit,
+      remark: instance.Remark,
+      applicableProducts: (instance.ApplicableProducts?.Product ?? []).map(
+        (product) => product.ProductCode,
+      ),
+    }),
+  )
 
   return {
     packages,
-    totalCount: Number(body.Data?.TotalCount ?? packages.length),
+    totalCount: body.Data?.TotalCount ?? packages.length,
   }
 }

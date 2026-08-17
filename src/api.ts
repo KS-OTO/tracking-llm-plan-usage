@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import type {
   AliyunPackagesResponse,
   DeepSeekBalanceResponse,
@@ -8,7 +10,6 @@ import type {
   TokenPlanResponse,
   VolcPlanResponse,
   ZhipuPackagesResponse,
-  ApiErrorPayload,
 } from './types'
 
 export class ApiError extends Error {
@@ -20,7 +21,21 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string, params?: Record<string, string | number>): Promise<T> {
+/** 后端错误信封（createAppHandler 的 errorResponse 契约）。 */
+const ApiErrorEnvelope = z.object({
+  error: z.object({ code: z.string(), message: z.string() }).optional(),
+})
+
+/**
+ * 同源后端（本仓库 server/app.ts）的响应负载 schema：
+ * 错误契约运行时校验；业务字段与共享 types.ts 同构，组件侧防御性渲染兜底，
+ * 因此负载本身声明为可信直通（z.custom）。
+ */
+async function get<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  params?: Record<string, string | number>,
+): Promise<T> {
   const url = new URL(path, window.location.origin)
   for (const [key, value] of Object.entries(params ?? {})) {
     url.searchParams.set(key, String(value))
@@ -35,9 +50,9 @@ async function get<T>(path: string, params?: Record<string, string | number>): P
     )
   }
 
-  let body: T & ApiErrorPayload
+  let json: unknown
   try {
-    body = (await res.json()) as T & ApiErrorPayload
+    json = JSON.parse(await res.text())
   } catch {
     if (res.status >= 500) {
       throw new ApiError(
@@ -49,24 +64,34 @@ async function get<T>(path: string, params?: Record<string, string | number>): P
   }
 
   if (!res.ok) {
+    const envelope = ApiErrorEnvelope.safeParse(json)
+    const error = envelope.success ? envelope.data.error : undefined
     throw new ApiError(
-      body.error?.code ?? `HTTP_${res.status}`,
-      body.error?.message ?? `请求失败 (${res.status})`,
+      error?.code ?? `HTTP_${res.status}`,
+      error?.message ?? `请求失败 (${res.status})`,
     )
   }
-  return body
+  return schema.parse(json)
 }
 
 export const api = {
-  status: () => get<StatusResponse>('/api/status'),
-  deepseekBalance: () => get<DeepSeekBalanceResponse>('/api/deepseek/balance'),
-  volcPlan: (days: number) => get<VolcPlanResponse>('/api/volc/plan', { days }),
+  status: () => get('/api/status', z.custom<StatusResponse>()),
+  deepseekBalance: () => get('/api/deepseek/balance', z.custom<DeepSeekBalanceResponse>()),
+  volcPlan: (days: number) => get('/api/volc/plan', z.custom<VolcPlanResponse>(), { days }),
   volcInference: (days: number, model?: string) =>
-    get<InferenceUsageResponse>('/api/volc/inference-usage', model ? { days, model } : { days }),
-  zhipuPackages: () => get<ZhipuPackagesResponse>('/api/zhipu/packages'),
+    get(
+      '/api/volc/inference-usage',
+      z.custom<InferenceUsageResponse>(),
+      model ? { days, model } : { days },
+    ),
+  zhipuPackages: () => get('/api/zhipu/packages', z.custom<ZhipuPackagesResponse>()),
   aliyunPackages: (productCode?: string) =>
-    get<AliyunPackagesResponse>('/api/aliyun/packages', productCode ? { productCode } : undefined),
-  aliyunTokenPlan: () => get<TokenPlanResponse>('/api/aliyun/tokenplan'),
-  giteeBalance: () => get<GiteeBalanceResponse>('/api/gitee/balance'),
-  extras: () => get<ExtrasResponse>('/api/extras'),
+    get(
+      '/api/aliyun/packages',
+      z.custom<AliyunPackagesResponse>(),
+      productCode ? { productCode } : undefined,
+    ),
+  aliyunTokenPlan: () => get('/api/aliyun/tokenplan', z.custom<TokenPlanResponse>()),
+  giteeBalance: () => get('/api/gitee/balance', z.custom<GiteeBalanceResponse>()),
+  extras: () => get('/api/extras', z.custom<ExtrasResponse>()),
 }

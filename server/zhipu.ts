@@ -13,9 +13,25 @@
  *    GET https://bigmodel.cn/api/biz/tokenAccounts/list/my?pageNum=1&pageSize=10&filterEnabled=false
  *    鉴权：Authorization: Bearer <API Key>
  */
+import { z } from 'zod'
 
 const ZHIPU_OPEN_BASE_URL = 'https://open.bigmodel.cn'
 const ZHIPU_BIZ_BASE_URL = 'https://bigmodel.cn/api/biz'
+
+/** unit 编码 → 窗口名（智谱 quota 接口契约：3=5 小时，6=每周）。 */
+const ZHIPU_WINDOW_BY_UNIT: Record<number, 'fiveHour' | 'weekly'> = {
+  3: 'fiveHour',
+  6: 'weekly',
+}
+
+/** 解析失败 → 域错误（避免裸 ZodError 直接暴露给 UI）。 */
+function parseZhipuBody<T>(schema: z.ZodType<T>, json: unknown): T {
+  const parsed = schema.safeParse(json)
+  if (!parsed.success) {
+    throw new ZhipuApiError('InvalidResponse', '响应结构无法解析')
+  }
+  return parsed.data
+}
 
 export class ZhipuApiError extends Error {
   constructor(
@@ -26,27 +42,16 @@ export class ZhipuApiError extends Error {
   }
 }
 
-function toNumber(value: unknown): number {
-  if (typeof value === 'number') {
-    return value
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-  return 0
-}
-
-function stringField(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
-}
+const ErrorEnvelope = z.object({
+  error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional(),
+})
 
 async function zhipuRequest(
   url: string,
   headers: Record<string, string>,
   apiKey: string,
   label: string,
-): Promise<Record<string, unknown>> {
+): Promise<unknown> {
   let res: Response
   try {
     res = await fetch(url, { headers: { ...headers, accept: 'application/json' } })
@@ -57,25 +62,20 @@ async function zhipuRequest(
   const text = await res.text()
   let json: unknown
   try {
-    json = JSON.parse(text) as Record<string, unknown>
+    json = JSON.parse(text)
   } catch {
     throw new ZhipuApiError('InvalidResponse', `${label}响应不是合法 JSON: ${text.slice(0, 200)}`)
   }
 
-  const body = json as Record<string, unknown>
   if (!res.ok) {
-    const error = body.error
-    const code =
-      error && typeof error === 'object' && 'code' in error
-        ? String(error.code)
-        : `HTTP_${res.status}`
-    const message =
-      error && typeof error === 'object' && 'message' in error
-        ? String(error.message)
-        : text.slice(0, 200)
-    throw new ZhipuApiError(`Zhipu_${code}`, message)
+    const envelope = ErrorEnvelope.safeParse(json)
+    const error = envelope.success ? envelope.data.error : undefined
+    throw new ZhipuApiError(
+      `Zhipu_${error?.code ?? `HTTP_${res.status}`}`,
+      error?.message ?? text.slice(0, 200),
+    )
   }
-  return body
+  return json
 }
 
 // ---------------------------------------------------------------------------
@@ -96,9 +96,34 @@ export interface ZhipuCodingPlanQuota {
   windows: ZhipuQuotaWindow[]
 }
 
+const ZhipuQuotaBody = z.object({
+  success: z.boolean().optional().catch(undefined),
+  msg: z.string().catch(''),
+  data: z
+    .object({
+      level: z.string().catch(''),
+      limits: z
+        .array(
+          z
+            .object({
+              type: z.string().nullish(),
+              unit: z.coerce.number().catch(0),
+              usage: z.coerce.number().catch(0),
+              currentValue: z.coerce.number().catch(0),
+              remaining: z.coerce.number().catch(0),
+              percentage: z.coerce.number().catch(0),
+              nextResetTime: z.coerce.number().catch(0),
+            })
+            .nullish(),
+        )
+        .catch([]),
+    })
+    .catch({ level: '', limits: [] }),
+})
+
 /** Coding Plan 额度查询。注意鉴权用裸 Key（无 Bearer 前缀）。 */
 export async function getZhipuCodingPlanQuota(apiKey: string): Promise<ZhipuCodingPlanQuota> {
-  const body = await zhipuRequest(
+  const json = await zhipuRequest(
     `${ZHIPU_OPEN_BASE_URL}/api/monitor/usage/quota/limit`,
     {
       authorization: apiKey,
@@ -108,46 +133,35 @@ export async function getZhipuCodingPlanQuota(apiKey: string): Promise<ZhipuCodi
     apiKey,
     'Coding Plan 额度查询',
   )
+  const body = parseZhipuBody(ZhipuQuotaBody, json)
 
   if (body.success === false) {
-    throw new ZhipuApiError('Zhipu_BUSINESS', `Coding Plan 额度查询失败: ${stringField(body.msg)}`)
+    throw new ZhipuApiError('Zhipu_BUSINESS', `Coding Plan 额度查询失败: ${body.msg}`)
   }
 
-  const data = body.data
-  const limits =
-    data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>).limits)
-      ? ((data as Record<string, unknown>).limits as Array<Record<string, unknown>>)
-      : []
-
   const windows: ZhipuQuotaWindow[] = []
-  for (const limit of limits) {
+  for (const limit of body.data.limits) {
+    if (!limit) {
+      continue
+    }
     if (limit.type !== 'CREDIT_LIMIT' && limit.type !== 'TOKENS_LIMIT') {
       continue
     }
-    const unit = Number(limit.unit ?? 0)
-    const windowName = unit === 3 ? 'fiveHour' : unit === 6 ? 'weekly' : null
+    const windowName = ZHIPU_WINDOW_BY_UNIT[limit.unit] ?? null
     if (!windowName) {
       continue
     }
     windows.push({
       window: windowName,
-      total: toNumber(limit.usage),
-      used: toNumber(limit.currentValue),
-      remaining: toNumber(limit.remaining),
-      percentage: toNumber(limit.percentage),
-      nextResetTime: Number(limit.nextResetTime ?? 0),
+      total: limit.usage,
+      used: limit.currentValue,
+      remaining: limit.remaining,
+      percentage: limit.percentage,
+      nextResetTime: limit.nextResetTime,
     })
   }
 
-  return {
-    level:
-      data &&
-      typeof data === 'object' &&
-      typeof (data as Record<string, unknown>).level === 'string'
-        ? ((data as Record<string, unknown>).level as string)
-        : '',
-    windows,
-  }
+  return { level: body.data.level, windows }
 }
 
 // ---------------------------------------------------------------------------
@@ -162,26 +176,41 @@ export interface ZhipuAccountBalance {
   creditStatus: string
 }
 
+const ZhipuBalanceBody = z.object({
+  code: z.coerce.number().catch(0),
+  msg: z.string().catch(''),
+  data: z
+    .object({
+      balance: z.coerce.number().catch(0),
+      availableBalance: z.coerce.number().catch(0),
+      rechargeAmount: z.coerce.number().catch(0),
+      giveAmount: z.coerce.number().catch(0),
+      creditStatus: z.string().catch(''),
+    })
+    .nullable()
+    .catch(null),
+})
+
 /** 账户余额查询（控制台 biz API，Bearer Key 鉴权）。 */
 export async function getZhipuAccountBalance(apiKey: string): Promise<ZhipuAccountBalance> {
-  const body = await zhipuRequest(
+  const json = await zhipuRequest(
     `${ZHIPU_BIZ_BASE_URL}/account/query-customer-account-report`,
     { authorization: `Bearer ${apiKey}`, 'user-agent': 'llm-usage-monitor/1.0' },
     apiKey,
     '账户余额查询',
   )
+  const body = parseZhipuBody(ZhipuBalanceBody, json)
 
   if (body.code !== 200) {
-    throw new ZhipuApiError('Zhipu_BUSINESS', `账户余额查询失败: ${stringField(body.msg)}`)
+    throw new ZhipuApiError('Zhipu_BUSINESS', `账户余额查询失败: ${body.msg}`)
   }
-  const data = body.data as Record<string, unknown> | null
 
   return {
-    balance: toNumber(data?.balance),
-    availableBalance: toNumber(data?.availableBalance),
-    rechargeAmount: toNumber(data?.rechargeAmount),
-    giveAmount: toNumber(data?.giveAmount),
-    creditStatus: typeof data?.creditStatus === 'string' ? data.creditStatus : '',
+    balance: body.data?.balance ?? 0,
+    availableBalance: body.data?.availableBalance ?? 0,
+    rechargeAmount: body.data?.rechargeAmount ?? 0,
+    giveAmount: body.data?.giveAmount ?? 0,
+    creditStatus: body.data?.creditStatus ?? '',
   }
 }
 
@@ -203,33 +232,39 @@ export interface ZhipuTokenPackage {
   packageExpirationTime: string
 }
 
+const ZhipuPackageRow = z.object({
+  id: z.coerce.number().catch(0),
+  resourcePackageName: z.string().catch(''),
+  tokensMagnitude: z.coerce.number().catch(0),
+  tokenBalance: z.coerce.number().catch(0),
+  availableBalance: z.coerce.number().catch(0),
+  consumeType: z.string().catch(''),
+  status: z.string().catch(''),
+  type: z.string().catch(''),
+  suitableScene: z.string().catch(''),
+  effectiveTime: z.string().catch(''),
+  packageExpirationTime: z.string().catch(''),
+})
+
+const ZhipuPackagesBody = z.object({
+  code: z.coerce.number().catch(0),
+  msg: z.string().catch(''),
+  rows: z.array(ZhipuPackageRow.nullish()).catch([]),
+})
+
 /** 资源包列表（控制台 biz API，Bearer Key 鉴权）。 */
 export async function getZhipuTokenPackages(apiKey: string): Promise<ZhipuTokenPackage[]> {
-  const body = await zhipuRequest(
+  const json = await zhipuRequest(
     `${ZHIPU_BIZ_BASE_URL}/tokenAccounts/list/my?pageNum=1&pageSize=50&filterEnabled=false`,
     { authorization: `Bearer ${apiKey}`, 'user-agent': 'llm-usage-monitor/1.0' },
     apiKey,
     '资源包查询',
   )
+  const body = parseZhipuBody(ZhipuPackagesBody, json)
 
   if (body.code !== 200) {
-    throw new ZhipuApiError('Zhipu_BUSINESS', `资源包查询失败: ${stringField(body.msg)}`)
+    throw new ZhipuApiError('Zhipu_BUSINESS', `资源包查询失败: ${body.msg}`)
   }
-  const rows = Array.isArray(body.rows) ? (body.rows as Array<Record<string, unknown>>) : []
 
-  return rows.map((entry) => ({
-    id: Number(entry.id ?? 0),
-    resourcePackageName:
-      typeof entry.resourcePackageName === 'string' ? entry.resourcePackageName : '',
-    tokensMagnitude: toNumber(entry.tokensMagnitude),
-    tokenBalance: toNumber(entry.tokenBalance),
-    availableBalance: toNumber(entry.availableBalance),
-    consumeType: typeof entry.consumeType === 'string' ? entry.consumeType : '',
-    status: typeof entry.status === 'string' ? entry.status : '',
-    type: typeof entry.type === 'string' ? entry.type : '',
-    suitableScene: typeof entry.suitableScene === 'string' ? entry.suitableScene : '',
-    effectiveTime: typeof entry.effectiveTime === 'string' ? entry.effectiveTime : '',
-    packageExpirationTime:
-      typeof entry.packageExpirationTime === 'string' ? entry.packageExpirationTime : '',
-  }))
+  return body.rows.filter((row): row is ZhipuTokenPackage => row !== null && row !== undefined)
 }

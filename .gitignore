@@ -40,7 +40,13 @@ coverage
 # Vitest
 __screenshots__/
 
+# Playwright 运行产物
+test-results/
+playwright-report/
+
 # Vite
 *.timestamp-*-*.mjs
 .wrangler
 .dev.vars
+# EdgeOne Makers 本地构建产物（含从 .env 烘焙的明文密钥，禁止入库）
+.edgeone/

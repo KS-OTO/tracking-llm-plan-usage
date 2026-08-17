@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ZhipuPackagesResponse } from '../types'
-import { formatDateTime, formatMoney, formatReset, formatTokens, ratioOf } from '../utils'
+import { isFailedAccount } from '../types'
+import { formatDateTime, formatReset, formatTokens, progressStatus } from '../utils'
 
-defineProps<{
+import AccountSection from './AccountSection.vue'
+
+const props = defineProps<{
   data: ZhipuPackagesResponse | null
   loading: boolean
   error: string | null
@@ -11,16 +15,6 @@ defineProps<{
 const WINDOW_LABELS: Record<string, string> = {
   fiveHour: '5 小时窗口',
   weekly: '每周窗口',
-}
-
-function windowStatus(percent: number): 'success' | 'warning' | 'danger' {
-  if (percent >= 90) {
-    return 'danger'
-  }
-  if (percent >= 70) {
-    return 'warning'
-  }
-  return 'success'
 }
 
 function creditStatusLabel(status: string): string {
@@ -54,7 +48,7 @@ const packageColumns = [
   { colKey: 'expire', title: '到期时间', width: 140, cell: 'expire' },
 ]
 
-function packageRows(
+function packageRowsOf(
   account: NonNullable<ZhipuPackagesResponse['accounts']>[number] & {
     packages?: Array<{
       id: number
@@ -70,153 +64,243 @@ function packageRows(
 ) {
   return (account.packages ?? [])
     .filter((pkg) => pkg.status === 'EFFECTIVE' || pkg.status === 'NOTUSED')
-    .map((pkg) => ({
-      ...pkg,
-      _key: String(pkg.id),
-      _name: pkg.resourcePackageName,
-      _scene: pkg.suitableScene ?? '',
-    }))
+    .map((pkg) =>
+      Object.assign({}, pkg, {
+        _key: String(pkg.id),
+        _name: pkg.resourcePackageName,
+        _scene: pkg.suitableScene ?? '',
+      }),
+    )
 }
+
+/** 每账号资源包行一次性计算（divider 计数与表格数据共用，避免每次渲染重复过滤/映射）。 */
+const packageRowsByHint = computed(() => {
+  const map = new Map<string, ReturnType<typeof packageRowsOf>>()
+  for (const account of props.data?.accounts ?? []) {
+    if (!isFailedAccount(account)) {
+      map.set(account.keyHint, packageRowsOf(account))
+    }
+  }
+  return map
+})
 </script>
 
 <template>
-  <t-cell-group :title="`智谱 GLM（${data?.accounts.length ?? 0} 账号）`" theme="card">
-    <t-skeleton v-if="loading" animation="gradient" :row="2" />
-    <t-cell v-else-if="error" title="查询失败" :note="error" />
-    <template v-else-if="data">
-      <template v-for="(account, index) in data.accounts" :key="account.keyHint">
-        <t-divider v-if="index > 0" />
-        <t-cell v-if="account.error" :title="`账号 ${account.keyHint}`" :note="account.error" />
-        <div v-else class="td-card">
-          <div class="account-head">
-            <t-tag size="small" variant="light-outline" theme="primary"
-              >账号 {{ account.keyHint }}</t-tag
-            >
-            <t-tag size="small" variant="light-outline" theme="warning">
-              GLM Coding Plan：{{ account.codingPlan?.level || '未知' }}
-            </t-tag>
-            <a
-              class="muted"
-              href="https://www.bigmodel.cn/coding-plan/personal/usage"
-              target="_blank"
-              rel="noreferrer"
-            >
-              控制台用量页 ↗
-            </a>
-          </div>
+  <AccountSection
+    title="智谱 GLM"
+    :subtitle="`账号 ${data?.accounts.length ?? 0}`"
+    :loading="loading"
+    :error="error"
+    :empty="data?.accounts.length === 0"
+    empty-text="未配置 ZHIPU_API_KEY"
+  >
+    <template v-if="data">
+      <t-space direction="vertical" size="large" class="accounts">
+        <t-card
+          v-for="account in data.accounts"
+          :key="account.keyHint"
+          size="small"
+          header-bordered
+        >
+          <template #header>
+            <t-space align="center" size="small" break-line>
+              <t-tag size="small" variant="light-outline" theme="primary">
+                {{ account.keyHint }}
+              </t-tag>
+              <t-tag
+                v-if="!isFailedAccount(account)"
+                size="small"
+                variant="light-outline"
+                theme="warning"
+              >
+                GLM Coding Plan：{{ account.codingPlan?.level || '未知' }}
+              </t-tag>
+            </t-space>
+          </template>
 
-          <div
-            v-if="account.codingPlan && account.codingPlan.windows.length > 0"
-            class="window-grid"
-          >
-            <div
-              v-for="window in account.codingPlan.windows"
-              :key="window.window"
-              class="window-card"
+          <t-alert
+            v-if="isFailedAccount(account)"
+            theme="error"
+            :title="`账号 ${account.keyHint} 查询失败`"
+            :message="account.error"
+            :max-line="5"
+          />
+
+          <template v-else>
+            <t-space align="center" size="small" break-line class="account-head">
+              <a
+                class="muted"
+                href="https://www.bigmodel.cn/coding-plan/personal/usage"
+                target="_blank"
+                rel="noreferrer"
+              >
+                控制台用量页 ↗
+              </a>
+            </t-space>
+
+            <t-row
+              v-if="account.codingPlan && account.codingPlan.windows.length > 0"
+              :gutter="[12, 12]"
             >
-              <div class="window-head">
-                <span class="window-name">{{ WINDOW_LABELS[window.window] ?? window.window }}</span>
-                <span class="window-reset">{{ formatReset(window.nextResetTime) }}</span>
-              </div>
-              <t-progress
-                :percentage="Math.round(Math.min(100, window.percentage))"
-                :status="windowStatus(window.percentage)"
-                :label="false"
-                theme="line"
-              />
-              <div class="window-meta">
-                <span class="num"
-                  >{{ formatTokens(window.used) }} / {{ formatTokens(window.total) }}</span
-                >
-                <span class="num">{{ window.percentage.toFixed(1) }}%</span>
-              </div>
-              <div class="window-foot">
-                剩余 {{ formatTokens(window.remaining) }} · 重置于
-                {{ window.nextResetTime > 0 ? formatDateTime(window.nextResetTime) : '—' }}
-              </div>
-            </div>
-          </div>
-          <t-empty v-else description="未查询到 Coding Plan 额度（可能未订阅）" />
+              <t-col
+                v-for="window in account.codingPlan.windows"
+                :key="window.window"
+                :xs="24"
+                :sm="12"
+              >
+                <div class="window-block">
+                  <t-space align="center" justify="space-between" class="window-head">
+                    <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
+                    <span class="muted">{{ formatReset(window.nextResetTime) }}</span>
+                  </t-space>
+                  <t-progress
+                    :percentage="Math.round(Math.min(100, window.percentage))"
+                    :status="progressStatus(window.percentage)"
+                    :label="false"
+                  />
+                  <t-space align="center" justify="space-between" class="window-meta">
+                    <span class="num"
+                      >{{ formatTokens(window.used) }} / {{ formatTokens(window.total) }}</span
+                    >
+                    <span class="num">{{ window.percentage.toFixed(1) }}%</span>
+                  </t-space>
+                  <div class="muted window-foot">
+                    剩余 {{ formatTokens(window.remaining) }} · 重置于
+                    {{ window.nextResetTime > 0 ? formatDateTime(window.nextResetTime) : '—' }}
+                  </div>
+                </div>
+              </t-col>
+            </t-row>
+            <t-empty v-else description="未查询到 Coding Plan 额度（可能未订阅）" />
 
-          <t-divider />
-          <div class="balance-grid">
-            <div class="balance-cell">
-              <span class="balance-value">{{
-                formatMoney(account.balance?.availableBalance ?? 0, 'CNY')
-              }}</span>
-              <span class="balance-label">可用余额</span>
-            </div>
-            <div class="balance-cell">
-              <span class="balance-value">{{
-                formatMoney(account.balance?.balance ?? 0, 'CNY')
-              }}</span>
-              <span class="balance-label">账户余额</span>
-            </div>
-            <div class="balance-cell">
-              <span class="balance-value">{{
-                formatMoney(account.balance?.rechargeAmount ?? 0, 'CNY')
-              }}</span>
-              <span class="balance-label">累计充值</span>
-            </div>
-            <div class="balance-cell">
-              <span class="balance-value">{{
-                formatMoney(account.balance?.giveAmount ?? 0, 'CNY')
-              }}</span>
-              <span class="balance-label">赠送金额</span>
-            </div>
-            <div class="balance-cell">
-              <span class="balance-value">{{
-                creditStatusLabel(account.balance?.creditStatus ?? '')
-              }}</span>
-              <span class="balance-label">信用支付</span>
-            </div>
-          </div>
+            <t-divider align="left">余额</t-divider>
+            <t-row :gutter="[12, 12]">
+              <t-col :xs="12" :sm="8" :lg="4">
+                <t-statistic
+                  title="可用余额"
+                  :value="account.balance?.availableBalance ?? 0"
+                  :decimal-places="2"
+                  suffix="CNY"
+                />
+              </t-col>
+              <t-col :xs="12" :sm="8" :lg="4">
+                <t-statistic
+                  title="账户余额"
+                  :value="account.balance?.balance ?? 0"
+                  :decimal-places="2"
+                  suffix="CNY"
+                />
+              </t-col>
+              <t-col :xs="12" :sm="8" :lg="4">
+                <t-statistic
+                  title="累计充值"
+                  :value="account.balance?.rechargeAmount ?? 0"
+                  :decimal-places="2"
+                  suffix="CNY"
+                />
+              </t-col>
+              <t-col :xs="12" :sm="8" :lg="4">
+                <t-statistic
+                  title="赠送金额"
+                  :value="account.balance?.giveAmount ?? 0"
+                  :decimal-places="2"
+                  suffix="CNY"
+                />
+              </t-col>
+              <t-col :xs="12" :sm="8" :lg="4">
+                <div class="text-stat">
+                  <span class="text-stat-label">信用支付</span>
+                  <span class="text-stat-value">{{
+                    creditStatusLabel(account.balance?.creditStatus ?? '')
+                  }}</span>
+                </div>
+              </t-col>
+            </t-row>
 
-          <t-divider />
-          <div class="section-title">资源包（{{ packageRows(account).length }}）</div>
-          <div class="table-scroll">
+            <t-divider align="left"
+              >资源包（{{ packageRowsByHint.get(account.keyHint)?.length ?? 0 }}）</t-divider
+            >
             <t-table
-              :data="packageRows(account)"
+              :data="packageRowsByHint.get(account.keyHint) ?? []"
               :columns="packageColumns"
               row-key="_key"
               max-height="360"
-              :bordered="true"
+              bordered
+              size="small"
             >
               <template #name="{ row }">
                 <div>{{ row._name }}</div>
                 <div class="muted scene">{{ row._scene }}</div>
               </template>
               <template #type="{ row }">{{ packageTypeLabel(row.type) }}</template>
-              <template #total="{ row }"
-                ><span class="num">{{ formatTokens(row.tokensMagnitude) }}</span></template
-              >
-              <template #remaining="{ row }"
-                ><span class="num">{{ formatTokens(row.availableBalance) }}</span></template
-              >
+              <template #total="{ row }">{{ formatTokens(row.tokensMagnitude) }}</template>
+              <template #remaining="{ row }">{{ formatTokens(row.availableBalance) }}</template>
               <template #expire="{ row }">{{
                 row.packageExpirationTime ? row.packageExpirationTime.replace('T', ' ') : '—'
               }}</template>
             </t-table>
-          </div>
-        </div>
-      </template>
-      <t-empty v-if="data.accounts.length === 0" description="未配置 ZHIPU_API_KEY" />
+          </template>
+        </t-card>
+      </t-space>
     </template>
-  </t-cell-group>
+  </AccountSection>
 </template>
 
 <style scoped>
+.accounts {
+  width: 100%;
+}
+
 .account-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
   margin-bottom: 12px;
 }
 
-.scene {
+.window-block {
+  padding: 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--td-radius-medium);
+}
+
+.window-head {
+  margin-bottom: 8px;
+}
+
+.window-meta {
+  margin-top: 8px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--td-text-color-placeholder);
   font-size: 12px;
+}
+
+.window-foot {
+  margin-top: 4px;
+}
+
+.scene {
   max-width: 220px;
   white-space: normal;
+}
+
+.text-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.text-stat-label {
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
+}
+
+.text-stat-value {
+  font-size: 18px;
+  font-weight: 700;
 }
 </style>

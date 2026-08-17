@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import { signAliyunRoa, type AliyunCredentials } from './aliyun.ts'
 
 /**
@@ -25,12 +27,14 @@ export class TokenPlanApiError extends Error {
   }
 }
 
-interface TokenPlanResponse {
-  Success?: boolean
-  Code?: string
-  Message?: string
-  Data?: unknown
-}
+const TokenPlanEnvelope = z.object({
+  Success: z.boolean().optional().catch(undefined),
+  Code: z.string().optional(),
+  Message: z.string().optional(),
+  Data: z.unknown().optional(),
+})
+
+type TokenPlanResponse = z.infer<typeof TokenPlanEnvelope>
 
 async function tokenPlanGet(
   creds: AliyunCredentials,
@@ -75,24 +79,28 @@ async function tokenPlanGet(
   }
 
   const text = await res.text()
-  let json: TokenPlanResponse
+  let json: unknown
   try {
-    json = JSON.parse(text) as TokenPlanResponse
+    json = JSON.parse(text)
   } catch {
     throw new TokenPlanApiError('InvalidResponse', `响应不是合法 JSON: ${text.slice(0, 200)}`)
   }
+  const parsed = TokenPlanEnvelope.safeParse(json)
+  if (!parsed.success) {
+    throw new TokenPlanApiError('InvalidResponse', `响应结构无法解析: ${text.slice(0, 200)}`)
+  }
 
-  if (!res.ok || json.Success === false) {
+  if (!res.ok || parsed.data.Success === false) {
     throw new TokenPlanApiError(
-      json.Code ?? `HTTP_${res.status}`,
-      json.Message ?? text.slice(0, 200),
+      parsed.data.Code ?? `HTTP_${res.status}`,
+      parsed.data.Message ?? text.slice(0, 200),
     )
   }
-  return json
+  return parsed.data
 }
 
 // ---------------------------------------------------------------------------
-// 类型与归一化
+// 类型与 schema
 // ---------------------------------------------------------------------------
 
 export interface TokenPlanOrg {
@@ -142,55 +150,77 @@ interface TokenPlanPage<T> {
   total: number
 }
 
-function toEquityList(value: unknown): EquityQuota[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  return value
-    .filter(
-      (entry): entry is Record<string, unknown> => entry !== null && typeof entry === 'object',
-    )
-    .map((entry) => ({
-      equityType: typeof entry.EquityType === 'string' ? entry.EquityType : '',
-      cycleStartTime: Number(entry.CycleStartTime ?? 0),
-      cycleEndTime: Number(entry.CycleEndTime ?? 0),
-      cycleTotalValue: Number(entry.CycleTotalValue ?? 0),
-      cycleSurplusValue: Number(entry.CycleSurplusValue ?? 0),
-    }))
-}
+const EquityQuotaShape = z.object({
+  EquityType: z.string().catch(''),
+  CycleStartTime: z.coerce.number().catch(0),
+  CycleEndTime: z.coerce.number().catch(0),
+  CycleTotalValue: z.coerce.number().catch(0),
+  CycleSurplusValue: z.coerce.number().catch(0),
+})
 
-function toSeat(entry: Record<string, unknown>): TokenPlanSeat {
+const WorkspaceShape = z.object({
+  WorkspaceId: z.string().catch(''),
+  RoleCode: z.string().catch(''),
+})
+
+const OrgMembershipShape = z.object({
+  OrgId: z.string().catch(''),
+  RoleCode: z.string().catch(''),
+  Workspaces: z.array(WorkspaceShape).catch([]),
+})
+
+const AccountDetailData = z
+  .object({
+    AccountId: z.string().catch(''),
+    AliyunUid: z.string().catch(''),
+    Name: z.string().catch(''),
+    AccountType: z.string().catch(''),
+    OrgMemberships: z.array(OrgMembershipShape).catch([]),
+  })
+  .nullable()
+  .catch(null)
+
+const SeatShape = z.object({
+  InstanceCode: z.string().catch(''),
+  SeatId: z.string().catch(''),
+  SpecType: z.string().catch(''),
+  Status: z.string().catch(''),
+  AssignedStatus: z.string().catch(''),
+  AccountId: z.string().nullish(),
+  AccountName: z.string().nullish(),
+  AccountEmail: z.string().nullish(),
+  StartTime: z.coerce.number().catch(0),
+  EndTime: z.coerce.number().catch(0),
+  EquityList: z.array(EquityQuotaShape).catch([]),
+})
+
+const SharedPackageShape = z.object({
+  InstanceCode: z.string().catch(''),
+  Status: z.string().catch(''),
+  EquityList: z.array(EquityQuotaShape).catch([]),
+})
+
+function toEquity(entry: z.infer<typeof EquityQuotaShape>): EquityQuota {
   return {
-    instanceCode: typeof entry.InstanceCode === 'string' ? entry.InstanceCode : '',
-    seatId: typeof entry.SeatId === 'string' ? entry.SeatId : '',
-    specType: typeof entry.SpecType === 'string' ? entry.SpecType : '',
-    status: typeof entry.Status === 'string' ? entry.Status : '',
-    assignedStatus: typeof entry.AssignedStatus === 'string' ? entry.AssignedStatus : '',
-    accountId: typeof entry.AccountId === 'string' ? entry.AccountId : undefined,
-    accountName: typeof entry.AccountName === 'string' ? entry.AccountName : undefined,
-    accountEmail: typeof entry.AccountEmail === 'string' ? entry.AccountEmail : undefined,
-    startTime: Number(entry.StartTime ?? 0),
-    endTime: Number(entry.EndTime ?? 0),
-    equityList: toEquityList(entry.EquityList),
+    equityType: entry.EquityType,
+    cycleStartTime: entry.CycleStartTime,
+    cycleEndTime: entry.CycleEndTime,
+    cycleTotalValue: entry.CycleTotalValue,
+    cycleSurplusValue: entry.CycleSurplusValue,
   }
 }
 
-function toSharedPackage(entry: Record<string, unknown>): TokenPlanSharedPackage {
-  return {
-    instanceCode: typeof entry.InstanceCode === 'string' ? entry.InstanceCode : '',
-    status: typeof entry.Status === 'string' ? entry.Status : '',
-    equityList: toEquityList(entry.EquityList),
-  }
-}
-
-function pageOf<T>(data: unknown, mapper: (entry: Record<string, unknown>) => T): TokenPlanPage<T> {
-  const body = data as { Items?: unknown[]; Total?: number } | null
-  const items = Array.isArray(body?.Items)
-    ? body.Items.filter(
-        (entry): entry is Record<string, unknown> => entry !== null && typeof entry === 'object',
-      ).map(mapper)
-    : []
-  return { items, total: Number(body?.Total ?? items.length) }
+function pageOf<T>(data: unknown, itemSchema: z.ZodType<T>): TokenPlanPage<T> {
+  const page = z
+    .object({
+      Items: z.array(itemSchema).catch([]),
+      Total: z.coerce.number().optional().catch(undefined),
+    })
+    .nullable()
+    .catch(null)
+    .parse(data)
+  const items = page?.Items ?? []
+  return { items, total: page?.Total ?? items.length }
 }
 
 // ---------------------------------------------------------------------------
@@ -199,35 +229,21 @@ function pageOf<T>(data: unknown, mapper: (entry: Record<string, unknown>) => T)
 
 export async function getTokenPlanAccount(creds: AliyunCredentials): Promise<TokenPlanAccount> {
   const response = await tokenPlanGet(creds, 'GetTokenPlanAccountDetail', '/tokenplan/account')
-  const data = response.Data as Record<string, unknown> | null
-
-  const memberships = Array.isArray(data?.OrgMemberships)
-    ? data.OrgMemberships.filter(
-        (m): m is Record<string, unknown> => m !== null && typeof m === 'object',
-      )
-    : []
-  const orgs: TokenPlanOrg[] = memberships.map((membership) => {
-    const workspaces = Array.isArray(membership.Workspaces)
-      ? membership.Workspaces.filter(
-          (w): w is Record<string, unknown> => w !== null && typeof w === 'object',
-        ).map((w) => ({
-          workspaceId: typeof w.WorkspaceId === 'string' ? w.WorkspaceId : '',
-          roleCode: typeof w.RoleCode === 'string' ? w.RoleCode : '',
-        }))
-      : []
-    return {
-      orgId: typeof membership.OrgId === 'string' ? membership.OrgId : '',
-      roleCode: typeof membership.RoleCode === 'string' ? membership.RoleCode : '',
-      workspaces,
-    }
-  })
+  const data = AccountDetailData.parse(response.Data)
 
   return {
-    accountId: typeof data?.AccountId === 'string' ? data.AccountId : '',
-    aliyunUid: typeof data?.AliyunUid === 'string' ? data.AliyunUid : '',
-    name: typeof data?.Name === 'string' ? data.Name : '',
-    accountType: typeof data?.AccountType === 'string' ? data.AccountType : '',
-    orgs,
+    accountId: data?.AccountId ?? '',
+    aliyunUid: data?.AliyunUid ?? '',
+    name: data?.Name ?? '',
+    accountType: data?.AccountType ?? '',
+    orgs: (data?.OrgMemberships ?? []).map((membership) => ({
+      orgId: membership.OrgId,
+      roleCode: membership.RoleCode,
+      workspaces: membership.Workspaces.map((workspace) => ({
+        workspaceId: workspace.WorkspaceId,
+        roleCode: workspace.RoleCode,
+      })),
+    })),
   }
 }
 
@@ -244,7 +260,23 @@ export async function getTokenPlanSeats(
       PageSize: String(opts?.pageSize ?? 20),
     },
   )
-  return pageOf(response.Data, toSeat)
+  const page = pageOf(response.Data, SeatShape)
+  return {
+    total: page.total,
+    items: page.items.map((seat) => ({
+      instanceCode: seat.InstanceCode,
+      seatId: seat.SeatId,
+      specType: seat.SpecType,
+      status: seat.Status,
+      assignedStatus: seat.AssignedStatus,
+      accountId: seat.AccountId ?? undefined,
+      accountName: seat.AccountName ?? undefined,
+      accountEmail: seat.AccountEmail ?? undefined,
+      startTime: seat.StartTime,
+      endTime: seat.EndTime,
+      equityList: seat.EquityList.map(toEquity),
+    })),
+  }
 }
 
 export async function getTokenPlanSharedPackages(
@@ -260,7 +292,15 @@ export async function getTokenPlanSharedPackages(
       PageSize: String(opts?.pageSize ?? 20),
     },
   )
-  return pageOf(response.Data, toSharedPackage)
+  const page = pageOf(response.Data, SharedPackageShape)
+  return {
+    total: page.total,
+    items: page.items.map((pkg) => ({
+      instanceCode: pkg.InstanceCode,
+      status: pkg.Status,
+      equityList: pkg.EquityList.map(toEquity),
+    })),
+  }
 }
 
 export interface TokenPlanStats {
