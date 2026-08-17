@@ -77,13 +77,8 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
-        <t-card
-          v-for="(account, i) in data.accounts"
-          :key="account.keyHint"
-          size="small"
-          header-bordered
-        >
-          <template #header>
+        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+          <div class="account-head">
             <t-space align="center" size="small" break-line>
               <t-tag size="small" variant="light-outline" theme="primary">{{
                 accountName(account, i)
@@ -101,7 +96,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
                 {{ account.detailsStart }} ~ {{ account.detailsEnd }}
               </span>
             </t-space>
-          </template>
+          </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
@@ -112,7 +107,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
           />
 
           <template v-else>
-            <t-row :gutter="[12, 12]">
+            <t-row :gutter="[16, 16]">
               <t-col
                 v-for="window in account.windows"
                 :key="window.window"
@@ -159,7 +154,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
                   {{ account.codingPlan.status }}
                 </t-tag>
               </t-space>
-              <t-row v-if="account.codingPlan.windows.length > 0" :gutter="[12, 12]">
+              <t-row v-if="account.codingPlan.windows.length > 0" :gutter="[16, 16]">
                 <t-col
                   v-for="window in account.codingPlan.windows"
                   :key="window.level"
@@ -201,7 +196,6 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
               :columns="detailsColumns"
               row-key="_key"
               max-height="360"
-              bordered
               size="small"
             >
               <template #time="{ row }">{{ formatDateTime(row.time) }}</template>
@@ -218,7 +212,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
               </template>
             </t-table>
           </template>
-        </t-card>
+        </div>
       </t-space>
     </template>
   </AccountSection>
@@ -235,8 +229,8 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
 }
 
 .window-block {
-  padding: 12px;
-  border: 1px solid var(--td-component-stroke);
+  padding: var(--td-size-5) var(--td-size-6);
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: var(--td-radius-medium);
 }
 
@@ -268,5 +262,18 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
 
 .section-head {
   margin-bottom: 12px;
+}
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 </style>
