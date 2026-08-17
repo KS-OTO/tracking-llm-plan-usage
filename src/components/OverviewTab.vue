@@ -148,9 +148,19 @@ interface PlatformSummary {
 const summaries = computed<PlatformSummary[]>(() => {
   const out: PlatformSummary[] = []
 
+  /** 平台出卡：失败时显示「查询失败」而非整卡消失（P0-4：失败平台静默蒸发）。 */
+  function push(entry: PlatformSummary, failed: boolean): void {
+    if (failed) {
+      out.push({ ...entry, primary: '查询失败', danger: true })
+    } else {
+      out.push(entry)
+    }
+  }
+
   // 火山：Agent Plan 最紧窗口 + Coding Plan 状态
-  const volcAccounts = okAccounts(volcPlan.value.data?.accounts ?? [])
-  if (volcAccounts.length > 0) {
+  const volcAll = volcPlan.value.data?.accounts ?? []
+  const volcAccounts = okAccounts(volcAll)
+  if (volcAll.length > 0) {
     let worstPercent = 0
     let worstReset = 0
     for (const account of volcAccounts) {
@@ -162,20 +172,24 @@ const summaries = computed<PlatformSummary[]>(() => {
         }
       }
     }
-    out.push({
-      key: 'volc',
-      name: '火山方舟',
-      tab: 'subscription',
-      anchor: 'volc-plan',
-      primary: `最紧窗口 ${Math.round(worstPercent)}%`,
-      secondary: worstReset > 0 ? formatReset(worstReset) : undefined,
-      danger: worstPercent >= 90,
-    })
+    push(
+      {
+        key: 'volc',
+        name: '火山方舟',
+        tab: 'subscription',
+        anchor: 'volc-plan',
+        primary: `最紧窗口 ${Math.round(worstPercent)}%`,
+        secondary: worstReset > 0 ? formatReset(worstReset) : undefined,
+        danger: worstPercent >= 90,
+      },
+      volcAccounts.length === 0,
+    )
   }
 
   // 智谱：Coding Plan 等级 + 最紧窗口
-  const zhipuAccounts = okAccounts(zhipu.value.data?.accounts ?? [])
-  if (zhipuAccounts.length > 0) {
+  const zhipuAll = zhipu.value.data?.accounts ?? []
+  const zhipuAccounts = okAccounts(zhipuAll)
+  if (zhipuAll.length > 0) {
     const level = zhipuAccounts[0]?.codingPlan?.level || '—'
     let worstPercent = 0
     for (const account of zhipuAccounts) {
@@ -183,20 +197,24 @@ const summaries = computed<PlatformSummary[]>(() => {
         worstPercent = Math.max(worstPercent, window.percentage)
       }
     }
-    out.push({
-      key: 'zhipu',
-      name: '智谱 GLM',
-      tab: 'subscription',
-      anchor: 'zhipu',
-      primary: `${level} · ${Math.round(worstPercent)}%`,
-      secondary: `${zhipuAccounts.length} 账号`,
-      danger: worstPercent >= 90,
-    })
+    push(
+      {
+        key: 'zhipu',
+        name: '智谱 GLM',
+        tab: 'subscription',
+        anchor: 'zhipu',
+        primary: `${level} · ${Math.round(worstPercent)}%`,
+        secondary: `${zhipuAccounts.length} 账号`,
+        danger: worstPercent >= 90,
+      },
+      zhipuAccounts.length === 0,
+    )
   }
 
   // Token Plan 座席剩余
-  const tpAccounts = okAccounts(tokenPlan.value.data?.accounts ?? [])
-  if (tpAccounts.length > 0) {
+  const tpAll = tokenPlan.value.data?.accounts ?? []
+  const tpAccounts = okAccounts(tpAll)
+  if (tpAll.length > 0) {
     let seats = 0
     let remaining = 0
     for (const account of tpAccounts) {
@@ -205,36 +223,44 @@ const summaries = computed<PlatformSummary[]>(() => {
         remaining += seat.equityList?.[0]?.cycleSurplusValue ?? 0
       }
     }
-    out.push({
-      key: 'tokenplan',
-      name: '阿里 Token Plan',
-      tab: 'subscription',
-      anchor: 'tokenplan',
-      primary: `${seats} 座席`,
-      secondary: `剩 ${remaining >= 1e6 ? `${(remaining / 1e6).toFixed(2)}M` : Math.round(remaining)} CREDITS`,
-    })
+    push(
+      {
+        key: 'tokenplan',
+        name: '阿里 Token Plan',
+        tab: 'subscription',
+        anchor: 'tokenplan',
+        primary: `${seats} 座席`,
+        secondary: `剩 ${remaining >= 1e6 ? `${(remaining / 1e6).toFixed(2)}M` : Math.round(remaining)} CREDITS`,
+      },
+      tpAccounts.length === 0,
+    )
   }
 
   // DeepSeek 余额
-  const dsAccounts = okAccounts(deepseek.value.data?.accounts ?? [])
-  if (dsAccounts.length > 0) {
+  const dsAll = deepseek.value.data?.accounts ?? []
+  const dsAccounts = okAccounts(dsAll)
+  if (dsAll.length > 0) {
     const total = dsAccounts.reduce(
       (sum, account) => sum + account.balances.reduce((s, entry) => s + entry.total, 0),
       0,
     )
-    out.push({
-      key: 'deepseek',
-      name: 'DeepSeek',
-      tab: 'balance',
-      anchor: 'deepseek',
-      primary: `${total.toFixed(2)} CNY`,
-      secondary: `${dsAccounts.length} 账号`,
-    })
+    push(
+      {
+        key: 'deepseek',
+        name: 'DeepSeek',
+        tab: 'balance',
+        anchor: 'deepseek',
+        primary: `${total.toFixed(2)} CNY`,
+        secondary: `${dsAccounts.length} 账号`,
+      },
+      dsAccounts.length === 0,
+    )
   }
 
   // 模力方舟：余额 + 代金券
-  const giteeAccounts = okAccounts(gitee.value.data?.accounts ?? [])
-  if (giteeAccounts.length > 0) {
+  const giteeAll = gitee.value.data?.accounts ?? []
+  const giteeAccounts = okAccounts(giteeAll)
+  if (giteeAll.length > 0) {
     const balance = giteeAccounts.reduce((sum, account) => sum + account.balance, 0)
     const voucher = giteeAccounts.reduce(
       (sum, account) =>
@@ -242,28 +268,35 @@ const summaries = computed<PlatformSummary[]>(() => {
         (account.voucher && 'data' in account.voucher ? account.voucher.data.couponCashBalance : 0),
       0,
     )
-    out.push({
-      key: 'gitee',
-      name: '模力方舟',
-      tab: 'balance',
-      anchor: 'gitee',
-      primary: `${balance.toFixed(2)} CNY`,
-      secondary: voucher > 0 ? `代金券 ${voucher.toFixed(2)}` : undefined,
-    })
+    push(
+      {
+        key: 'gitee',
+        name: '模力方舟',
+        tab: 'balance',
+        anchor: 'gitee',
+        primary: `${balance.toFixed(2)} CNY`,
+        secondary: voucher > 0 ? `代金券 ${voucher.toFixed(2)}` : undefined,
+      },
+      giteeAccounts.length === 0,
+    )
   }
 
   // 阿里资源包
-  const aliyunAccounts = okAccounts(aliyun.value.data?.accounts ?? [])
-  if (aliyunAccounts.length > 0) {
+  const aliyunAll = aliyun.value.data?.accounts ?? []
+  const aliyunAccounts = okAccounts(aliyunAll)
+  if (aliyunAll.length > 0) {
     const packages = aliyunAccounts.reduce((sum, account) => sum + (account.totalCount ?? 0), 0)
-    out.push({
-      key: 'aliyun',
-      name: '阿里资源包',
-      tab: 'balance',
-      anchor: 'aliyun',
-      primary: `${packages} 个包`,
-      secondary: `${aliyunAccounts.length} 账号`,
-    })
+    push(
+      {
+        key: 'aliyun',
+        name: '阿里资源包',
+        tab: 'balance',
+        anchor: 'aliyun',
+        primary: `${packages} 个包`,
+        secondary: `${aliyunAccounts.length} 账号`,
+      },
+      aliyunAccounts.length === 0,
+    )
   }
 
   // 扩展平台计数
@@ -290,6 +323,22 @@ const incompleteVars = computed(() => status.value.data?.incomplete ?? [])
 const isEmpty = computed(
   () => !loading.value && alerts.value.length === 0 && summaries.value.length === 0,
 )
+
+/** 预警行跳转（清除死代码三元：智谱→zhipu 锚点，其余→volc-plan）。 */
+function jumpFromAlert(alert: { platform: string }): void {
+  const isZhipu = alert.platform.includes('智谱')
+  emit('jump', 'subscription', isZhipu ? 'zhipu' : 'volc-plan')
+}
+
+/** t-statistic 文本值：重置倒计时。 */
+function resetDisplayValue(reset: {
+  platform: string
+  account: string
+  window: string
+  resetTime: number
+}): string {
+  return formatReset(reset.resetTime)
+}
 
 function jump(tab: string, anchor: string): void {
   emit('jump', tab, anchor)
@@ -392,29 +441,28 @@ function jump(tab: string, anchor: string): void {
       <t-col :xs="24" :sm="12" :lg="7">
         <t-card title="平台总览" header-bordered size="small">
           <t-empty v-if="summaries.length === 0 && !loading" description="未配置任何平台密钥" />
-          <div v-else class="summary-counts">
-            <div class="summary-item">
-              <span class="summary-value">{{ summaries.length }}</span>
-              <span class="muted">已配置平台</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-value" :class="{ 'text-danger': criticalCount > 0 }">
-                {{ criticalCount }}
-              </span>
-              <span class="muted">紧急 (≥90%)</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-value">{{ warningCount }}</span>
-              <span class="muted">注意 (≥70%)</span>
-            </div>
-          </div>
+          <t-row v-else :gutter="[16, 8]">
+            <t-col :span="8">
+              <t-statistic title="已配置平台" :value="summaries.length" />
+            </t-col>
+            <t-col :span="8">
+              <t-statistic
+                title="紧急 (≥90%)"
+                :value="criticalCount"
+                :color="criticalCount > 0 ? 'red' : undefined"
+              />
+            </t-col>
+            <t-col :span="8">
+              <t-statistic title="注意 (≥70%)" :value="warningCount" />
+            </t-col>
+          </t-row>
         </t-card>
       </t-col>
     </t-row>
 
     <!-- 平台导航卡：点击直达对应区块 -->
     <t-divider align="left">平台导航（点击直达）</t-divider>
-    <t-row :gutter="[12, 12]">
+    <t-row :gutter="[16, 16]">
       <t-col v-for="item in summaries" :key="item.key" :xs="12" :sm="8" :md="6" :lg="4">
         <t-card
           size="small"
@@ -443,88 +491,6 @@ function jump(tab: string, anchor: string): void {
 <style scoped>
 .overview {
   width: 100%;
-}
-
-.alert-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.alert-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--td-radius-medium);
-  cursor: pointer;
-}
-
-.alert-row:hover {
-  background: var(--td-bg-color-container-hover);
-}
-
-.alert-row:focus-visible {
-  outline: 2px solid var(--td-brand-color);
-  outline-offset: -2px;
-}
-
-.alert-platform {
-  font-weight: 600;
-  font-size: 13px;
-  min-width: 64px;
-}
-
-.alert-account,
-.alert-window {
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-}
-
-.alert-reset {
-  margin-left: auto;
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.more-hint {
-  padding: 4px 8px;
-}
-
-.reset-block {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.reset-countdown {
-  font-size: 20px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.summary-counts {
-  display: flex;
-  justify-content: space-around;
-  padding: 8px 0;
-}
-
-.summary-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.summary-value {
-  font-size: 22px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.text-danger {
-  color: var(--td-error-color);
 }
 
 .nav-card {
@@ -556,5 +522,13 @@ function jump(tab: string, anchor: string): void {
 .muted {
   color: var(--td-text-color-placeholder);
   font-size: 12px;
+}
+.alert-meta {
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-secondary);
+}
+
+.reset-meta {
+  margin-top: var(--td-size-2);
 }
 </style>

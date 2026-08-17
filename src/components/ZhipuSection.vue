@@ -20,6 +20,11 @@ const WINDOW_LABELS: Record<string, string> = {
   weekly: '每周窗口',
 }
 
+/** 信用支付状态 → 数值占位（t-statistic 值必须为 number，文本经 format 呈现）。 */
+function creditStatusNumber(status: string): number {
+  return status === 'ENABLE' ? 1 : 0
+}
+
 function creditStatusLabel(status: string): string {
   if (status === 'ENABLE') {
     return '已开通'
@@ -100,13 +105,8 @@ const packageRowsByHint = computed(() => {
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
-        <t-card
-          v-for="(account, i) in data.accounts"
-          :key="account.keyHint"
-          size="small"
-          header-bordered
-        >
-          <template #header>
+        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+          <div class="account-head">
             <t-space align="center" size="small" break-line>
               <t-tag size="small" variant="light-outline" theme="primary">{{
                 accountName(account, i)
@@ -121,7 +121,7 @@ const packageRowsByHint = computed(() => {
                 GLM Coding Plan：{{ account.codingPlan?.level || '未知' }}
               </t-tag>
             </t-space>
-          </template>
+          </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
@@ -153,7 +153,7 @@ const packageRowsByHint = computed(() => {
               v-if="
                 variant !== 'balance' && account.codingPlan && account.codingPlan.windows.length > 0
               "
-              :gutter="[12, 12]"
+              :gutter="[16, 16]"
             >
               <t-col
                 v-for="window in account.codingPlan.windows"
@@ -190,7 +190,7 @@ const packageRowsByHint = computed(() => {
             />
 
             <t-divider v-if="variant !== 'plan'" align="left">余额</t-divider>
-            <t-row v-if="variant !== 'plan'" :gutter="[12, 12]">
+            <t-row v-if="variant !== 'plan'" :gutter="[16, 16]">
               <t-col :xs="12" :sm="8" :lg="4">
                 <t-statistic
                   title="可用余额"
@@ -224,12 +224,11 @@ const packageRowsByHint = computed(() => {
                 />
               </t-col>
               <t-col :xs="12" :sm="8" :lg="4">
-                <div class="text-stat">
-                  <span class="text-stat-label">信用支付</span>
-                  <span class="text-stat-value">{{
-                    creditStatusLabel(account.balance?.creditStatus ?? '')
-                  }}</span>
-                </div>
+                <t-statistic
+                  title="信用支付"
+                  :value="creditStatusNumber(account.balance?.creditStatus ?? '')"
+                  :format="() => creditStatusLabel(account.balance?.creditStatus ?? '')"
+                />
               </t-col>
             </t-row>
 
@@ -242,7 +241,6 @@ const packageRowsByHint = computed(() => {
               :columns="packageColumns"
               row-key="_key"
               max-height="360"
-              bordered
               size="small"
             >
               <template #name="{ row }">
@@ -257,7 +255,7 @@ const packageRowsByHint = computed(() => {
               }}</template>
             </t-table>
           </template>
-        </t-card>
+        </div>
       </t-space>
     </template>
   </AccountSection>
@@ -273,8 +271,8 @@ const packageRowsByHint = computed(() => {
 }
 
 .window-block {
-  padding: 12px;
-  border: 1px solid var(--td-component-stroke);
+  padding: var(--td-size-5) var(--td-size-6);
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: var(--td-radius-medium);
 }
 
@@ -305,19 +303,17 @@ const packageRowsByHint = computed(() => {
   white-space: normal;
 }
 
-.text-stat {
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+.account-head {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.text-stat-label {
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-
-.text-stat-value {
-  font-size: 18px;
-  font-weight: 700;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 </style>

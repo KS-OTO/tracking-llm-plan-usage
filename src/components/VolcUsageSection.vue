@@ -100,18 +100,13 @@ const accountCards = computed<AccountCard[]>(() =>
 
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
-        <t-card
-          v-for="(card, i) in accountCards"
-          :key="card.account.keyHint"
-          size="small"
-          header-bordered
-        >
-          <template #header>
+        <div v-for="(card, i) in accountCards" :key="card.account.keyHint" class="account-group">
+          <div class="account-head">
             <t-tag size="small" variant="light-outline" theme="primary">
               {{ accountName(card.account, i) }}
             </t-tag>
             <span class="muted key-hint">{{ card.account.keyHint }}</span>
-          </template>
+          </div>
 
           <t-alert
             v-if="card.failed"
@@ -122,7 +117,7 @@ const accountCards = computed<AccountCard[]>(() =>
           />
 
           <template v-else-if="card.totals">
-            <t-row :gutter="[12, 12]">
+            <t-row :gutter="[16, 16]">
               <t-col :xs="12" :sm="6">
                 <t-statistic title="总 Token" :value="card.totals.total" :format="formatTokens" />
               </t-col>
@@ -143,7 +138,6 @@ const accountCards = computed<AccountCard[]>(() =>
               :columns="columns"
               row-key="_key"
               max-height="360"
-              bordered
               size="small"
             >
               <template #day="{ row }">{{ row.day }}</template>
@@ -153,7 +147,7 @@ const accountCards = computed<AccountCard[]>(() =>
               <template #requests="{ row }">{{ row.requests.toLocaleString('zh-CN') }}</template>
             </t-table>
           </template>
-        </t-card>
+        </div>
       </t-space>
     </template>
   </AccountSection>
@@ -166,5 +160,18 @@ const accountCards = computed<AccountCard[]>(() =>
 .key-hint {
   font-size: 12px;
   color: var(--td-text-color-placeholder);
+}
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 </style>

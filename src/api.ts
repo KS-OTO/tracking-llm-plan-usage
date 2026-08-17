@@ -46,7 +46,7 @@ async function get<T>(
   } catch {
     throw new ApiError(
       'BACKEND_UNREACHABLE',
-      '无法连接后端 API 服务（127.0.0.1:8787），请先运行 bun run server（或 bun run dev:all 一键启动）',
+      `无法连接后端 API 服务（${window.location.origin}），请确认服务已启动（本地运行 bun run server 或 bun run dev）`,
     )
   }
 
