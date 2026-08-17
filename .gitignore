@@ -50,3 +50,9 @@ playwright-report/
 .dev.vars
 # EdgeOne Makers 本地构建产物（含从 .env 烘焙的明文密钥，禁止入库）
 .edgeone/
+
+# Tencent Cloud EdgeOne
+.env
+.edgeone/*
+.tef_dist/*
+  
