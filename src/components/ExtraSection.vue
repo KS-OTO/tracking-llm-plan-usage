@@ -159,7 +159,7 @@ const WINDOW_LABELS: Record<string, string> = {
 
 .window-block {
   padding: var(--td-size-5) var(--td-size-6);
-  background: var(--td-bg-color-secondarycontainer);
+  background: var(--td-bg-color-container);
   border-radius: var(--td-radius-medium);
 }
 

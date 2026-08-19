@@ -101,7 +101,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`账号 ${account.keyHint} 查询失败`"
+            :title="`${accountName(account, i)}（${account.keyHint}）查询失败`"
             :message="account.error"
             :max-line="5"
           />
@@ -230,7 +230,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
 
 .window-block {
   padding: var(--td-size-5) var(--td-size-6);
-  background: var(--td-bg-color-secondarycontainer);
+  background: var(--td-bg-color-container);
   border-radius: var(--td-radius-medium);
 }
 

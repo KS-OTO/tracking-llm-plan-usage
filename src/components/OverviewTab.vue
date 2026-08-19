@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { Component } from 'vue'
 
-import { accountName, isFailedAccount } from '../types'
+import { isFailedAccount } from '../types'
 import { useDashboardStore } from '../stores/dashboard'
 import { formatReset } from '../utils'
 
@@ -119,8 +118,12 @@ const earliestReset = computed(() => {
     if ('error' in account) {
       continue
     }
+    const name = account.label || account.keyHint
     for (const window of account.windows) {
-      consider('火山方舟', account.keyHint, window.window, window.resetTime)
+      consider('火山方舟', name, window.window, window.resetTime)
+    }
+    for (const window of account.codingPlan?.windows ?? []) {
+      consider('火山 Coding', name, window.level, window.resetTime)
     }
   }
   for (const account of zhipu.value.data?.accounts ?? []) {
@@ -128,7 +131,7 @@ const earliestReset = computed(() => {
       continue
     }
     for (const window of account.codingPlan?.windows ?? []) {
-      consider('智谱', account.keyHint, window.window, window.nextResetTime)
+      consider('智谱', account.label || account.keyHint, window.window, window.nextResetTime)
     }
   }
   return best as { platform: string; account: string; window: string; resetTime: number } | null
@@ -165,7 +168,7 @@ const summaries = computed<PlatformSummary[]>(() => {
     let worstReset = 0
     for (const account of volcAccounts) {
       for (const window of account.windows) {
-        const percent = window.quota > 0 ? (window.used / window.quota) * 100 : 0
+        const percent = window.quota > 0 ? Math.min(100, (window.used / window.quota) * 100) : 0
         if (percent > worstPercent) {
           worstPercent = percent
           worstReset = window.resetTime

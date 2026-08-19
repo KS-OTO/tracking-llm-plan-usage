@@ -134,10 +134,16 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }, FILTER_DEBOUNCE_MS)
   }
 
-  /** 模型过滤局部刷新：只重拉火山推理接口，不打扰其余平台。 */
+  let inferenceSeq = 0
+
+  /** 模型过滤局部刷新：只重拉火山推理接口，不打扰其余平台。序号守卫丢弃乱序响应。 */
   async function refreshInference(): Promise<void> {
+    const seq = ++inferenceSeq
     const model = modelFilter.value.trim() || undefined
     const result = await Promise.allSettled([api.volcInference(VOLC_DETAILS_DAYS, model)])
+    if (seq !== inferenceSeq) {
+      return
+    }
     applyResult(result[0], volcInference)
   }
 

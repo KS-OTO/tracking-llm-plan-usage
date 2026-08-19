@@ -81,6 +81,14 @@ describe('TokenPlanSection', () => {
     expect(alerts[0]!.text()).toContain('LTAI****failed')
   })
 
+  it('renders neutral empty state (no red alert) when notConfigured', () => {
+    const wrapper = mountWithTDesign(TokenPlanSection, {
+      props: { data: null, loading: false, error: null, notConfigured: true },
+    })
+    expect(wrapper.text()).toContain('未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY')
+    expect(wrapper.findComponent({ name: 'TAlert' }).exists()).toBe(false)
+  })
+
   it('shows skeleton when loading without data', () => {
     const wrapper = mountWithTDesign(TokenPlanSection, {
       props: { data: null, loading: true, error: null },

@@ -69,7 +69,7 @@ function rowsOf(
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`账号 ${account.keyHint} 查询失败`"
+            :title="`${accountName(account, i)}（${account.keyHint}）查询失败`"
             :message="account.error"
             :max-line="5"
           />
