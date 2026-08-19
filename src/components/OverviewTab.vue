@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 
 import { isFailedAccount } from '../types'
 import { useDashboardStore } from '../stores/dashboard'
-import { formatReset } from '../utils'
+import { formatReset, formatTokens } from '../utils'
 
 const emit = defineEmits<{
   /** 跳转到指定平台卡片：切 Tab + 滚动到锚点。 */
@@ -29,6 +29,7 @@ const {
   aliyun,
   tokenPlan,
   extras,
+  baidu,
   status,
   loading,
   lastUpdated,
@@ -299,6 +300,25 @@ const summaries = computed<PlatformSummary[]>(() => {
         secondary: `${aliyunAccounts.length} 账号`,
       },
       aliyunAccounts.length === 0,
+    )
+  }
+
+  // 百度千帆：量包用量 + TPM
+  const baiduAll = baidu.value.data?.accounts ?? []
+  const baiduAccounts = okAccounts(baiduAll)
+  if (baiduAll.length > 0) {
+    const tokens = baiduAccounts.reduce((sum, a) => sum + a.usage.totalTokens, 0)
+    const pkgs = baiduAccounts.reduce((sum, a) => sum + a.packages.length, 0)
+    push(
+      {
+        key: 'baidu',
+        name: '百度千帆',
+        tab: 'balance',
+        anchor: 'baidu',
+        primary: tokens > 0 ? `7 天 ${formatTokens(tokens)}` : `${pkgs} 量包`,
+        secondary: baiduAccounts.length > 1 ? `${baiduAccounts.length} 账号` : undefined,
+      },
+      baiduAccounts.length === 0,
     )
   }
 

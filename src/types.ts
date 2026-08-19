@@ -11,6 +11,7 @@ export interface StatusResponse {
     zhipu: ProviderStatus
     aliyun: ProviderStatus
     gitee: ProviderStatus
+    baidu: ProviderStatus
     tokenplan: ProviderStatus
     extras: ProviderStatus
   }
@@ -314,4 +315,39 @@ export interface ApiErrorPayload {
     code: string
     message: string
   }
+}
+
+export interface QianfanPackage {
+  packageId: string
+  serviceName: string
+  specification: string
+  used: string
+  status: string
+  startTime: string
+  expiredTime: string
+  creator: string
+}
+
+export interface QianfanTpmQuota {
+  instanceId: string
+  model: string
+  tpm: number
+  status: string
+  paymentTiming: string
+}
+
+export interface QianfanUsageSummary {
+  serviceCount: number
+  totalTokens: number
+  totalCalls: number
+}
+
+export interface QianfanData {
+  packages: QianfanPackage[]
+  tpmQuotas: QianfanTpmQuota[]
+  usage: QianfanUsageSummary
+}
+
+export interface BaiduQianfanResponse {
+  accounts: AccountEnvelope<QianfanData>[]
 }

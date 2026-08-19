@@ -16,16 +16,17 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
 - **可访问性**：语义化地标（header/main/footer）、键盘可达、aria 标注、对比度对齐 TDesign 官方 token。
 - **骨架屏 / 错误告警 / 空状态**：统一由 TDesign Skeleton / Alert / Empty 承载。
 
-| 数据源                | 接口                                                                                        | 展示内容                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| DeepSeek              | `GET /user/balance`                                                                         | 总余额、充值余额、赠金余额（CNY/USD）、可用状态                           |
-| 火山方舟 Agent Plan   | `GetAFPUsage` + `GetUsageDetails`                                                           | 套餐类型 + 5 小时/每日/每周/每月 AFP 配额与用量、重置倒计时、模型调用明细 |
-| 火山方舟 Coding Plan  | `GetCodingPlanUsage`（套餐额度）+ `GetInferenceUsage`（推理用量）                           | Coding Plan 状态/窗口额度（session/周/月）+ 近 N 天推理用量、按模型过滤   |
-| 智谱 GLM              | `GET /api/monitor/usage/quota/limit`（Coding Plan）+ 控制台 biz API（余额/资源包）          | Coding Plan 套餐等级与 5 小时/每周窗口额度、账户余额、Token 资源包明细    |
-| 阿里云百炼            | `QueryResourcePackageInstances`（BSS）                                                      | Token 资源包实例：总量/剩余、有效期、状态、适用产品（需 BSS 只读权限）    |
-| 阿里云百炼 Token Plan | ModelStudio OpenAPI（ROA）：`GetSubscriptionSeatDetails` / `ListSubscriptionSharedPackages` | TokenPlan 账户/组织信息、订阅座席与共享包的 CREDITS 额度周期、总额/剩余   |
-| 模力方舟（Gitee AI）  | `GET /tokens/packages/balance` + 内部接口（Cookie）                                         | 资源包总金额/已用/剩余、代金券余额与明细（需配置会话 Cookie）             |
-| 扩展平台（可选）      | StepFun / SiliconFlow / OpenRouter / Novita 余额 + Kimi / MiniMax Token Plan                | 配置对应密钥后自动出现在「其他平台（扩展）」区块，支持多账号              |
+| 数据源                | 接口                                                                                        | 展示内容                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| DeepSeek              | `GET /user/balance`                                                                         | 总余额、充值余额、赠金余额（CNY/USD）、可用状态                              |
+| 火山方舟 Agent Plan   | `GetAFPUsage` + `GetUsageDetails`                                                           | 套餐类型 + 5 小时/每日/每周/每月 AFP 配额与用量、重置倒计时、模型调用明细    |
+| 火山方舟 Coding Plan  | `GetCodingPlanUsage`（套餐额度）+ `GetInferenceUsage`（推理用量）                           | Coding Plan 状态/窗口额度（session/周/月）+ 近 N 天推理用量、按模型过滤      |
+| 智谱 GLM              | `GET /api/monitor/usage/quota/limit`（Coding Plan）+ 控制台 biz API（余额/资源包）          | Coding Plan 套餐等级与 5 小时/每周窗口额度、账户余额、Token 资源包明细       |
+| 阿里云百炼            | `QueryResourcePackageInstances`（BSS）                                                      | Token 资源包实例：总量/剩余、有效期、状态、适用产品（需 BSS 只读权限）       |
+| 阿里云百炼 Token Plan | ModelStudio OpenAPI（ROA）：`GetSubscriptionSeatDetails` / `ListSubscriptionSharedPackages` | TokenPlan 账户/组织信息、订阅座席与共享包的 CREDITS 额度周期、总额/剩余      |
+| 模力方舟（Gitee AI）  | `GET /tokens/packages/balance` + 内部接口（Cookie）                                         | 资源包总金额/已用/剩余、代金券余额与明细（需配置会话 Cookie）                |
+| 百度智能云千帆        | 平台功能 OpenAPI（/v2/charge + /v2/service，BCE AK/SK 签名）                                | 量包（总量/已用/到期/状态）+ TPM 配额 + 近 7 天调用概览（Token/次数/服务数） |
+| 扩展平台（可选）      | StepFun / SiliconFlow / OpenRouter / Novita 余额 + Kimi / MiniMax Token Plan                | 配置对应密钥后自动出现在「其他平台（扩展）」区块，支持多账号                 |
 
 密钥只存在于服务端环境变量，前端页面不接触任何 Key（仅展示掩码）。
 
