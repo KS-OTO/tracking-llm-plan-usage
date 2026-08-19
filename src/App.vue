@@ -9,6 +9,7 @@ import DeepSeekSection from './components/DeepSeekSection.vue'
 import ExtraSection from './components/ExtraSection.vue'
 import GiteeSection from './components/GiteeSection.vue'
 import OverviewTab from './components/OverviewTab.vue'
+import OpenRouterSection from './components/OpenRouterSection.vue'
 import TokenPlanSection from './components/TokenPlanSection.vue'
 import VolcPlanSection from './components/VolcPlanSection.vue'
 import VolcUsageSection from './components/VolcUsageSection.vue'
@@ -27,6 +28,7 @@ const {
   tokenPlan,
   gitee,
   baidu,
+  openrouter,
   extras,
   loading,
   lastUpdated,
@@ -85,6 +87,7 @@ const failedProviders = computed(() => {
   check('阿里资源包', aliyun.value)
   check('模力方舟', gitee.value)
   check('百度千帆', baidu.value)
+  check('OpenRouter', openrouter.value)
   check('扩展平台', extras.value)
   return entries
 })
@@ -240,6 +243,14 @@ const lastUpdatedText = computed(() => {
               :loading="loading && baidu.data === null"
               :error="baidu.error"
               :not-configured="baidu.notConfigured"
+            />
+          </t-col>
+          <t-col :xs="24" :md="12" :lg="8" id="anchor-openrouter">
+            <OpenRouterSection
+              :data="openrouter.data"
+              :loading="loading && openrouter.data === null"
+              :error="openrouter.error"
+              :not-configured="openrouter.notConfigured"
             />
           </t-col>
         </t-row>

@@ -11,6 +11,7 @@
 import {
   fetchNovitaBalance,
   fetchOpenRouterBalance,
+  fetchOpenRouterDetail,
   fetchSiliconFlowBalance,
   fetchStepFunBalance,
   type BalanceInfo,
@@ -212,6 +213,7 @@ export function createAppHandler(env: EnvGetter) {
   labelMap('kimi', 'KIMI_API_KEY', 'KIMI_LABEL')
   labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
   labelMap('baidu', 'BAIDU_ACCESS_KEY_ID', 'BAIDU_LABEL')
+  labelMap('openrouter', 'OPENROUTER_API_KEY', 'OPENROUTER_LABEL')
   const labelOf = (provider: string, key: string): string | undefined =>
     LABELS.get(provider)?.get(key)
 
@@ -487,6 +489,20 @@ export function createAppHandler(env: EnvGetter) {
     return json({ accounts })
   }
 
+  async function handleOpenRouter(): Promise<Response> {
+    if (OPENROUTER_KEYS.length === 0) {
+      return errorResponse(503, 'NOT_CONFIGURED', '未配置 OPENROUTER_API_KEY 环境变量')
+    }
+    const accounts = await runAccounts(
+      OPENROUTER_KEYS.map((apiKey) => ({
+        keyHint: maskKey(apiKey),
+        label: labelOf('openrouter', apiKey),
+        run: () => fetchOpenRouterDetail(apiKey),
+      })),
+    )
+    return json({ accounts })
+  }
+
   async function handleVolcInference(requestUrl: URL): Promise<Response> {
     if (volcCredentialsList.length === 0) {
       return errorResponse(
@@ -553,6 +569,9 @@ export function createAppHandler(env: EnvGetter) {
       }
       if (url.pathname === '/api/baidu/qianfan') {
         return await handleBaidu()
+      }
+      if (url.pathname === '/api/openrouter/detail') {
+        return await handleOpenRouter()
       }
       if (url.pathname === '/api/extras') {
         return await handleExtras()
