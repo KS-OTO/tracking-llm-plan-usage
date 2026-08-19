@@ -238,7 +238,8 @@ export function normalizeSessionCookie(raw: string): string {
   }
   try {
     const decoded = decodeURIComponent(trimmed)
-    return decoded.includes('=') && decoded.includes(';') ? decoded : trimmed
+    // 解码后含 '=' 即视为编码 Cookie（单对/多对均可），且解码形态应比原文更「像 Cookie」
+    return decoded.includes('=') ? decoded : trimmed
   } catch {
     // 非法百分号序列（如 token%invalid）不是编码 Cookie，按原文使用
     return trimmed

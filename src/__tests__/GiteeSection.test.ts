@@ -121,6 +121,14 @@ describe('GiteeSection', () => {
     expect(wrapper.text()).toContain('没有资源包')
   })
 
+  it('renders neutral empty state (no red alert) when notConfigured', () => {
+    const wrapper = mountWithTDesign(GiteeSection, {
+      props: { data: null, loading: false, error: null, notConfigured: true },
+    })
+    expect(wrapper.text()).toContain('未配置 GITEE_AI_API_KEY')
+    expect(wrapper.findComponent({ name: 'TAlert' }).exists()).toBe(false)
+  })
+
   it('shows skeleton when loading without data', () => {
     const wrapper = mountWithTDesign(GiteeSection, {
       props: { data: null, loading: true, error: null },

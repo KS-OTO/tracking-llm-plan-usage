@@ -46,7 +46,7 @@ defineProps<{
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`账号 ${account.keyHint} 查询失败`"
+            :title="`${accountName(account, i)}（${account.keyHint}）查询失败`"
             :message="account.error"
             :max-line="5"
           />
@@ -94,5 +94,9 @@ defineProps<{
   gap: var(--td-size-2);
   flex-wrap: wrap;
   margin-bottom: var(--td-size-4);
+}
+.muted {
+  color: var(--td-text-color-placeholder);
+  font-size: var(--td-font-size-body-small);
 }
 </style>

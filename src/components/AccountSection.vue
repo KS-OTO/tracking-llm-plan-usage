@@ -24,7 +24,7 @@ defineProps<{
     </template>
 
     <t-skeleton v-if="loading" :loading="true" animation="gradient" :row-col="[1, 2, 3]" />
-    <template v-else-if="error && (empty || notConfigured)">
+    <template v-else-if="error && empty">
       <t-alert theme="error" :message="error" :max-line="5" />
     </template>
     <template v-else-if="notConfigured">
