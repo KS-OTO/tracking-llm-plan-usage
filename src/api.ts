@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type {
   AliyunPackagesResponse,
   BaiduQianfanResponse,
+  OpenRouterDetailResponse,
   DeepSeekBalanceResponse,
   ExtrasResponse,
   GiteeBalanceResponse,
@@ -95,5 +96,6 @@ export const api = {
   aliyunTokenPlan: () => get('/api/aliyun/tokenplan', z.custom<TokenPlanResponse>()),
   giteeBalance: () => get('/api/gitee/balance', z.custom<GiteeBalanceResponse>()),
   baiduQianfan: () => get('/api/baidu/qianfan', z.custom<BaiduQianfanResponse>()),
+  openrouterDetail: () => get('/api/openrouter/detail', z.custom<OpenRouterDetailResponse>()),
   extras: () => get('/api/extras', z.custom<ExtrasResponse>()),
 }
