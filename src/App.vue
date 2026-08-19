@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { RefreshIcon, MoonIcon, SunnyIcon } from 'tdesign-icons-vue-next'
 
 import AliyunSection from './components/AliyunSection.vue'
+import BaiduSection from './components/BaiduSection.vue'
 import DeepSeekSection from './components/DeepSeekSection.vue'
 import ExtraSection from './components/ExtraSection.vue'
 import GiteeSection from './components/GiteeSection.vue'
@@ -25,6 +26,7 @@ const {
   aliyun,
   tokenPlan,
   gitee,
+  baidu,
   extras,
   loading,
   lastUpdated,
@@ -82,6 +84,7 @@ const failedProviders = computed(() => {
   check('DeepSeek', deepseek.value)
   check('阿里资源包', aliyun.value)
   check('模力方舟', gitee.value)
+  check('百度千帆', baidu.value)
   check('扩展平台', extras.value)
   return entries
 })
@@ -229,6 +232,14 @@ const lastUpdatedText = computed(() => {
               :loading="loading && gitee.data === null"
               :error="gitee.error"
               :not-configured="gitee.notConfigured"
+            />
+          </t-col>
+          <t-col :xs="24" :md="12" :lg="8" id="anchor-baidu">
+            <BaiduSection
+              :data="baidu.data"
+              :loading="loading && baidu.data === null"
+              :error="baidu.error"
+              :not-configured="baidu.notConfigured"
             />
           </t-col>
         </t-row>

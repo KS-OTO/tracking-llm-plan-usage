@@ -11,6 +11,7 @@ import { defineStore } from 'pinia'
 import { api, ApiError } from '../api'
 import type {
   AliyunPackagesResponse,
+  BaiduQianfanResponse,
   DeepSeekBalanceResponse,
   ExtrasResponse,
   GiteeBalanceResponse,
@@ -71,6 +72,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   })
   const tokenPlan = ref<Slice<TokenPlanResponse>>({ data: null, error: null, notConfigured: false })
   const gitee = ref<Slice<GiteeBalanceResponse>>({ data: null, error: null, notConfigured: false })
+  const baidu = ref<Slice<BaiduQianfanResponse>>({ data: null, error: null, notConfigured: false })
   const extras = ref<Slice<ExtrasResponse>>({ data: null, error: null, notConfigured: false })
 
   const loading = ref(false)
@@ -101,6 +103,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       api.aliyunPackages(),
       api.aliyunTokenPlan(),
       api.giteeBalance(),
+      api.baiduQianfan(),
       api.extras(),
     ])
     inFlight = false
@@ -118,7 +121,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
     applyResult(results[5], aliyun)
     applyResult(results[6], tokenPlan)
     applyResult(results[7], gitee)
-    applyResult(results[8], extras)
+    applyResult(results[8], baidu)
+    applyResult(results[9], extras)
 
     // 至少一个请求成功才更新时间戳：全部失败时保留旧时间，避免“刚刷新但数据是旧的”误导
     if (results.some((result) => result.status === 'fulfilled')) {
@@ -197,6 +201,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     aliyun,
     tokenPlan,
     gitee,
+    baidu,
     extras,
     loading,
     lastUpdated,
