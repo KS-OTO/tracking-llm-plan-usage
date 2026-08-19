@@ -17,6 +17,7 @@ import {
 } from './balances.ts'
 import { queryResourcePackageInstances, type AliyunCredentials } from './aliyun.ts'
 import { fetchDeepSeekBalance } from './deepseek.ts'
+import { fetchQianfanData, type BaiduCredentials } from './baidu.ts'
 import { fetchGiteePackageBalance, fetchGiteeVoucher } from './gitee.ts'
 import { fetchKimiPlan, fetchMiniMaxPlan, type TokenPlanInfo } from './plans.ts'
 import {
@@ -187,6 +188,12 @@ export function createAppHandler(env: EnvGetter) {
     env,
   ).map((pair) => ({ accessKey: pair.key, secretKey: pair.secret }))
 
+  const baiduCredentialsList: BaiduCredentials[] = readKeyPairs(
+    'BAIDU_ACCESS_KEY_ID',
+    'BAIDU_SECRET_KEY',
+    env,
+  ).map((pair) => ({ accessKey: pair.key, secretKey: pair.secret }))
+
   // 账号别名（可选）：*_LABEL / *_LABEL_N 与同序号 Key 配对；按平台命名空间隔离，
   // 避免跨平台复用同一凭据值时别名互相覆盖
   const LABELS = new Map<string, Map<string, string>>()
@@ -204,6 +211,7 @@ export function createAppHandler(env: EnvGetter) {
   labelMap('novita', 'NOVITA_API_KEY', 'NOVITA_LABEL')
   labelMap('kimi', 'KIMI_API_KEY', 'KIMI_LABEL')
   labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
+  labelMap('baidu', 'BAIDU_ACCESS_KEY_ID', 'BAIDU_LABEL')
   const labelOf = (provider: string, key: string): string | undefined =>
     LABELS.get(provider)?.get(key)
 
@@ -211,6 +219,7 @@ export function createAppHandler(env: EnvGetter) {
   const INCOMPLETE_VARS = [
     ...readIncompletePairs('VOLC_ACCESS_KEY_ID', 'VOLC_SECRET_KEY', env),
     ...readIncompletePairs('ALIYUN_ACCESS_KEY_ID', 'ALIYUN_SECRET_KEY', env),
+    ...readIncompletePairs('BAIDU_ACCESS_KEY_ID', 'BAIDU_SECRET_KEY', env),
   ]
 
   // ---------------------------------------------------------------------------
@@ -233,6 +242,7 @@ export function createAppHandler(env: EnvGetter) {
         zhipu: providerStatus(ZHIPU_KEYS.map(maskKey)),
         aliyun: providerStatus(aliyunCredentialsList.map((cred) => maskKey(cred.accessKey))),
         gitee: providerStatus(GITEE_AI_KEYS.map(maskKey)),
+        baidu: providerStatus(baiduCredentialsList.map((cred) => maskKey(cred.accessKey))),
         tokenplan: providerStatus(aliyunCredentialsList.map((cred) => maskKey(cred.accessKey))),
         extras: providerStatus(extrasKeyHints),
       },
@@ -459,6 +469,24 @@ export function createAppHandler(env: EnvGetter) {
     return json({ accounts })
   }
 
+  async function handleBaidu(): Promise<Response> {
+    if (baiduCredentialsList.length === 0) {
+      return errorResponse(
+        503,
+        'NOT_CONFIGURED',
+        '未配置 BAIDU_ACCESS_KEY_ID / BAIDU_SECRET_KEY 环境变量',
+      )
+    }
+    const accounts = await runAccounts(
+      baiduCredentialsList.map((creds) => ({
+        keyHint: maskKey(creds.accessKey),
+        label: labelOf('baidu', creds.accessKey),
+        run: () => fetchQianfanData(creds),
+      })),
+    )
+    return json({ accounts })
+  }
+
   async function handleVolcInference(requestUrl: URL): Promise<Response> {
     if (volcCredentialsList.length === 0) {
       return errorResponse(
@@ -522,6 +550,9 @@ export function createAppHandler(env: EnvGetter) {
       }
       if (url.pathname === '/api/gitee/balance') {
         return await handleGiteeBalance()
+      }
+      if (url.pathname === '/api/baidu/qianfan') {
+        return await handleBaidu()
       }
       if (url.pathname === '/api/extras') {
         return await handleExtras()
