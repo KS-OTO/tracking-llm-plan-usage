@@ -122,8 +122,13 @@ type AccountResult<T> =
   | (T & { keyHint: string; label?: string })
   | { keyHint: string; label?: string; error: string }
 
-/** 按账号错误的中文化提示（与顶层 ERROR_HINTS 同源下沉到 per-account）。 */
-function accountErrorHint(message: string): string {
+/** 按账号错误的中文化提示：优先匹配错误类携带的 code 字段，回退 message 子串。 */
+function accountErrorHint(message: string, code?: string): string {
+  for (const { pattern, hint } of ACCOUNT_ERROR_HINTS) {
+    if (code === pattern || (code && code.includes(pattern))) {
+      return `${hint}：${message}`
+    }
+  }
   for (const { pattern, hint } of ACCOUNT_ERROR_HINTS) {
     if (message.includes(pattern)) {
       return `${hint}：${message}`
@@ -141,7 +146,9 @@ async function runAccounts<T>(entries: AccountEntry<T>[]): Promise<AccountResult
       return Object.assign({}, result.value, { keyHint, label })
     }
     const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
-    return { keyHint, label, error: accountErrorHint(reason) }
+    const reasonError = result.reason instanceof Error ? result.reason : null
+    const code = reasonError && 'code' in reasonError ? String(reasonError.code) : undefined
+    return { keyHint, label, error: accountErrorHint(reason, code) }
   })
 }
 
@@ -180,24 +187,25 @@ export function createAppHandler(env: EnvGetter) {
     env,
   ).map((pair) => ({ accessKey: pair.key, secretKey: pair.secret }))
 
-  // 账号别名（可选）：*_LABEL / *_LABEL_N 与同序号 Key 配对，无别名时前端退化为「账号 N」
-  const LABEL_BY_KEY = readPairedMap('DEEPSEEK_API_KEY', 'DEEPSEEK_LABEL', env)
-  for (const [k, v] of readPairedMap('VOLC_ACCESS_KEY_ID', 'VOLC_LABEL', env))
-    LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('ZHIPU_API_KEY', 'ZHIPU_LABEL', env)) LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('ALIYUN_ACCESS_KEY_ID', 'ALIYUN_LABEL', env))
-    LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('GITEE_AI_API_KEY', 'GITEE_LABEL', env)) LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('STEPFUN_API_KEY', 'STEPFUN_LABEL', env))
-    LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('SILICONFLOW_API_KEY', 'SILICONFLOW_LABEL', env))
-    LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('OPENROUTER_API_KEY', 'OPENROUTER_LABEL', env))
-    LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('NOVITA_API_KEY', 'NOVITA_LABEL', env)) LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('KIMI_API_KEY', 'KIMI_LABEL', env)) LABEL_BY_KEY.set(k, v)
-  for (const [k, v] of readPairedMap('MINIMAX_API_KEY', 'MINIMAX_LABEL', env))
-    LABEL_BY_KEY.set(k, v)
+  // 账号别名（可选）：*_LABEL / *_LABEL_N 与同序号 Key 配对；按平台命名空间隔离，
+  // 避免跨平台复用同一凭据值时别名互相覆盖
+  const LABELS = new Map<string, Map<string, string>>()
+  const labelMap = (provider: string, keyPrefix: string, labelPrefix: string) => {
+    LABELS.set(provider, readPairedMap(keyPrefix, labelPrefix, env))
+  }
+  labelMap('deepseek', 'DEEPSEEK_API_KEY', 'DEEPSEEK_LABEL')
+  labelMap('volc', 'VOLC_ACCESS_KEY_ID', 'VOLC_LABEL')
+  labelMap('zhipu', 'ZHIPU_API_KEY', 'ZHIPU_LABEL')
+  labelMap('aliyun', 'ALIYUN_ACCESS_KEY_ID', 'ALIYUN_LABEL')
+  labelMap('gitee', 'GITEE_AI_API_KEY', 'GITEE_LABEL')
+  labelMap('stepfun', 'STEPFUN_API_KEY', 'STEPFUN_LABEL')
+  labelMap('siliconflow', 'SILICONFLOW_API_KEY', 'SILICONFLOW_LABEL')
+  labelMap('openrouter', 'OPENROUTER_API_KEY', 'OPENROUTER_LABEL')
+  labelMap('novita', 'NOVITA_API_KEY', 'NOVITA_LABEL')
+  labelMap('kimi', 'KIMI_API_KEY', 'KIMI_LABEL')
+  labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
+  const labelOf = (provider: string, key: string): string | undefined =>
+    LABELS.get(provider)?.get(key)
 
   // 半配置检测：只配了 Key 没配 SecretKey（或反之）的变量名
   const INCOMPLETE_VARS = [
@@ -210,13 +218,14 @@ export function createAppHandler(env: EnvGetter) {
   // ---------------------------------------------------------------------------
 
   function handleStatus(): Response {
-    const extrasCount =
-      STEPFUN_KEYS.length +
-      SILICONFLOW_KEYS.length +
-      OPENROUTER_KEYS.length +
-      NOVITA_KEYS.length +
-      KIMI_KEYS.length +
-      MINIMAX_KEYS.length
+    const extrasKeyHints = [
+      ...STEPFUN_KEYS,
+      ...SILICONFLOW_KEYS,
+      ...OPENROUTER_KEYS,
+      ...NOVITA_KEYS,
+      ...KIMI_KEYS,
+      ...MINIMAX_KEYS,
+    ].map(maskKey)
     return json({
       providers: {
         deepseek: providerStatus(DEEPSEEK_KEYS.map(maskKey)),
@@ -225,9 +234,7 @@ export function createAppHandler(env: EnvGetter) {
         aliyun: providerStatus(aliyunCredentialsList.map((cred) => maskKey(cred.accessKey))),
         gitee: providerStatus(GITEE_AI_KEYS.map(maskKey)),
         tokenplan: providerStatus(aliyunCredentialsList.map((cred) => maskKey(cred.accessKey))),
-        extras: providerStatus(
-          extrasCount > 0 ? Array.from({ length: extrasCount }, (_, i) => `凭据${i + 1}`) : [],
-        ),
+        extras: providerStatus(extrasKeyHints),
       },
       incomplete: INCOMPLETE_VARS,
       now: Date.now(),
@@ -240,7 +247,7 @@ export function createAppHandler(env: EnvGetter) {
         provider: 'StepFun 阶跃星辰',
         entries: STEPFUN_KEYS.map((key) => ({
           keyHint: maskKey(key),
-          label: LABEL_BY_KEY.get(key),
+          label: labelOf('stepfun', key),
           run: () => fetchStepFunBalance(key),
         })),
       },
@@ -248,7 +255,7 @@ export function createAppHandler(env: EnvGetter) {
         provider: 'SiliconFlow 硅基流动',
         entries: SILICONFLOW_KEYS.map((key) => ({
           keyHint: maskKey(key),
-          label: LABEL_BY_KEY.get(key),
+          label: labelOf('siliconflow', key),
           run: () => fetchSiliconFlowBalance(key),
         })),
       },
@@ -256,7 +263,7 @@ export function createAppHandler(env: EnvGetter) {
         provider: 'OpenRouter',
         entries: OPENROUTER_KEYS.map((key) => ({
           keyHint: maskKey(key),
-          label: LABEL_BY_KEY.get(key),
+          label: labelOf('openrouter', key),
           run: () => fetchOpenRouterBalance(key),
         })),
       },
@@ -264,7 +271,7 @@ export function createAppHandler(env: EnvGetter) {
         provider: 'Novita AI',
         entries: NOVITA_KEYS.map((key) => ({
           keyHint: maskKey(key),
-          label: LABEL_BY_KEY.get(key),
+          label: labelOf('novita', key),
           run: () => fetchNovitaBalance(key),
         })),
       },
@@ -275,7 +282,7 @@ export function createAppHandler(env: EnvGetter) {
         provider: 'Kimi For Coding',
         entries: KIMI_KEYS.map((key) => ({
           keyHint: maskKey(key),
-          label: LABEL_BY_KEY.get(key),
+          label: labelOf('kimi', key),
           run: () => fetchKimiPlan(key),
         })),
       },
@@ -283,7 +290,7 @@ export function createAppHandler(env: EnvGetter) {
         provider: 'MiniMax',
         entries: MINIMAX_KEYS.map((key) => ({
           keyHint: maskKey(key),
-          label: LABEL_BY_KEY.get(key),
+          label: labelOf('minimax', key),
           run: () => fetchMiniMaxPlan(key),
         })),
       },
@@ -318,7 +325,7 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       GITEE_AI_KEYS.map((apiKey) => ({
         keyHint: maskKey(apiKey),
-        label: LABEL_BY_KEY.get(apiKey),
+        label: labelOf('gitee', apiKey),
         run: async () => {
           // 代金券与资源包并行查询、独立容错：Cookie 未配置 → voucher 缺省；过期/失败 → voucher.error
           const cookie = GITEE_AI_COOKIE_BY_KEY.get(apiKey)
@@ -347,7 +354,7 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       DEEPSEEK_KEYS.map((apiKey) => ({
         keyHint: maskKey(apiKey),
-        label: LABEL_BY_KEY.get(apiKey),
+        label: labelOf('deepseek', apiKey),
         run: () => fetchDeepSeekBalance(apiKey),
       })),
     )
@@ -366,7 +373,7 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       volcCredentialsList.map((creds) => ({
         keyHint: maskKey(creds.accessKey),
-        label: LABEL_BY_KEY.get(creds.accessKey),
+        label: labelOf('volc', creds.accessKey),
         run: async () => {
           const [afp, details, codingPlan] = await Promise.all([
             getAfpUsage(creds),
@@ -394,7 +401,7 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       ZHIPU_KEYS.map((apiKey) => ({
         keyHint: maskKey(apiKey),
-        label: LABEL_BY_KEY.get(apiKey),
+        label: labelOf('zhipu', apiKey),
         run: async () => {
           const [codingPlan, balance, packages] = await Promise.all([
             getZhipuCodingPlanQuota(apiKey),
@@ -420,7 +427,7 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       aliyunCredentialsList.map((creds) => ({
         keyHint: maskKey(creds.accessKey),
-        label: LABEL_BY_KEY.get(creds.accessKey),
+        label: labelOf('aliyun', creds.accessKey),
         run: () => queryResourcePackageInstances(creds, { productCode }),
       })),
     )
@@ -438,7 +445,7 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       aliyunCredentialsList.map((creds) => ({
         keyHint: maskKey(creds.accessKey),
-        label: LABEL_BY_KEY.get(creds.accessKey),
+        label: labelOf('aliyun', creds.accessKey),
         run: async () => {
           const [account, seats, sharedPackages] = await Promise.all([
             getTokenPlanAccount(creds),
@@ -475,7 +482,7 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       volcCredentialsList.map((creds) => ({
         keyHint: maskKey(creds.accessKey),
-        label: LABEL_BY_KEY.get(creds.accessKey),
+        label: labelOf('volc', creds.accessKey),
         run: async () => {
           const usage = await getInferenceUsage(creds, start, end, filters)
           return { rows: usage.rows, start, end }

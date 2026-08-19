@@ -111,7 +111,7 @@ const accountCards = computed<AccountCard[]>(() =>
           <t-alert
             v-if="card.failed"
             theme="error"
-            :title="`账号 ${card.account.keyHint} 查询失败`"
+            :title="`${accountName(card.account, i)}（${card.account.keyHint}）查询失败`"
             :message="card.account.error"
             :max-line="5"
           />

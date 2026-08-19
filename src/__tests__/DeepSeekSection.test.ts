@@ -8,6 +8,7 @@ const fixture: DeepSeekBalanceResponse = {
   accounts: [
     {
       keyHint: 'sk-0****cdef',
+      label: '主力号',
       isAvailable: true,
       balances: [{ currency: 'CNY', total: 110.0, granted: 10.0, toppedUp: 100.0 }],
     },
@@ -40,6 +41,22 @@ describe('DeepSeekSection', () => {
     expect(alerts.length).toBe(1)
     expect(alerts[0]!.text()).toContain('sk-9****aaaa')
     expect(alerts[0]!.text()).toContain('NetworkError')
+  })
+
+  it('shows the configured alias as primary account name', () => {
+    const wrapper = mountWithTDesign(DeepSeekSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    expect(wrapper.text()).toContain('主力号')
+    expect(wrapper.text()).toContain('sk-0****cdef')
+  })
+
+  it('renders neutral empty state (no red alert) when notConfigured', () => {
+    const wrapper = mountWithTDesign(DeepSeekSection, {
+      props: { data: null, loading: false, error: null, notConfigured: true },
+    })
+    expect(wrapper.text()).toContain('未配置 DEEPSEEK_API_KEY')
+    expect(wrapper.findComponent({ name: 'TAlert' }).exists()).toBe(false)
   })
 
   it('shows skeleton when loading and no data yet', () => {

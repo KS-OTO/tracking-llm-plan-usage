@@ -49,11 +49,6 @@ function onAutoRefreshToggle(): void {
   // v-model 已更新，此处仅作联动钩子（未来可挂统计/持久化）
 }
 
-/** 页面滚动容器：TDesign back-top 的 'body' 约定映射 document（scrollTop 未定义 → 读 documentElement）。 */
-function scrollContainer(): Document {
-  return document
-}
-
 /** 锚点跳转：切 Tab → 等渲染 → 平滑滚动到卡片（手动补偿 sticky header 高度）→ 高亮闪烁。 */
 async function jumpToAnchor(tab: string, anchor: string): Promise<void> {
   activeTab.value = tab
@@ -255,7 +250,7 @@ const lastUpdatedText = computed(() => {
       </footer>
     </main>
 
-    <t-back-top :container="scrollContainer" />
+    <t-back-top />
   </t-layout>
 </template>
 
