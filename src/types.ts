@@ -351,3 +351,26 @@ export interface QianfanData {
 export interface BaiduQianfanResponse {
   accounts: AccountEnvelope<QianfanData>[]
 }
+
+export interface OpenRouterDetailData {
+  provider: string
+  balance: number
+  total?: number
+  used?: number
+  unit: string
+  note?: string
+  isFreeTier: boolean
+  isManagementKey: boolean
+  label: string
+  limit: number | null
+  limitRemaining: number | null
+  limitReset: string | null
+  expiresAt: string | null
+  usageDaily: number
+  usageWeekly: number
+  usageMonthly: number
+}
+
+export interface OpenRouterDetailResponse {
+  accounts: AccountEnvelope<OpenRouterDetailData>[]
+}

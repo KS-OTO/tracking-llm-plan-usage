@@ -30,6 +30,7 @@ const {
   tokenPlan,
   extras,
   baidu,
+  openrouter,
   status,
   loading,
   lastUpdated,
@@ -319,6 +320,31 @@ const summaries = computed<PlatformSummary[]>(() => {
         secondary: baiduAccounts.length > 1 ? `${baiduAccounts.length} 账号` : undefined,
       },
       baiduAccounts.length === 0,
+    )
+  }
+
+  // OpenRouter：剩余额度 + 限额
+  const orAll = openrouter.value.data?.accounts ?? []
+  const orAccounts = okAccounts(orAll)
+  if (orAll.length > 0) {
+    const balance = orAccounts.reduce((sum, a) => sum + a.balance, 0)
+    const withLimit = orAccounts.filter((a) => a.limit !== null)
+    push(
+      {
+        key: 'openrouter',
+        name: 'OpenRouter',
+        tab: 'balance',
+        anchor: 'openrouter',
+        primary: `${balance.toFixed(2)} USD`,
+        secondary:
+          withLimit.length > 0
+            ? `限额剩 ${withLimit.reduce((s, a) => s + (a.limitRemaining ?? 0), 0).toFixed(2)}`
+            : orAccounts[0]?.isFreeTier
+              ? '免费层'
+              : undefined,
+        danger: withLimit.some((a) => (a.limitRemaining ?? 0) <= 1),
+      },
+      orAccounts.length === 0,
     )
   }
 
