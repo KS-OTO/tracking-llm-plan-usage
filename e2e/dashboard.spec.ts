@@ -27,6 +27,22 @@ test.describe('dashboard smoke', () => {
     expect(body.error.code).toBe('NOT_CONFIGURED')
   })
 
+  test('aliyun token plan endpoint reports NOT_CONFIGURED without erroring out', async ({
+    request,
+  }) => {
+    const res = await request.get('/api/aliyun/tokenplan')
+    expect(res.status()).toBe(503)
+    const body = z.object({ error: z.object({ code: z.string() }) }).parse(await res.json())
+    expect(body.error.code).toBe('NOT_CONFIGURED')
+  })
+
+  test('extras empty state lists the OpenCode Go credential', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('.t-menu__item', { hasText: '扩展平台' }).click()
+    await expect(page.getByText('未配置扩展平台密钥').first()).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/OPENCODE_GO/).first()).toBeVisible()
+  })
+
   test('overview is the default tab with alert, reset and nav cards', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByText('套餐订阅')).toBeVisible()

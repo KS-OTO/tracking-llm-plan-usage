@@ -55,4 +55,7 @@ playwright-report/
 .env
 .edgeone/*
 .tef_dist/*
+
+# 编码助手的工作区状态（本地记忆/日志，非项目源码）
+.workbuddy/
   

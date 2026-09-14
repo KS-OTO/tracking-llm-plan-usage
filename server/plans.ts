@@ -22,7 +22,7 @@ export class PlanApiError extends Error {
 }
 
 export interface TokenPlanWindow {
-  window: 'fiveHour' | 'weekly'
+  window: 'fiveHour' | 'weekly' | 'monthly'
   percent: number
   resetTime: number
 }
@@ -30,6 +30,23 @@ export interface TokenPlanWindow {
 export interface TokenPlanInfo {
   provider: string
   windows: TokenPlanWindow[]
+}
+
+/**
+ * 重置时间归一化为毫秒。
+ * 各平台口径不一：毫秒时间戳 / 秒时间戳 / ISO 字符串；无法解析时返回 0
+ * （前端展示为「—」，不视为故障）。
+ */
+export function resetTimeToMillis(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    // 秒级时间戳（< 1e12）换算为毫秒，避免把 10 位秒误当 1970 年毫秒
+    return value > 0 && value < 1e12 ? Math.round(value * 1000) : Math.round(value)
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
 }
 
 const ErrorEnvelope = z.object({

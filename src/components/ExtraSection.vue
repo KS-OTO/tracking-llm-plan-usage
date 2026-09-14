@@ -14,6 +14,7 @@ defineProps<{
 const WINDOW_LABELS: Record<string, string> = {
   fiveHour: '5 小时窗口',
   weekly: '每周窗口',
+  monthly: '30 天窗口',
 }
 </script>
 
@@ -24,7 +25,7 @@ const WINDOW_LABELS: Record<string, string> = {
     :loading="loading"
     :error="error"
     :empty="data?.configured === 0"
-    empty-text="未配置扩展平台密钥（STEPFUN / SILICONFLOW / OPENROUTER / NOVITA / KIMI / MINIMAX）"
+    empty-text="未配置扩展平台密钥（STEPFUN / SILICONFLOW / OPENROUTER / NOVITA / KIMI / MINIMAX / OPENCODE_GO）"
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
