@@ -7,6 +7,8 @@ VOLC_SECRET_KEY=xxxx
 ZHIPU_API_KEY=xxxxx.xxxxx
 ALIYUN_ACCESS_KEY_ID=LTAIxxxx
 ALIYUN_SECRET_KEY=xxxx
+# Token Plan 个人版用量（可选）：百炼控制台会话 Cookie 的 login_aliyunid_ticket，无需 RAM 授权
+# ALIYUN_TOKENPLAN_COOKIE=eyJ0aWNrZXQ...（示意，勿照抄）
 GITEE_AI_API_KEY=UC03xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # 代金券查询（可选）：ai.gitee.com 会话 Cookie（约 30 天过期）
 # GITEE_AI_SESSION_COOKIE=__Secure-next-auth.session-token=xxxx-xxxx
@@ -18,6 +20,7 @@ OPENROUTER_API_KEY=
 NOVITA_API_KEY=
 KIMI_API_KEY=
 MINIMAX_API_KEY=
+OPENCODE_GO_API_KEY=
 
 BAIDU_ACCESS_KEY_ID=ALTAKxxxx
 BAIDU_SECRET_KEY=xxxx

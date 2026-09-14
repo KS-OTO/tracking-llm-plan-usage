@@ -17,9 +17,11 @@ import {
   type BalanceInfo,
 } from './balances.ts'
 import { queryResourcePackageInstances, type AliyunCredentials } from './aliyun.ts'
+import { fetchAliyunPersonalPlan, type AliyunPersonalPlan } from './aliyun-console.ts'
 import { fetchDeepSeekBalance } from './deepseek.ts'
 import { fetchQianfanData, type BaiduCredentials } from './baidu.ts'
 import { fetchGiteePackageBalance, fetchGiteeVoucher } from './gitee.ts'
+import { fetchOpenCodeGoUsage } from './opencode.ts'
 import { fetchKimiPlan, fetchMiniMaxPlan, type TokenPlanInfo } from './plans.ts'
 import {
   readIncompletePairs,
@@ -46,8 +48,10 @@ import {
  *   VOLC_ACCESS_KEY_ID      火山方舟 Access Key ID（管控面 API）
  *   VOLC_SECRET_KEY         火山方舟 Secret Access Key
  *   ZHIPU_API_KEY           智谱开放平台 API Key（资源包/余额）
- *   ALIYUN_ACCESS_KEY_ID    阿里云 AccessKey ID（BSS 资源包）
+ *   ALIYUN_ACCESS_KEY_ID    阿里云 AccessKey ID（BSS 资源包 / Token Plan）
  *   ALIYUN_SECRET_KEY       阿里云 AccessKey Secret
+ *   ALIYUN_TOKENPLAN_COOKIE 百炼控制台会话 Cookie（可选，仅个人版用量；无需 RAM 授权）
+ *   OPENCODE_GO_API_KEY     OpenCode Go 订阅额度（usage.rolling / weekly / monthly）
  *   HOST / PORT             监听地址（默认 127.0.0.1:8787）
  *
  * Serves the built frontend from dist/ plus /api/* endpoints.
@@ -91,6 +95,9 @@ const ACCOUNT_ERROR_HINTS: Array<{ pattern: string; hint: string }> = [
   { pattern: 'Unauthorized', hint: '鉴权失败（Key 可能已失效）' },
   { pattern: 'CookieExpired', hint: '会话 Cookie 已过期，需重新获取' },
   { pattern: 'Forbidden', hint: '无权限访问该资源' },
+  { pattern: 'ConsoleSessionExpired', hint: '百炼控制台会话已失效，需更新 Cookie' },
+  { pattern: 'OpenCodeGo_HTTP_401', hint: 'OpenCode Go API Key 无效或已失效' },
+  { pattern: 'OpenCodeGo_HTTP_403', hint: 'OpenCode Go 无权限（该 Key 可能未开通订阅）' },
 ]
 
 function errorResponse(status: number, code: string, message: string): Response {
@@ -119,6 +126,12 @@ interface AccountEntry<T> {
   label?: string
   run: () => Promise<T>
 }
+
+/**
+ * Token Plan 个人版用量切片（判别联合）：成功携带 data，失败仅含 error。
+ * 与账号级容错解耦——个人版查询失败不影响组织/座席视图渲染。
+ */
+type PersonalSlice = { data: AliyunPersonalPlan } | { error: string }
 
 type AccountResult<T> =
   | (T & { keyHint: string; label?: string })
@@ -176,6 +189,7 @@ export function createAppHandler(env: EnvGetter) {
   const NOVITA_KEYS = readKeys('NOVITA_API_KEY', env)
   const KIMI_KEYS = readKeys('KIMI_API_KEY', env)
   const MINIMAX_KEYS = readKeys('MINIMAX_API_KEY', env)
+  const OPENCODE_GO_KEYS = readKeys('OPENCODE_GO_API_KEY', env)
 
   const volcCredentialsList: VolcCredentials[] = readKeyPairs(
     'VOLC_ACCESS_KEY_ID',
@@ -188,6 +202,28 @@ export function createAppHandler(env: EnvGetter) {
     'ALIYUN_SECRET_KEY',
     env,
   ).map((pair) => ({ accessKey: pair.key, secretKey: pair.secret }))
+
+  // 百炼控制台会话 Cookie（可选）：仅用于 Token Plan **个人版**用量查询，
+  // 是一条独立于 AK/SK 的通道（无需 RAM 授权）。按序号与 ALIYUN_ACCESS_KEY_ID 配对；
+  // Cookie 数量多于 AK/SK 时，多出的部分作为「仅有 Cookie」的独立账号。
+  const ALIYUN_TOKENPLAN_COOKIES = readKeys('ALIYUN_TOKENPLAN_COOKIE', env)
+
+  /**
+   * Token Plan 查询来源：AK/SK（组织/座席/共享包）与会话 Cookie（个人版用量）按序号配对。
+   * 同一账号两种凭据并存时合为一个来源，避免出现重复条目。
+   */
+  const aliyunTokenPlanSources = Array.from(
+    { length: Math.max(aliyunCredentialsList.length, ALIYUN_TOKENPLAN_COOKIES.length) },
+    (_, index) => {
+      const credentials = aliyunCredentialsList[index]
+      const cookie = ALIYUN_TOKENPLAN_COOKIES[index]
+      return {
+        credentials,
+        cookie,
+        keyHint: credentials ? maskKey(credentials.accessKey) : `cookie:${maskKey(cookie ?? '')}`,
+      }
+    },
+  )
 
   const baiduCredentialsList: BaiduCredentials[] = readKeyPairs(
     'BAIDU_ACCESS_KEY_ID',
@@ -212,6 +248,7 @@ export function createAppHandler(env: EnvGetter) {
   labelMap('novita', 'NOVITA_API_KEY', 'NOVITA_LABEL')
   labelMap('kimi', 'KIMI_API_KEY', 'KIMI_LABEL')
   labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
+  labelMap('opencode', 'OPENCODE_GO_API_KEY', 'OPENCODE_GO_LABEL')
   labelMap('baidu', 'BAIDU_ACCESS_KEY_ID', 'BAIDU_LABEL')
   labelMap('openrouter', 'OPENROUTER_API_KEY', 'OPENROUTER_LABEL')
   const labelOf = (provider: string, key: string): string | undefined =>
@@ -236,6 +273,7 @@ export function createAppHandler(env: EnvGetter) {
       ...NOVITA_KEYS,
       ...KIMI_KEYS,
       ...MINIMAX_KEYS,
+      ...OPENCODE_GO_KEYS,
     ].map(maskKey)
     return json({
       providers: {
@@ -245,7 +283,7 @@ export function createAppHandler(env: EnvGetter) {
         aliyun: providerStatus(aliyunCredentialsList.map((cred) => maskKey(cred.accessKey))),
         gitee: providerStatus(GITEE_AI_KEYS.map(maskKey)),
         baidu: providerStatus(baiduCredentialsList.map((cred) => maskKey(cred.accessKey))),
-        tokenplan: providerStatus(aliyunCredentialsList.map((cred) => maskKey(cred.accessKey))),
+        tokenplan: providerStatus(aliyunTokenPlanSources.map((source) => source.keyHint)),
         extras: providerStatus(extrasKeyHints),
       },
       incomplete: INCOMPLETE_VARS,
@@ -304,6 +342,14 @@ export function createAppHandler(env: EnvGetter) {
           keyHint: maskKey(key),
           label: labelOf('minimax', key),
           run: () => fetchMiniMaxPlan(key),
+        })),
+      },
+      {
+        provider: 'OpenCode Go',
+        entries: OPENCODE_GO_KEYS.map((key) => ({
+          keyHint: maskKey(key),
+          label: labelOf('opencode', key),
+          run: () => fetchOpenCodeGoUsage(key),
         })),
       },
     ].filter((group) => group.entries.length > 0)
@@ -447,24 +493,39 @@ export function createAppHandler(env: EnvGetter) {
   }
 
   async function handleTokenPlan(): Promise<Response> {
-    if (aliyunCredentialsList.length === 0) {
+    if (aliyunTokenPlanSources.length === 0) {
       return errorResponse(
         503,
         'NOT_CONFIGURED',
-        '未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY 环境变量',
+        '未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY（组织与座席）或 ALIYUN_TOKENPLAN_COOKIE（个人版用量）环境变量',
       )
     }
+
     const accounts = await runAccounts(
-      aliyunCredentialsList.map((creds) => ({
-        keyHint: maskKey(creds.accessKey),
-        label: labelOf('aliyun', creds.accessKey),
+      aliyunTokenPlanSources.map(({ credentials, cookie, keyHint }) => ({
+        keyHint,
+        label: labelOf('aliyun', credentials?.accessKey ?? cookie ?? ''),
         run: async () => {
-          const [account, seats, sharedPackages] = await Promise.all([
-            getTokenPlanAccount(creds),
-            getTokenPlanSeats(creds),
-            getTokenPlanSharedPackages(creds),
+          const [account, seats, sharedPackages, personal] = await Promise.all([
+            // 组织 / 座席 / 共享包依赖 AK/SK；仅有会话 Cookie 时跳过（置 null，展示层隐藏）
+            credentials ? getTokenPlanAccount(credentials) : Promise.resolve(null),
+            credentials ? getTokenPlanSeats(credentials) : Promise.resolve(null),
+            credentials ? getTokenPlanSharedPackages(credentials) : Promise.resolve(null),
+            // 个人版用量（独立容错）：组织/座席视图即使无订阅也应正常渲染
+            fetchAliyunPersonalPlan({
+              ...(cookie ? { cookie } : {}),
+              ...(credentials ? { credentials } : {}),
+            }).then(
+              (data): PersonalSlice => ({ data }),
+              (cause: unknown): PersonalSlice => ({
+                error: accountErrorHint(
+                  cause instanceof Error ? cause.message : String(cause),
+                  cause instanceof Error && 'code' in cause ? String(cause.code) : undefined,
+                ),
+              }),
+            ),
           ])
-          return { account, seats, sharedPackages }
+          return { account, seats, sharedPackages, personal }
         },
       })),
     )

@@ -72,3 +72,26 @@
 - ❌ Claude / Codex / Gemini / Grok 官方订阅（OAuth 凭据，与本项目 API Key 模型不兼容）
 - ❌ Zhipu Team（需要组织/项目 ID，暂未配置）
 - ❌ ZenMux（私有中转服务）
+
+## 四、2026-09-14 补充：OpenCode Go 订阅额度
+
+来源：cc-switch PR [#6547](https://github.com/farion1231/cc-switch/pull/6547)
+（`fix(opencode): render Go quota usage accurately`，Fixes #6350）。
+
+- **接口**：`GET {{baseUrl}}/usage`；preset 的 provider `baseURL` 为 `https://opencode.ai/zen/go/v1`，
+  故最终地址为 **`https://opencode.ai/zen/go/v1/usage`**（无重复 `/v1`）。
+- **鉴权**：`Authorization: Bearer {{apiKey}}` —— **纯 API Key，无需控制台 Cookie**（区别于 #3606/#6434 的 cookie/SSR 方案）。
+- **响应**：`usage.rolling` / `usage.weekly` / `usage.monthly`，每个窗口 `{ percent, resetsAt }`。
+  - `percent` **直接是「已用百分比」**（不是剩余）。
+  - `resetsAt` 为重置时间（ISO 字符串），用于倒计时；PR 展示为 `5h:0%4h59m 7d:19%6d3h 30d:5%21d7h`。
+- **窗口映射**：rolling → 5 小时、weekly → 7 天、monthly → 30 天。
+
+**本仓库实测**：`GET https://opencode.ai/zen/go/v1/usage` 无 Key 返回 **401**，
+而任意不存在的同级路径返回 404 —— 路由真实存在。
+
+落地：
+
+- 新增 `server/opencode.ts`（`fetchOpenCodeGoUsage`）。
+- 接入 `/api/extras` 的 `plans` 分组（与 Kimi / MiniMax Token Plan 同一区块），
+  窗口类型扩展 `'fiveHour' | 'weekly' | 'monthly'`，前端新增「30 天窗口」标签。
+- 环境变量 `OPENCODE_GO_API_KEY`（多账号 `_2`… 后缀，别名 `OPENCODE_GO_LABEL`）。

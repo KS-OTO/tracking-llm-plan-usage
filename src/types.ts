@@ -222,10 +222,55 @@ export interface TokenPlanAccount {
 }
 
 export interface TokenPlanData {
-  account: TokenPlanAccount
-  seats: { items: TokenPlanSeat[]; total: number }
-  sharedPackages: { items: TokenPlanSharedPackage[]; total: number }
+  /** 组织信息；仅配置会话 Cookie（无 AK/SK）时为 null。 */
+  account: TokenPlanAccount | null
+  seats: { items: TokenPlanSeat[]; total: number } | null
+  sharedPackages: { items: TokenPlanSharedPackage[]; total: number } | null
+  /** 个人版套餐用量（独立容错切片）：失败仅携带 error。 */
+  personal: TokenPlanPersonalSlice
 }
+
+export interface TokenPlanPersonalWindow {
+  percent: number
+  resetTime: number
+}
+
+export interface TokenPlanPersonalSubscription {
+  instanceCode: string
+  specCode: string
+  status: string
+  remainingDays: number
+  startTime: number
+  endTime: number
+  autoRenewFlag: boolean
+}
+
+export interface TokenPlanPersonalAddon {
+  remainingCredits: number
+  totalCredits: number
+  activeCount: number
+}
+
+/** 重置卡：可在有效期内提前重置额度窗口。 */
+export interface TokenPlanResetCard {
+  cardType: string
+  effectiveAt: number
+  expiresAt: number
+}
+
+export interface TokenPlanPersonalPlan {
+  /** 数据来源：cookie（控制台会话 Cookie）/ cli（AK/SK 换 cliAccessToken）。 */
+  source: 'cookie' | 'cli'
+  /** 5 小时窗口；官方取消该窗口时为 null。 */
+  fiveHour: TokenPlanPersonalWindow | null
+  weekly: TokenPlanPersonalWindow
+  subscription: TokenPlanPersonalSubscription | null
+  addon: TokenPlanPersonalAddon | null
+  resetCards: TokenPlanResetCard[]
+}
+
+/** 个人版用量子查询（独立容错）：成功携带 data，失败仅含 error（判别联合，二者互斥）。 */
+export type TokenPlanPersonalSlice = { data: TokenPlanPersonalPlan } | { error: string }
 
 export interface TokenPlanResponse {
   accounts: AccountEnvelope<TokenPlanData>[]
@@ -283,7 +328,7 @@ export interface ExtrasBalance {
 }
 
 export interface ExtrasPlanWindow {
-  window: 'fiveHour' | 'weekly'
+  window: 'fiveHour' | 'weekly' | 'monthly'
   percent: number
   resetTime: number
 }

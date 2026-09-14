@@ -34,6 +34,9 @@ function hermeticEnv(): Record<string, string> {
     'ZHIPU_API_KEY',
     'ALIYUN_ACCESS_KEY_ID',
     'ALIYUN_SECRET_KEY',
+    'ALIYUN_TOKENPLAN_COOKIE',
+    'BAIDU_ACCESS_KEY_ID',
+    'BAIDU_SECRET_KEY',
     'GITEE_AI_API_KEY',
     'GITEE_AI_SESSION_COOKIE',
     'STEPFUN_API_KEY',
@@ -42,6 +45,7 @@ function hermeticEnv(): Record<string, string> {
     'NOVITA_API_KEY',
     'KIMI_API_KEY',
     'MINIMAX_API_KEY',
+    'OPENCODE_GO_API_KEY',
   ]
   for (const prefix of prefixes) {
     cleared[prefix] = ''

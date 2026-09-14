@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 
-import { PlanApiError, parseKimiPlan, parseMiniMaxPlan } from './plans.ts'
+import { PlanApiError, parseKimiPlan, parseMiniMaxPlan, resetTimeToMillis } from './plans.ts'
 
 describe('parseKimiPlan', () => {
   it('parses the 5-hour limit and weekly usage windows', () => {
@@ -59,5 +59,29 @@ describe('parseMiniMaxPlan', () => {
     expect(() =>
       parseMiniMaxPlan({ base_resp: { status_code: 1001, status_msg: 'cookie is missing' } }),
     ).toThrow(PlanApiError)
+  })
+})
+
+describe('resetTimeToMillis', () => {
+  it('keeps millisecond timestamps as-is', () => {
+    expect(resetTimeToMillis(1_789_371_600_000)).toBe(1_789_371_600_000)
+  })
+
+  it('promotes second timestamps to milliseconds', () => {
+    expect(resetTimeToMillis(1_789_371_600)).toBe(1_789_371_600_000)
+  })
+
+  it('parses ISO date strings', () => {
+    expect(resetTimeToMillis('2026-09-20T09:00:00.000Z')).toBe(
+      Date.parse('2026-09-20T09:00:00.000Z'),
+    )
+  })
+
+  it('returns 0 for unusable values instead of a bogus epoch', () => {
+    expect(resetTimeToMillis(undefined)).toBe(0)
+    expect(resetTimeToMillis(null)).toBe(0)
+    expect(resetTimeToMillis('')).toBe(0)
+    expect(resetTimeToMillis('not-a-date')).toBe(0)
+    expect(resetTimeToMillis(Number.NaN)).toBe(0)
   })
 })
