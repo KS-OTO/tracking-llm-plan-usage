@@ -470,6 +470,20 @@ export function normalizeSessionCookie(raw: string): string {
   return value.includes('=') ? value : `login_aliyunid_ticket=${value}`
 }
 
+/**
+ * 会话失效时的补充说明（纯函数）。
+ *
+ * 报 `NotLogined` 有两种成因，但网关给出的错误完全一致、无法区分：
+ * 1. 会话真过期；
+ * 2. 配置值在本地 `.env` 里被 `$VAR` 展开**静默截断**（ticket 值含字面 `$`，
+ *    未转义为 `\$` 时会被吃掉若干字符）。
+ *
+ * 补上实际长度，让用户在报错当下就能自证：与浏览器里复制的值比对，明显偏短即属第 2 种。
+ */
+export function sessionExpiredHint(normalizedCookie: string): string {
+  return `（当前配置值长度 ${normalizedCookie.length}；若明显短于浏览器中复制的值，说明本地 .env 里字面 $ 未转义为 \\$）`
+}
+
 /** 控制台会话 Cookie 通道：只需 `login_aliyunid_ticket`。 */
 export function createCookieTransport(cookie: string): ConsoleTransport {
   const value = normalizeSessionCookie(cookie)
@@ -478,8 +492,22 @@ export function createCookieTransport(cookie: string): ConsoleTransport {
   }
   return {
     kind: 'cookie',
-    call: (api, data = {}) =>
-      postConsoleGateway(buildGatewayRequest(CONSOLE_DATA_PATH, api, data, { cookie: value })),
+    call: async (api, data = {}) => {
+      try {
+        return await postConsoleGateway(
+          buildGatewayRequest(CONSOLE_DATA_PATH, api, data, { cookie: value }),
+        )
+      } catch (cause) {
+        // 会话失效最常见的原因是「值本身已损坏」，此处补上长度便于用户自证
+        if (cause instanceof AliyunConsoleApiError && cause.code === 'ConsoleSessionExpired') {
+          throw new AliyunConsoleApiError(
+            cause.code,
+            `${cause.message}${sessionExpiredHint(value)}`,
+          )
+        }
+        throw cause
+      }
+    },
   }
 }
 
