@@ -65,6 +65,47 @@ bun run deploy            # = vp build && wrangler deploy
 - 密钥：`wrangler secret put DEEPSEEK_API_KEY` 等逐项配置；本地调试用 `.dev.vars`（参考 `.dev.vars.example`）
 - 多账号变量同样按 `_N` 后缀命名（如 `DEEPSEEK_API_KEY_2`）
 
+## 部署到 EdgeOne Makers
+
+仓库已含 Makers 适配层，在控制台把函数目录指向 `cloud-functions/` 即可：
+
+- `cloud-functions/api/[[default]].js` —— `/api/*` 全捕获，动态 `import('../../server/app.ts')`
+  复用同一份 `createAppHandler`；依赖链加载失败时返回结构化 `FN_IMPORT_FAILED`（而不是裸崩成 5xx HTML）。
+- `cloud-functions/api/diag.js` —— 零依赖自诊断，访问 `/api/diag` 可区分「函数系统故障」与「依赖链加载失败」，
+  并列出运行时已知的环境变量名（Key/Secret 类只显示 `<set>`），用于确认线上变量是否注入成功。
+- `edgeone.json` 配置云函数超时与区域（`maxDuration: 60`，广州 / 新加坡）。
+- 环境变量在 Makers 控制台 EnvVars 配置，经 `context.env` 注入；同样支持 `_N` 多账号。
+
+## 部署到其他平台（Vercel 等）
+
+`server/app.ts` 是平台无关的（只依赖 Web Fetch API 与 Web Crypto，不使用 `node:crypto`），
+只要有「单一 HTTP 入口 + 环境变量注入」的平台都可以承载，`api/` 下的适配层照着
+`cloud-functions/api/[[default]].js` 改写即可。
+
+平台面板配置环境变量时有两条硬约束，配置前请先读「Cookie 怎么填」：
+
+- **值不能含空格/换行/制表符** —— 所以百炼 Cookie 只粘 ticket 的**值**，别粘整段 `Cookie` 头。
+- **面板不做 `$` 变量展开** —— 直接粘原值，**不要**加 `\$`（那是本地 `.env` 才需要的写法）。
+
+另外两点容易踩：
+
+- **改完变量必须重新部署才生效**：Vercel / Workers 的部署产物在构建期固化配置，
+  改面板上的值不会影响已经在跑的实例，要触发一次新部署（或在面板点 Redeploy）。
+- **用 CLI 配置时别用 `echo`**：`echo` 会附带回车换行，正是面板拒绝的「换行符」。
+  服务端会把值 `trim()` 掉，因此写入的换行不会损坏查询，但面板会直接拒绝这一笔。
+
+  ```bash
+  # ✅ printf 不带换行
+  printf '%s' '<login_aliyunid_ticket 的值>' | vercel env add ALIYUN_TOKENPLAN_COOKIE production
+  # ❌ echo 会写入尾部 \n
+  echo '<值>' | vercel env add ALIYUN_TOKENPLAN_COOKIE production
+  ```
+
+  排查线上「会话已失效」时，报错会附带**当前配置值的长度**，与浏览器中复制的值比对：
+
+  - **偏短** → 本地 `.env` 里的字面 `$` 未转义，被变量展开吃掉了字符；
+  - **长度一致但仍失败** → 大概率是会话真过期，重新复制即可。
+
 ## 多账号支持
 
 每个平台支持多组凭据：第 1 组使用基础变量名，第 N 组在变量名后加 `_N` 后缀（连续编号，遇到缺失即停）。
@@ -74,30 +115,35 @@ bun run deploy            # = vp build && wrangler deploy
 
 ## 环境变量
 
-| 变量                      | 必填 | 说明                                                                                      |
-| ------------------------- | ---- | ----------------------------------------------------------------------------------------- |
-| `DEEPSEEK_API_KEY`        | 否   | DeepSeek API Key（余额查询），在 https://platform.deepseek.com/api_keys 获取              |
-| `VOLC_ACCESS_KEY_ID`      | 否   | 火山方舟 Access Key ID（管控面 API 签名）                                                 |
-| `VOLC_SECRET_KEY`         | 否   | 火山方舟 Secret Access Key                                                                |
-| `ZHIPU_API_KEY`           | 否   | 智谱开放平台 API Key（资源包/余额），在 https://open.bigmodel.cn/usercenter/apikeys 获取  |
-| `ALIYUN_ACCESS_KEY_ID`    | 否   | 阿里云 AccessKey ID（BSS 资源包查询），在 https://ram.console.aliyun.com/manage/ak 创建   |
-| `ALIYUN_SECRET_KEY`       | 否   | 阿里云 AccessKey Secret                                                                   |
-| `ALIYUN_TOKENPLAN_COOKIE` | 否   | 百炼控制台会话 Cookie（仅 Token Plan 个人版用量，只需 `login_aliyunid_ticket`，无需授权） |
-| `GITEE_AI_API_KEY`        | 否   | 模力方舟（Gitee AI）访问令牌（资源包余额），在 https://ai.gitee.com 生成                  |
-| `GITEE_AI_SESSION_COOKIE` | 否   | 模力方舟 Web 会话 Cookie（代金券查询，约 30 天过期需轮换；多账号 `_N` 后缀与 Key 配对）   |
-| `STEPFUN_API_KEY`         | 否   | StepFun 账户余额，在 https://platform.stepfun.com 获取                                    |
-| `SILICONFLOW_API_KEY`     | 否   | SiliconFlow 账户余额，在 https://cloud.siliconflow.cn 获取                                |
-| `OPENROUTER_API_KEY`      | 否   | OpenRouter 剩余额度，在 https://openrouter.ai/keys 获取                                   |
-| `NOVITA_API_KEY`          | 否   | Novita AI 账户余额，在 https://novita.ai 获取                                             |
-| `KIMI_API_KEY`            | 否   | Kimi For Coding Token Plan 额度，在 https://platform.moonshot.cn 获取                     |
-| `MINIMAX_API_KEY`         | 否   | MiniMax Token Plan 额度，在 https://platform.minimaxi.com 获取                            |
-| `OPENCODE_GO_API_KEY`     | 否   | OpenCode Go 订阅额度（5 小时/7 天/30 天窗口），在 https://opencode.ai 获取                |
-| `HOST`                    | 否   | 监听地址，默认 `127.0.0.1`                                                                |
-| `PORT`                    | 否   | 监听端口，默认 `8787`                                                                     |
+| 变量                      | 必填 | 说明                                                                                                       |
+| ------------------------- | ---- | ---------------------------------------------------------------------------------------------------------- |
+| `DEEPSEEK_API_KEY`        | 否   | DeepSeek API Key（余额查询），在 https://platform.deepseek.com/api_keys 获取                               |
+| `VOLC_ACCESS_KEY_ID`      | 否   | 火山方舟 Access Key ID（管控面 API 签名）                                                                  |
+| `VOLC_SECRET_KEY`         | 否   | 火山方舟 Secret Access Key                                                                                 |
+| `ZHIPU_API_KEY`           | 否   | 智谱开放平台 API Key（资源包/余额），在 https://open.bigmodel.cn/usercenter/apikeys 获取                   |
+| `ALIYUN_ACCESS_KEY_ID`    | 否   | 阿里云 AccessKey ID（BSS 资源包 + Token Plan 组织/座席），在 https://ram.console.aliyun.com/manage/ak 创建 |
+| `ALIYUN_SECRET_KEY`       | 否   | 阿里云 AccessKey Secret                                                                                    |
+| `ALIYUN_TOKENPLAN_COOKIE` | 否   | 百炼控制台 Cookie 中 `login_aliyunid_ticket` 的**值**（Token Plan 个人版用量，无需授权；详见下文取值注意） |
+| `GITEE_AI_API_KEY`        | 否   | 模力方舟（Gitee AI）访问令牌（资源包余额），在 https://ai.gitee.com 生成                                   |
+| `GITEE_AI_SESSION_COOKIE` | 否   | 模力方舟 Web 会话 Cookie（代金券查询，约 30 天过期需轮换；多账号 `_N` 后缀与 Key 配对）                    |
+| `STEPFUN_API_KEY`         | 否   | StepFun 账户余额，在 https://platform.stepfun.com 获取                                                     |
+| `SILICONFLOW_API_KEY`     | 否   | SiliconFlow 账户余额，在 https://cloud.siliconflow.cn 获取                                                 |
+| `OPENROUTER_API_KEY`      | 否   | OpenRouter 剩余额度，在 https://openrouter.ai/keys 获取                                                    |
+| `NOVITA_API_KEY`          | 否   | Novita AI 账户余额，在 https://novita.ai 获取                                                              |
+| `KIMI_API_KEY`            | 否   | Kimi For Coding Token Plan 额度，在 https://platform.moonshot.cn 获取                                      |
+| `MINIMAX_API_KEY`         | 否   | MiniMax Token Plan 额度，在 https://platform.minimaxi.com 获取                                             |
+| `OPENCODE_GO_API_KEY`     | 否   | OpenCode Go 订阅额度（5 小时/7 天/30 天窗口），在 https://opencode.ai 获取                                 |
+| `HOST`                    | 否   | 监听地址，默认 `127.0.0.1`                                                                                 |
+| `PORT`                    | 否   | 监听端口，默认 `8787`                                                                                      |
 
 火山方舟 Access Key 在 https://console.volcengine.com/iam/keymanage 创建；出于安全考虑建议使用 IAM 子用户并仅授予方舟相关权限。
-阿里云 AccessKey 建议使用 RAM 子用户：Token Plan 区块需要 `AliyunTokenPlanReadOnlyAccess` 策略；资源包区块需要费用中心（bss:QueryResourcePackageInstances）只读权限，可按需分别授权。
+阿里云 AccessKey 建议使用 RAM 子用户：Token Plan 组织/座席区块需要 `AliyunTokenPlanReadOnlyAccess` 策略；资源包区块需要费用中心（bss:QueryResourcePackageInstances）只读权限，可按需分别授权。个人版用量用会话 Cookie 即可，无需任何授权。
 各平台变量都配置齐全后才会启用对应页面。
+
+OpenCode Go 的用量接口在 200 响应中为每个窗口附带 `status`（`ok` / `rate-limited`）。当某窗口被上游限流时，接口报 `percent: 100` 且 `status: "rate-limited"`——两者语义不同，因此面板会把该状态单独标为「上游限流中」并附说明，而不是只显示 100%。
+
+> **取值规则因环境而异**：平台面板（Vercel / EdgeOne Makers / Cloudflare Workers）**原样保存**变量值、不做变量展开；
+> 本地 `.env` / `.dev.vars` 会展开 `$`。含 `$` 的值（如百炼 ticket）在本地必须转义——详见「Cookie 怎么填」。
 
 ### 阿里云百炼 Token Plan 的权限说明
 
@@ -111,10 +157,10 @@ bun run deploy            # = vp build && wrangler deploy
      ，Cookie 鉴权。登录 https://bailian.console.aliyun.com 后，从
      DevTools → Application → Cookies → `bailian.console.aliyun.com`，
      复制 **`login_aliyunid_ticket`** 的值写入 `ALIYUN_TOKENPLAN_COOKIE`
-     （实测仅此一个 Cookie 即可；其余 Cookie、Origin/Referer 均非必需。
-     该变量两种写法都接受：裸 ticket 值，或整段 `Cookie` 请求头 `a=b; c=d`）。
+     （实测仅此一个 Cookie 即可；其余 Cookie、Origin/Referer 均非必需）。
      **无需 AK/SK，无需任何 RAM 授权**；会话过期（通常数周）后重新复制即可。
      仅有该 Cookie 时也可独立使用——此账号会显示「仅配置会话 Cookie」，组织/座席区块自动隐藏。
+     **取值写法见下文「Cookie 怎么填」——填错会静默损坏且报错与「会话过期」同形。**
 
   2. **AK/SK 通道**（官方 CLI `bl usage token-plan` 的等价实现，原生移植、无子进程）：
      AK/SK 以 `ACS3-HMAC-SHA256` 调用 `GenerateCLIAccessToken` 换取控制台 access token，
@@ -135,6 +181,62 @@ bun run deploy            # = vp build && wrangler deploy
   ```
 
   未配置 Cookie 且未授权时，页面会在「个人版套餐用量」处给出黄色提示，组织/座席视图不受影响。
+
+### 阿里云两块凭据是共存关系，不是二选一
+
+`ALIYUN_ACCESS_KEY_ID` / `ALIYUN_SECRET_KEY` 与 `ALIYUN_TOKENPLAN_COOKIE` **各管一块数据，互不替代**：
+
+| 展示内容                                              | 依赖的凭据                                                             | 缺失后果                                          |
+| ----------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------- |
+| 阿里云百炼 Token 资源包实例（`/api/aliyun/packages`） | `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_SECRET_KEY`（BSS）                    | 该接口返回 `NOT_CONFIGURED`，「资源包」区块不显示 |
+| Token Plan 组织 / 座席 / 共享包                       | 同上（ModelStudio ROA）                                                | 组织/座席区块隐藏                                 |
+| Token Plan **个人版**用量                             | `ALIYUN_TOKENPLAN_COOKIE`（**或** AK/SK + 额外 RAM 授权，Cookie 优先） | 「个人版套餐用量」处显示黄色提示                  |
+
+结论：
+
+- **加 Cookie 不会取代 AK/SK**，两者负责不同数据；相同序号视为同一账号，只出一张卡片。
+- **不要把 AK/SK 删掉**：删了就同时丢掉「Token 资源包」和「组织/座席」两块。
+- **只配 Cookie 也能用**：个人版用量可独立查询，组织/座席区块自动隐藏。
+- 多账号按序号一一配对：`ALIYUN_ACCESS_KEY_ID_2` 与 `ALIYUN_TOKENPLAN_COOKIE_2` 指同一账号。
+
+### Cookie 怎么填：只粘 ticket 的值，别粘整段
+
+变量接受两种写法（裸 ticket 值，或整段 `Cookie` 头 `a=b; c=d`），但两者在不同环境下命运不同：
+
+| 环境                                   | 整段 `Cookie` 头  | 原因                                                                   |
+| -------------------------------------- | ----------------- | ---------------------------------------------------------------------- |
+| Vercel / EdgeOne Makers / Workers 面板 | ❌ 会被拒绝       | 值里含 `; ` 空格，面板报「变量值不能包含空格、换行、制表符等特殊字符」 |
+| 本地 `.env` / `.dev.vars`              | ✅ 可以，但需转义 | 加载器会展开 `$`，见下                                                 |
+
+**推荐一律只粘 `login_aliyunid_ticket` 的值本身**——它不含空格与换行，所有平台都能原样保存，
+服务端会自动按 `login_aliyunid_ticket=<值>` 处理（裸值缺少 `name=` 时自动补前缀）。
+
+#### 本地 `.env`：字面 `$` 必须写成 `\$`，否则静默损坏
+
+Bun 的 `.env` 加载器与 Vite 的 `loadEnv()`（`vite.config.ts` 用的就是它）**都会做 `$VAR` 变量展开**。
+该 ticket 的值里含 `$`（形如 `…M_1t$w3j6$SFnA3gvT*…`），未转义时这两段会被当作变量名、
+**静默展开为空**——实测 153 字符的 ticket 只剩 130 字符，丢了 23 个字符，且没有任何警告。
+
+```bash
+# ❌ 错误：$w3j6 与 $SFnA3gvHMS14Yv8bT 被当作变量展开为空
+ALIYUN_TOKENPLAN_COOKIE=…M_1t$w3j6$SFnA3gvHMS14Yv8bT*…
+
+# ✅ 正确：每个字面 $ 前加反斜杠
+ALIYUN_TOKENPLAN_COOKIE=…M_1t\$w3j6\$SFnA3gvHMS14Yv8bT*…
+```
+
+损坏后的值发到网关只会返回 `BailianGateway.Login.NotLogined`——**与「会话过期」的报错完全一致**，
+极易误判成 Cookie 失效。注意：**加引号（`"…"` / `'…'`）在两种加载器下都无效，必须用 `\$`**。
+
+平台上（Vercel / EdgeOne / Workers 面板）**直接粘原值，不要加反斜杠**——那里不做变量展开。
+
+自检（在项目根目录执行，`bun -e` 会自动加载 `.env`）：
+
+```bash
+bun -e 'console.log(process.env.ALIYUN_TOKENPLAN_COOKIE?.length ?? "not set")'
+```
+
+输出的长度应与你在浏览器里复制的值一致；**明显变短就说明 `$` 被展开吃掉了**。
 
 ## 常用命令
 
@@ -160,7 +262,7 @@ server/           平台无关 API 核心 + Bun 入口
   aliyun.ts       阿里云 RPC/ROA 签名 + BSS 资源包客户端
   aliyun-console.ts 百炼控制台网关（Token Plan 个人版用量：会话 Cookie / AK-SK 双通道 + ACS3 签名）
   tokenplan.ts    阿里云 Model Studio Token Plan 客户端（组织/座席/共享包）
-  opencode.ts     OpenCode Go 订阅额度客户端（rolling/weekly/monthly）
+  opencode.ts     OpenCode Go 订阅额度客户端（rolling/weekly/monthly + 窗口 status）
   balances.ts     StepFun / SiliconFlow / OpenRouter / Novita 余额客户端
   plans.ts        Kimi / MiniMax Token Plan 客户端
 src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
@@ -170,6 +272,8 @@ src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
   utils.ts        展示格式化工具
   components/     各平台区块组件（AccountSection 统一外壳）
 e2e/              Playwright E2E 冒烟
+worker/           Cloudflare Workers 入口（复用 server/app.ts）
+cloud-functions/  EdgeOne Makers 云函数（/api/* 全捕获 + /api/diag 自诊断）
 docs/reviews/     七角色红蓝对抗审查报告
 docs/             调研文档（阿里云 Token Plan / CC-Switch 用量查询全景）
 ```
@@ -187,5 +291,4 @@ docs/             调研文档（阿里云 Token Plan / CC-Switch 用量查询�
 - 百炼 CLI 用量与配额文档：https://docs.bailian.console.aliyun.com/zh/model-studio/cli/usage-quota
 - 百炼 Token Plan 系列 OpenAPI（当前网关未开放，实测 404）：https://docs.bailian.console.aliyun.com/zh/model-studio/get-subscription-stats
 - OpenCode Go 用量参考实现（cc-switch PR #6547）：https://github.com/farion1231/cc-switch/pull/6547
-- 百炼 CLI 用量与配额：https://docs.bailian.console.aliyun.com/zh/model-studio/cli/usage-quota
-- OpenCode Go 用量接口（cc-switch PR #6547）：https://github.com/farion1231/cc-switch/pull/6547
+- OpenCode Go 用量端点与字段语义（`GET /zen/go/v1/usage`，窗口 `status`/`percent`/`resetsAt`）：https://github.com/looplj/axonhub/pull/2204

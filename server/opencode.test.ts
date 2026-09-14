@@ -96,3 +96,50 @@ describe('parseOpenCodeGoUsage', () => {
     expect(() => parseOpenCodeGoUsage(null)).toThrow(/响应结构无法解析/)
   })
 })
+
+// status 字段来源：官方文档与两个独立实现（cljdoc vis-provider-opencode-go、
+// axonhub PR #2204）均确认窗口形如 { status, percent, resetsAt }，
+// status 取 `ok` / `rate-limited`。丢弃它会丢失「超额被限流」这一信息。
+describe('parseOpenCodeGoUsage window status', () => {
+  it('carries a non-ok status through so the UI can flag it', () => {
+    const result = parseOpenCodeGoUsage({
+      usage: {
+        rolling: { status: 'ok', percent: 0, resetsAt: ISO_ROLLING },
+        weekly: { status: 'rate-limited', percent: 100, resetsAt: ISO_WEEKLY },
+      },
+    })
+
+    expect(result.windows.map((item) => item.status)).toEqual([undefined, 'rate-limited'])
+  })
+
+  it('treats ok, blank and non-string statuses as normal (key omitted)', () => {
+    const result = parseOpenCodeGoUsage({
+      usage: {
+        rolling: { status: 'ok', percent: 1 },
+        weekly: { status: '  OK  ', percent: 1 },
+        monthly: { status: '', percent: 1 },
+      },
+    })
+
+    // 归一化后不写入 status 键，既有响应结构保持稳定
+    expect(result.windows).toEqual([
+      { window: 'fiveHour', percent: 1, resetTime: 0 },
+      { window: 'weekly', percent: 1, resetTime: 0 },
+      { window: 'monthly', percent: 1, resetTime: 0 },
+    ])
+  })
+
+  it('keeps an unrecognised status verbatim instead of dropping it', () => {
+    const result = parseOpenCodeGoUsage({ usage: { monthly: { status: 'exhausted' } } })
+
+    expect(result.windows.map((item) => item.status)).toEqual(['exhausted'])
+  })
+
+  it('ignores a non-string status', () => {
+    const result = parseOpenCodeGoUsage({
+      usage: { rolling: { status: 500, percent: 3 }, weekly: { status: null, percent: 4 } },
+    })
+
+    expect(result.windows.map((item) => item.status)).toEqual([undefined, undefined])
+  })
+})

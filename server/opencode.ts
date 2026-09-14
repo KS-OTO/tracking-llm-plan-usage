@@ -5,7 +5,8 @@
  *   该地址为 provider baseURL（https://opencode.ai/zen/go/v1）下的 /usage，
  *   与 cc-switch 的 `{{baseUrl}}/usage` usage_script 契约一致。
  * - 响应 `usage.rolling` / `usage.weekly` / `usage.monthly` 三个窗口，
- *   每个窗口 `percent` 直接是「已用百分比」，`resetsAt` 为重置时间。
+ *   每个窗口 `percent` 直接是「已用百分比」，`resetsAt` 为重置时间，
+ *   `status` 为窗口状态（`ok` / `rate-limited`）。
  * - 窗口映射：rolling → 5 小时、weekly → 7 天、monthly → 30 天。
  *
  * 鉴权仅需 API Key，无需控制台会话（与 cc-switch 的 cookie/SSR 方案不同）。
@@ -34,9 +35,28 @@ function toPercent(value: unknown): number {
   return Math.min(100, Math.max(0, num))
 }
 
+/**
+ * 窗口状态归一化：`ok` 与空值统一为 undefined（= 正常），其余原样保留。
+ *
+ * 上游在窗口超额时把 `status` 置为 `rate-limited`，同时 `percent` 报 100。
+ * 若丢弃该字段，UI 只能看到「已用 100%」，无法区分「额度用尽」与
+ * 「上游正在限流」；未知状态同样保留，交由展示层提示而不是静默吞掉。
+ */
+function toStatus(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const trimmed = value.trim()
+  if (trimmed === '' || trimmed.toLowerCase() === 'ok') {
+    return undefined
+  }
+  return trimmed
+}
+
 const WindowShape = z.object({
   percent: z.unknown().optional(),
   resetsAt: z.unknown().optional(),
+  status: z.unknown().optional(),
 })
 
 const UsageBody = z.object({
@@ -73,10 +93,13 @@ export function parseOpenCodeGoUsage(body: unknown): TokenPlanInfo {
     if (!entry) {
       continue
     }
+    const status = toStatus(entry.status)
     windows.push({
       window,
       percent: toPercent(entry.percent),
       resetTime: resetTimeToMillis(entry.resetsAt),
+      // status 为 undefined 时不写入键，保持既有响应结构稳定
+      ...(status === undefined ? {} : { status }),
     })
   }
 

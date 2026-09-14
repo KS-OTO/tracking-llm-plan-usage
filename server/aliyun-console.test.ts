@@ -10,6 +10,7 @@ import {
   parsePersonalUsage,
   parseResetCards,
   parseGatewayResponse,
+  sessionExpiredHint,
   signAcs3,
   unwrapConsolePayload,
 } from './aliyun-console.ts'
@@ -137,6 +138,27 @@ describe('normalizeSessionCookie', () => {
     expect(normalizeSessionCookie('  abc  ')).toBe('login_aliyunid_ticket=abc')
     expect(normalizeSessionCookie('   ')).toBe('')
     expect(normalizeSessionCookie('')).toBe('')
+  })
+})
+
+describe('sessionExpiredHint', () => {
+  // 真实验证：ticket 值含字面 `$`，本地 .env 未转义时会被 $VAR 展开吃掉 23 个字符
+  // （153 → 130），而网关给出的报错与「会话真过期」完全一致。补长度让用户自证。
+  it('reports the length of the configured value so truncation is self-evident', () => {
+    const cookie = 'login_aliyunid_ticket=abcde'
+    const hint = sessionExpiredHint(cookie)
+
+    expect(hint).toContain(String(cookie.length))
+    expect(hint).toContain('.env')
+  })
+
+  it('mentions the dollar-escaping remedy', () => {
+    expect(sessionExpiredHint('x')).toContain('\\$')
+  })
+
+  it('keeps the hint free of the value itself', () => {
+    // 只披露长度，不泄露内容
+    expect(sessionExpiredHint('login_aliyunid_ticket=supersecret')).not.toContain('supersecret')
   })
 })
 
