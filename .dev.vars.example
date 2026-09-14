@@ -7,8 +7,10 @@ VOLC_SECRET_KEY=xxxx
 ZHIPU_API_KEY=xxxxx.xxxxx
 ALIYUN_ACCESS_KEY_ID=LTAIxxxx
 ALIYUN_SECRET_KEY=xxxx
-# Token Plan 个人版用量（可选）：百炼控制台会话 Cookie 的 login_aliyunid_ticket，无需 RAM 授权
-# ALIYUN_TOKENPLAN_COOKIE=eyJ0aWNrZXQ...（示意，勿照抄）
+# Token Plan 个人版用量（可选）：百炼控制台 Cookie 里 login_aliyunid_ticket 的「值」，无需 RAM 授权
+# ⚠️ 本地文件里的字面 $ 必须写成 \$（加载器会做 $VAR 展开，否则值被静默截断）；
+#    平台面板（Vercel / EdgeOne / Workers Secret）则直接粘原值、不要加反斜杠。
+# ALIYUN_TOKENPLAN_COOKIE=
 GITEE_AI_API_KEY=UC03xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # 代金券查询（可选）：ai.gitee.com 会话 Cookie（约 30 天过期）
 # GITEE_AI_SESSION_COOKIE=__Secure-next-auth.session-token=xxxx-xxxx

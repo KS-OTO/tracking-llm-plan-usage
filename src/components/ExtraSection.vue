@@ -16,6 +16,21 @@ const WINDOW_LABELS: Record<string, string> = {
   weekly: '每周窗口',
   monthly: '30 天窗口',
 }
+
+/** 上游窗口状态的展示文案；未收录的状态原样回退显示，不隐藏信息。 */
+const WINDOW_STATUS_LABELS: Record<string, string> = {
+  'rate-limited': '上游限流中',
+}
+
+function windowStatusLabel(status: string): string {
+  return WINDOW_STATUS_LABELS[status] ?? status
+}
+
+function windowStatusNote(status: string): string {
+  return status === 'rate-limited'
+    ? '该窗口已被上游限流，期间的请求可能被拒绝；百分比仍为已用额度'
+    : `上游返回的窗口状态：${status}`
+}
 </script>
 
 <template>
@@ -116,7 +131,17 @@ const WINDOW_LABELS: Record<string, string> = {
                     <t-col v-for="window in account.windows" :key="window.window" :xs="24">
                       <div class="window-block">
                         <t-space align="center" justify="space-between" class="window-head">
-                          <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
+                          <t-space align="center" size="small">
+                            <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
+                            <t-tag
+                              v-if="window.status"
+                              size="small"
+                              theme="warning"
+                              variant="light-outline"
+                            >
+                              {{ windowStatusLabel(window.status) }}
+                            </t-tag>
+                          </t-space>
                           <span class="muted">{{ formatReset(window.resetTime) }}</span>
                         </t-space>
                         <t-progress
@@ -128,6 +153,9 @@ const WINDOW_LABELS: Record<string, string> = {
                           <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
                           <span class="num">{{ window.percent.toFixed(1) }}%</span>
                         </t-space>
+                        <div v-if="window.status" class="muted window-foot">
+                          {{ windowStatusNote(window.status) }}
+                        </div>
                         <div v-if="window.resetTime > 0" class="muted window-foot">
                           重置于 {{ formatDateTime(window.resetTime) }}
                         </div>

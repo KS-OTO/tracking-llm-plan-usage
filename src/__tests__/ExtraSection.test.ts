@@ -144,4 +144,67 @@ describe('ExtraSection', () => {
     expect(text).toContain('19.0%')
     expect(text).toContain('5.0%')
   })
+
+  it('flags a rate-limited window instead of silently showing 100% as usage', () => {
+    const wrapper = mountWithTDesign(ExtraSection, {
+      props: {
+        data: {
+          balances: [],
+          plans: [
+            {
+              provider: 'OpenCode Go',
+              accounts: [
+                {
+                  keyHint: 'sk-0****go',
+                  provider: 'OpenCode Go',
+                  windows: [
+                    {
+                      window: 'monthly',
+                      percent: 100,
+                      resetTime: Date.now() + 86_400_000,
+                      status: 'rate-limited',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          configured: 1,
+        },
+        loading: false,
+        error: null,
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('上游限流中')
+    expect(text).toContain('该窗口已被上游限流')
+  })
+
+  it('renders no status tag for a normal window', () => {
+    const wrapper = mountWithTDesign(ExtraSection, {
+      props: {
+        data: {
+          balances: [],
+          plans: [
+            {
+              provider: 'OpenCode Go',
+              accounts: [
+                {
+                  keyHint: 'sk-0****go',
+                  provider: 'OpenCode Go',
+                  windows: [{ window: 'weekly', percent: 19, resetTime: Date.now() + 86_400_000 }],
+                },
+              ],
+            },
+          ],
+          configured: 1,
+        },
+        loading: false,
+        error: null,
+      },
+    })
+
+    expect(wrapper.text()).not.toContain('上游限流中')
+  })
 })

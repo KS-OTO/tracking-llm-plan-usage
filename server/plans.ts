@@ -25,6 +25,14 @@ export interface TokenPlanWindow {
   window: 'fiveHour' | 'weekly' | 'monthly'
   percent: number
   resetTime: number
+  /**
+   * 上游返回的窗口状态。
+   *
+   * 仅 OpenCode Go 提供该字段，取值为 `ok` / `rate-limited`（超额时上游会限流）。
+   * 缺省表示「不适用或正常」——`ok` 会被解析层归一化为缺省，
+   * 因此消费方只需判断 `status !== undefined` 即可识别异常窗口。
+   */
+  status?: string
 }
 
 export interface TokenPlanInfo {
