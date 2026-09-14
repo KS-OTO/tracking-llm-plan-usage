@@ -331,6 +331,8 @@ export interface ExtrasPlanWindow {
   window: 'fiveHour' | 'weekly' | 'monthly'
   percent: number
   resetTime: number
+  /** 上游窗口状态（如 OpenCode Go 的 `rate-limited`）；缺省表示正常或不适用。 */
+  status?: string
 }
 
 export interface ExtrasPlan {
