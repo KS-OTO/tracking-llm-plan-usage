@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign, openDetail } from './mount'
 
 import BaiduSection from '../components/BaiduSection.vue'
 import type { BaiduQianfanResponse } from '../types'
@@ -41,28 +41,39 @@ const fixture: BaiduQianfanResponse = {
 }
 
 describe('BaiduSection', () => {
-  it('renders usage statistics, package and TPM tables with alias', () => {
+  it('renders the usage statistics with the configured alias', () => {
     const wrapper = mountWithTDesign(BaiduSection, {
       props: { data: fixture, loading: false, error: null },
     })
-    const text = wrapper.text()
-    expect(text).toContain('百度主号')
-    expect(text).toContain('ALTA****xD6n')
-    expect(text).toContain('4.00M')
-    expect(text).toContain('1,200')
-    expect(text).toContain('ernie-4.5-turbo-128k')
-    expect(text).toContain('使用中')
-    expect(text).toContain('120,000')
-    expect(text).toContain('后付费')
+    const account = wrapper.find('.account-group')
+    expect(account.find('.account-name').text()).toBe('百度主号')
+    expect(account.find('.key-hint').text()).toBe('ALTA****xD6n')
+    expect(wrapper.text()).toContain('4.00M')
+    expect(wrapper.text()).toContain('1,200')
+    // 量包明细与 TPM 配额表属低优先级信息，已移出卡片
+    expect(wrapper.text()).not.toContain('ernie-4.5-turbo-128k')
+    expect(wrapper.text()).not.toContain('120,000')
   })
 
-  it('shows an alert for the failed account with alias + keyHint', () => {
+  it('moves the package and TPM tables into the detail dialog', async () => {
+    const wrapper = mountWithTDesign(BaiduSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('量包明细（1）')
+    expect(detail).toContain('ernie-4.5-turbo-128k')
+    expect(detail).toContain('使用中')
+    expect(detail).toContain('TPM 配额（1）')
+    expect(detail).toContain('120,000')
+    expect(detail).toContain('后付费')
+  })
+
+  it('shows an alert for the failed account with keyHint', () => {
     const wrapper = mountWithTDesign(BaiduSection, {
       props: { data: fixture, loading: false, error: null },
     })
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
-    expect(alerts.length).toBe(1)
-    expect(alerts[0]!.text()).toContain('ALTA****fail')
+    expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('ALTA****fail')])
   })
 
   it('renders neutral empty state when notConfigured', () => {
@@ -73,7 +84,7 @@ describe('BaiduSection', () => {
     expect(wrapper.findComponent({ name: 'TAlert' }).exists()).toBe(false)
   })
 
-  it('shows empty-package hint when account has no packages', () => {
+  it('shows empty-package hint in the dialog when account has no packages', async () => {
     const wrapper = mountWithTDesign(BaiduSection, {
       props: {
         data: {
@@ -90,7 +101,8 @@ describe('BaiduSection', () => {
         error: null,
       },
     })
-    expect(wrapper.text()).toContain('无量包')
+    expect(wrapper.text()).not.toContain('无量包')
+    expect(await openDetail(wrapper)).toContain('无量包')
   })
 
   it('shows skeleton when loading without data', () => {

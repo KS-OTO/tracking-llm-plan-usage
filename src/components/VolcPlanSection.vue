@@ -1,6 +1,12 @@
 <script setup lang="ts">
+/**
+ * 火山方舟 Agent Plan。
+ *
+ * 卡片只保留高优先级信息——Agent Plan / Coding Plan 各窗口的额度进度；
+ * 套餐类型、明细统计区间、模型调用明细表收进「详情」弹窗。
+ */
 import type { VolcPlanResponse } from '../types'
-import { accountName, isFailedAccount } from '../types'
+import { accountTitle, isFailedAccount } from '../types'
 import {
   formatDateTime,
   formatReset,
@@ -11,6 +17,7 @@ import {
 } from '../utils'
 
 import AccountSection from './AccountSection.vue'
+import DetailDialog from './DetailDialog.vue'
 
 defineProps<{
   data: VolcPlanResponse | null
@@ -77,31 +84,67 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
-        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+        <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
-            <t-space align="center" size="small" break-line>
-              <t-tag size="small" variant="light-outline" theme="primary">{{
-                accountName(account, i)
-              }}</t-tag>
-              <span class="muted key-hint">{{ account.keyHint }}</span>
-              <t-tag
-                v-if="!isFailedAccount(account)"
+            <span v-if="account.label" class="account-name">{{ account.label }}</span>
+            <span class="key-hint" :class="{ 'key-hint-secondary': account.label }">
+              {{ account.keyHint }}
+            </span>
+            <DetailDialog
+              v-if="!isFailedAccount(account)"
+              :title="accountTitle(account)"
+              :subtitle="account.label ? account.keyHint : undefined"
+            >
+              <t-descriptions :column="2" size="small" class="detail-block">
+                <t-descriptions-item label="别名">
+                  {{ account.label || '未配置（用 VOLC_LABEL / VOLC_LABEL_N 设置）' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="Key">
+                  <span class="num">{{ account.keyHint }}</span>
+                </t-descriptions-item>
+                <t-descriptions-item label="套餐类型">
+                  {{ account.planType ?? '未知' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="明细区间">
+                  <span class="num">{{ account.detailsStart }} ~ {{ account.detailsEnd }}</span>
+                </t-descriptions-item>
+                <t-descriptions-item label="Coding Plan 状态">
+                  {{ account.codingPlan?.status || '—' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="调用明细合计">
+                  <span class="num">{{ totalOf(account) }}</span>
+                </t-descriptions-item>
+              </t-descriptions>
+
+              <t-divider align="left">模型调用明细（{{ account.details.length }}）</t-divider>
+              <t-table
+                :data="detailRows(account)"
+                :columns="detailsColumns"
+                row-key="_key"
+                max-height="360"
                 size="small"
-                variant="light-outline"
-                theme="warning"
               >
-                {{ account.planType ?? '未知' }} 套餐
-              </t-tag>
-              <span v-if="!isFailedAccount(account)" class="account-range">
-                {{ account.detailsStart }} ~ {{ account.detailsEnd }}
-              </span>
-            </t-space>
+                <template #time="{ row }">{{ formatDateTime(row.time) }}</template>
+                <template #objectName="{ row }">{{ row.objectName }}</template>
+                <template #usage="{ row }">{{ formatTokens(row.usage) }}</template>
+                <template #billingType="{ row }">
+                  <t-tag
+                    size="small"
+                    variant="light-outline"
+                    :theme="row.billingType === 'WithinPlan' ? 'success' : 'warning'"
+                  >
+                    {{ row.billingType === 'WithinPlan' ? '套餐内' : '套餐外' }}
+                  </t-tag>
+                </template>
+              </t-table>
+              <t-empty v-if="account.details.length === 0" description="区间内没有调用明细" />
+            </DetailDialog>
           </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`${accountName(account, i)}（${account.keyHint}）查询失败`"
+            :title="`${accountTitle(account)} 查询失败`"
             :message="account.error"
             :max-line="5"
           />
@@ -184,33 +227,6 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
               </t-row>
               <t-empty v-else description="无 Coding Plan 额度数据（订阅可能已回收或未开通）" />
             </div>
-
-            <t-divider align="left">
-              <t-space align="center" size="small">
-                <span>模型调用明细</span>
-                <span class="muted num">合计 {{ totalOf(account) }}</span>
-              </t-space>
-            </t-divider>
-            <t-table
-              :data="detailRows(account)"
-              :columns="detailsColumns"
-              row-key="_key"
-              max-height="360"
-              size="small"
-            >
-              <template #time="{ row }">{{ formatDateTime(row.time) }}</template>
-              <template #objectName="{ row }">{{ row.objectName }}</template>
-              <template #usage="{ row }">{{ formatTokens(row.usage) }}</template>
-              <template #billingType="{ row }">
-                <t-tag
-                  size="small"
-                  variant="light-outline"
-                  :theme="row.billingType === 'WithinPlan' ? 'success' : 'warning'"
-                >
-                  {{ row.billingType === 'WithinPlan' ? '套餐内' : '套餐外' }}
-                </t-tag>
-              </template>
-            </t-table>
           </template>
         </div>
       </t-space>
@@ -223,9 +239,24 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
   width: 100%;
 }
 
-.account-range {
-  font-size: 12px;
+.account-name {
+  font-weight: 600;
+  font-size: var(--td-font-size-body-large);
+}
+
+.key-hint {
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-hint-secondary {
   color: var(--td-text-color-placeholder);
+  font-size: 12px;
+}
+
+.detail-block {
+  margin-bottom: var(--td-size-4);
 }
 
 .window-block {
@@ -263,6 +294,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
 .section-head {
   margin-bottom: 12px;
 }
+
 .account-group {
   background: var(--td-bg-color-secondarycontainer);
   border-radius: var(--td-radius-medium);

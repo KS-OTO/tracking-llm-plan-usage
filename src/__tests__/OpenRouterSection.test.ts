@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign, openDetail } from './mount'
 
 import OpenRouterSection from '../components/OpenRouterSection.vue'
 import type { OpenRouterDetailResponse } from '../types'
@@ -47,18 +47,32 @@ const fixture: OpenRouterDetailResponse = {
 }
 
 describe('OpenRouterSection', () => {
-  it('renders balance, limit, usage windows and tags', () => {
+  it('keeps the credit readings on the card', () => {
     const wrapper = mountWithTDesign(OpenRouterSection, {
       props: { data: fixture, loading: false, error: null },
     })
     const text = wrapper.text()
     expect(text).toContain('主力')
     expect(text).toContain('74.75')
-    expect(text).toContain('每月重置')
-    expect(text).toContain('2027-12-31 23:59:59')
+    expect(text).toContain('限额剩余')
+    expect(text).toContain('今日用量')
     expect(text).toContain('1.50')
-    expect(text).toContain('10.25')
-    expect(text).toContain('25.50')
+    // 密钥元数据与周月用量已移出卡片
+    expect(text).not.toContain('每月重置')
+    expect(text).not.toContain('10.25')
+  })
+
+  it('moves key metadata and weekly/monthly usage into the detail dialog', async () => {
+    const wrapper = mountWithTDesign(OpenRouterSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('每月重置')
+    expect(detail).toContain('2027-12-31 23:59:59')
+    expect(detail).toContain('10.25')
+    expect(detail).toContain('25.50')
+    expect(detail).toContain('100.50')
+    expect(detail).toContain('管理密钥')
   })
 
   it('shows neutral empty state when notConfigured', () => {
@@ -69,13 +83,12 @@ describe('OpenRouterSection', () => {
     expect(wrapper.findComponent({ name: 'TAlert' }).exists()).toBe(false)
   })
 
-  it('shows failed-account alert with alias', () => {
+  it('shows failed-account alert with key hint', () => {
     const wrapper = mountWithTDesign(OpenRouterSection, {
       props: { data: fixture, loading: false, error: null },
     })
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
-    expect(alerts.length).toBe(1)
-    expect(alerts[0]!.text()).toContain('sk-o****free')
+    expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('sk-o****free')])
   })
 
   it('shows skeleton when loading', () => {

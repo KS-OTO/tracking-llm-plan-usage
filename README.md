@@ -15,6 +15,10 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
 - **暗色模式**：一键切换并持久化（localStorage），默认跟随系统 `prefers-color-scheme`。
 - **可访问性**：语义化地标（header/main/footer）、键盘可达、aria 标注、对比度对齐 TDesign 官方 token。
 - **骨架屏 / 错误告警 / 空状态**：统一由 TDesign Skeleton / Alert / Empty 承载。
+- **卡片只放高优先级读数**：卡片上只有窗口用量 / 余额 / 状态这类每天要看的数字；
+  账号身份、订阅元数据、明细表、次级指标全部收进卡片右上角的「详情」弹窗，需要时才展开。
+- **账号别名**：多 Key 场景下 `*_LABEL` 给每个 Key 起人类可读的名字，卡片主标题显示别名、
+  Key 掩码退居次要位置（详见「账号别名」）。
 
 | 数据源                | 接口                                                                                                                                                                                            | 展示内容                                                                                                                                            |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -26,7 +30,8 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
 | 阿里云百炼 Token Plan | ModelStudio OpenAPI（ROA）：`GetSubscriptionSeatDetails` / `ListSubscriptionSharedPackages`；个人版用量经控制台网关（`zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/*`，Cookie 或 AK/SK 均可） | TokenPlan 账户/组织信息、订阅座席与共享包的 CREDITS 额度周期、总额/剩余；**个人版** 5 小时/7 天窗口用量、订阅状态与剩余天数、加购包 Credits、重置卡 |
 | 模力方舟（Gitee AI）  | `GET /tokens/packages/balance` + 内部接口（Cookie）                                                                                                                                             | 资源包总金额/已用/剩余、代金券余额与明细（需配置会话 Cookie）                                                                                       |
 | 百度智能云千帆        | 平台功能 OpenAPI（/v2/charge + /v2/service，BCE AK/SK 签名）                                                                                                                                    | 量包（总量/已用/到期/状态）+ TPM 配额 + 近 7 天调用概览（Token/次数/服务数）                                                                        |
-| 扩展平台（可选）      | StepFun / SiliconFlow / OpenRouter / Novita 余额 + Kimi / MiniMax / **OpenCode Go** Token Plan                                                                                                  | 配置对应密钥后自动出现在「其他平台（扩展）」区块，支持多账号                                                                                        |
+| 扩展平台（余额）      | StepFun / SiliconFlow / OpenRouter / Novita 余额（`/api/extras`）                                                                                                                               | 配置对应密钥后出现在「扩展平台」Tab；卡片只显示余额，「详情」弹窗内是总额/已用/备注                                                                 |
+| 订阅套餐（可选）      | Kimi For Coding（`/coding/v1/usages`）/ MiniMax（`coding_plan/remains`）/ **OpenCode Go**（`/zen/go/v1/usage`），统一走 `/api/plans`                                                            | 按窗口计的**订阅额度**，与火山/智谱/百炼并列在「套餐订阅」Tab；卡片显示窗口进度条，账号身份与窗口明细在「详情」弹窗内                               |
 
 密钥只存在于服务端环境变量，前端页面不接触任何 Key（仅展示掩码）。
 
@@ -113,6 +118,47 @@ bun run deploy            # = vp build && wrangler deploy
 成对凭据（AccessKey/SecretKey）同编号成组：`VOLC_ACCESS_KEY_ID_2` + `VOLC_SECRET_KEY_2`。
 每个账号独立查询、独立容错，仪表盘按账号卡片展示。
 
+### 账号别名（多 Key 团队建议配置）
+
+Key 掩码（`sk-f61c****L3Qe`）对人而言没有可读性——同一平台挂 5 个 Key 时无法判断哪个是哪个。
+给每个 Key 配一个别名，卡片主标题就显示别名，Key 掩码退居次要位置（仅作消歧）。
+
+变量名规则：**在凭据变量名前缀后加 `_LABEL`**，第 N 组同样加 `_LABEL_N`，按**序号**与凭据配对。
+
+```bash
+# 5 个 OpenCode Go 订阅，按团队标注归属
+OPENCODE_GO_API_KEY=sk-aaaa...
+OPENCODE_GO_LABEL=前端团队专用订阅
+OPENCODE_GO_API_KEY_2=sk-bbbb...
+OPENCODE_GO_LABEL_2=后端团队专用 Key
+OPENCODE_GO_API_KEY_3=sk-cccc...
+OPENCODE_GO_LABEL_3=算法组（长上下文）
+```
+
+各平台对应的别名前缀：
+
+| 平台                                    | 凭据变量                  | 别名变量                 |
+| --------------------------------------- | ------------------------- | ------------------------ |
+| DeepSeek                                | `DEEPSEEK_API_KEY`        | `DEEPSEEK_LABEL`         |
+| 火山方舟                                | `VOLC_ACCESS_KEY_ID`      | `VOLC_LABEL`             |
+| 智谱 GLM                                | `ZHIPU_API_KEY`           | `ZHIPU_LABEL`            |
+| 阿里云（资源包 / Token Plan 组织·座席） | `ALIYUN_ACCESS_KEY_ID`    | `ALIYUN_LABEL`           |
+| 阿里 Token Plan 个人版（仅 Cookie）     | `ALIYUN_TOKENPLAN_COOKIE` | `ALIYUN_TOKENPLAN_LABEL` |
+| 模力方舟                                | `GITEE_AI_API_KEY`        | `GITEE_LABEL`            |
+| 百度千帆                                | `BAIDU_ACCESS_KEY_ID`     | `BAIDU_LABEL`            |
+| StepFun / SiliconFlow / Novita          | `STEPFUN_API_KEY` 等      | `STEPFUN_LABEL` 等       |
+| OpenRouter                              | `OPENROUTER_API_KEY`      | `OPENROUTER_LABEL`       |
+| Kimi For Coding / MiniMax               | `KIMI_API_KEY` 等         | `KIMI_LABEL` 等          |
+| OpenCode Go                             | `OPENCODE_GO_API_KEY`     | `OPENCODE_GO_LABEL`      |
+
+三条容易踩的规则：
+
+- **按序号配对，不按值配对**。`*_LABEL_2` 对应的是第 2 组凭据；中间断号（有 `_1`、`_3` 没 `_2`）会让后续组全部读不到。
+- **别用 `ALIYUN_LABEL` 标 Cookie 专属账号**：没有 AK/SK 时 `ALIYUN_LABEL` 找不到配对项，别名会被忽略——这种情况请用 `ALIYUN_TOKENPLAN_LABEL`。
+- **同一序号两种凭据并存时（AK/SK + Cookie）**，别名取 `ALIYUN_LABEL`（两者本就是同一账号，只出一张卡）。
+
+别名只影响展示，不参与任何鉴权或查询。
+
 ## 环境变量
 
 | 变量                      | 必填 | 说明                                                                                                       |
@@ -138,7 +184,7 @@ bun run deploy            # = vp build && wrangler deploy
 
 火山方舟 Access Key 在 https://console.volcengine.com/iam/keymanage 创建；出于安全考虑建议使用 IAM 子用户并仅授予方舟相关权限。
 阿里云 AccessKey 建议使用 RAM 子用户：Token Plan 组织/座席区块需要 `AliyunTokenPlanReadOnlyAccess` 策略；资源包区块需要费用中心（bss:QueryResourcePackageInstances）只读权限，可按需分别授权。个人版用量用会话 Cookie 即可，无需任何授权。
-各平台变量都配置齐全后才会启用对应页面。
+各平台变量都配置齐全后才会启用对应页面。每个凭据变量都支持同序号的 `*_LABEL` / `*_LABEL_N` 别名（详见「账号别名」）。
 
 OpenCode Go 的用量接口在 200 响应中为每个窗口附带 `status`（`ok` / `rate-limited`）。当某窗口被上游限流时，接口报 `percent: 100` 且 `status: "rate-limited"`——两者语义不同，因此面板会把该状态单独标为「上游限流中」并附说明，而不是只显示 100%。
 
@@ -270,7 +316,8 @@ src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
   stores/         Pinia stores（dashboard 数据编排 / theme 暗色主题）
   types.ts        共享类型（多账号 AccountEnvelope 判别联合）
   utils.ts        展示格式化工具
-  components/     各平台区块组件（AccountSection 统一外壳）
+  components/     各平台区块组件（AccountSection 统一外壳 + DetailDialog 详情弹窗）
+                  套餐订阅 Tab：PlansSection 承载 Kimi / MiniMax / OpenCode Go
 e2e/              Playwright E2E 冒烟
 worker/           Cloudflare Workers 入口（复用 server/app.ts）
 cloud-functions/  EdgeOne Makers 云函数（/api/* 全捕获 + /api/diag 自诊断）
