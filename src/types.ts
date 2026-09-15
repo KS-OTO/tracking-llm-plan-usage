@@ -14,6 +14,8 @@ export interface StatusResponse {
     baidu: ProviderStatus
     tokenplan: ProviderStatus
     extras: ProviderStatus
+    /** 套餐类扩展平台（Kimi / MiniMax / OpenCode Go），与「套餐订阅」Tab 对应。 */
+    plans: ProviderStatus
   }
   /** 半配置的成对凭据变量名（只配了 Key 没配 SecretKey）。 */
   incomplete?: string[]
@@ -32,9 +34,17 @@ export function isFailedAccount<T>(
   return 'error' in account && account.error !== undefined
 }
 
-/** 账号显示名：别名优先，无别名退化为「账号 N」。 */
+/** 账号显示名：别名优先，无别名退化为「账号 N」（用于失败提示等需要序号的场合）。 */
 export function accountName(account: { keyHint: string; label?: string }, index: number): string {
   return account.label || `账号 ${index + 1}`
+}
+
+/**
+ * 账号主标题：别名优先，无别名退化为 Key 掩码。
+ * Key 掩码对人而言可读性差，因此仅在缺少别名时才顶到主标题位置。
+ */
+export function accountTitle(account: { keyHint: string; label?: string }): string {
+  return account.label || account.keyHint
 }
 
 export interface BalanceEntry {
@@ -351,8 +361,17 @@ export interface ExtrasPlanGroup {
   accounts: AccountEnvelope<ExtrasPlan>[]
 }
 
+/**
+ * 余额类扩展平台（余额账户 Tab）：StepFun / SiliconFlow / OpenRouter / Novita。
+ * 套餐类（Kimi / MiniMax / OpenCode Go）已随 PlansResponse 归入「套餐订阅」Tab。
+ */
 export interface ExtrasResponse {
   balances: ExtrasBalanceGroup[]
+  configured: number
+}
+
+/** 套餐类扩展平台（套餐订阅 Tab）的窗口用量。 */
+export interface PlansResponse {
   plans: ExtrasPlanGroup[]
   configured: number
 }

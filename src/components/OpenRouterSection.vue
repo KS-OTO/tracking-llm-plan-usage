@@ -1,9 +1,15 @@
 <script setup lang="ts">
+/**
+ * OpenRouter。
+ *
+ * 卡片只留额度读数（剩余额度 / 限额剩余 / 今日用量）；
+ * 充值总额、周月用量、密钥元数据（限额重置周期、到期时间、是否管理密钥）收进「详情」弹窗。
+ */
 import type { OpenRouterDetailResponse } from '../types'
-import { accountName, isFailedAccount } from '../types'
-import { formatMoney } from '../utils'
+import { accountTitle, isFailedAccount } from '../types'
 
 import AccountSection from './AccountSection.vue'
+import DetailDialog from './DetailDialog.vue'
 
 defineProps<{
   data: OpenRouterDetailResponse | null
@@ -55,109 +61,86 @@ function expiryLabel(iso: string | null): string {
 
     <template v-if="data">
       <t-space direction="vertical" size="medium" class="accounts">
-        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+        <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
-            <t-space align="center" size="small" break-line>
-              <t-tag size="small" variant="light-outline" theme="primary">
-                {{ accountName(account, i) }}
-              </t-tag>
-              <span class="muted key-hint">{{ account.keyHint }}</span>
-              <t-tag
-                v-if="!isFailedAccount(account)"
-                size="small"
-                variant="light"
-                :theme="account.isFreeTier ? 'default' : 'success'"
-              >
-                {{ account.isFreeTier ? '免费层' : '付费' }}
-              </t-tag>
-            </t-space>
+            <span v-if="account.label" class="account-name">{{ account.label }}</span>
+            <span class="key-hint" :class="{ 'key-hint-secondary': account.label }">
+              {{ account.keyHint }}
+            </span>
+            <DetailDialog
+              v-if="!isFailedAccount(account)"
+              :title="accountTitle(account)"
+              :subtitle="account.label ? account.keyHint : undefined"
+            >
+              <t-descriptions :column="2" size="small" class="detail-block">
+                <t-descriptions-item label="别名 / 密钥名">
+                  {{ account.label || '未配置（用 OPENROUTER_LABEL / OPENROUTER_LABEL_N 设置）' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="Key">
+                  <span class="num">{{ account.keyHint }}</span>
+                </t-descriptions-item>
+                <t-descriptions-item label="账户类型">
+                  {{ account.isFreeTier ? '免费层' : '付费' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="管理密钥">
+                  {{ account.isManagementKey ? '是' : '否' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="充值 / 已用">
+                  {{ (account.total ?? 0).toFixed(2) }} USD
+                </t-descriptions-item>
+                <t-descriptions-item label="限额重置">
+                  {{ limitResetLabel(account.limitReset) }}
+                </t-descriptions-item>
+                <t-descriptions-item label="本周用量">
+                  {{ account.usageWeekly.toFixed(2) }} USD
+                </t-descriptions-item>
+                <t-descriptions-item label="本月用量">
+                  {{ account.usageMonthly.toFixed(2) }} USD
+                </t-descriptions-item>
+                <t-descriptions-item label="Key 有效期">
+                  {{ expiryLabel(account.expiresAt) }}
+                </t-descriptions-item>
+              </t-descriptions>
+            </DetailDialog>
           </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`${accountName(account, i)}（${account.keyHint}）查询失败`"
+            :title="`${accountTitle(account)} 查询失败`"
             :message="account.error"
             :max-line="5"
           />
 
-          <template v-else>
-            <t-row :gutter="[16, 16]">
-              <t-col :xs="12" :sm="8">
-                <t-statistic
-                  title="剩余额度"
-                  :value="account.balance"
-                  :decimal-places="2"
-                  suffix="USD"
-                  :color="
-                    account.limitRemaining !== null && account.limitRemaining <= 1
-                      ? 'red'
-                      : undefined
-                  "
-                />
-              </t-col>
-              <t-col v-if="account.limit !== null" :xs="12" :sm="8">
-                <t-statistic
-                  title="限额剩余"
-                  :value="account.limitRemaining ?? 0"
-                  :decimal-places="2"
-                  suffix="USD"
-                />
-              </t-col>
-              <t-col :xs="12" :sm="8">
-                <t-statistic
-                  title="总充值 / 已用"
-                  :value="account.total ?? 0"
-                  :decimal-places="2"
-                  suffix="USD"
-                />
-              </t-col>
-            </t-row>
-
-            <t-row :gutter="[16, 16]">
-              <t-col :xs="12" :sm="8">
-                <t-statistic
-                  title="今日用量"
-                  :value="account.usageDaily"
-                  :decimal-places="2"
-                  suffix="USD"
-                />
-              </t-col>
-              <t-col :xs="12" :sm="8">
-                <t-statistic
-                  title="本周用量"
-                  :value="account.usageWeekly"
-                  :decimal-places="2"
-                  suffix="USD"
-                />
-              </t-col>
-              <t-col :xs="12" :sm="8">
-                <t-statistic
-                  title="本月用量"
-                  :value="account.usageMonthly"
-                  :decimal-places="2"
-                  suffix="USD"
-                />
-              </t-col>
-            </t-row>
-
-            <t-space size="small" break-line class="meta-row">
-              <t-tag v-if="account.limitReset" size="small" variant="light-outline" theme="primary">
-                限额 {{ limitResetLabel(account.limitReset) }}
-              </t-tag>
-              <t-tag size="small" variant="light-outline" theme="default">
-                Key {{ expiryLabel(account.expiresAt) }}
-              </t-tag>
-              <t-tag
-                v-if="account.isManagementKey"
-                size="small"
-                variant="light-outline"
-                theme="warning"
-              >
-                管理密钥
-              </t-tag>
-            </t-space>
-          </template>
+          <t-row v-else :gutter="[16, 16]">
+            <t-col :xs="12" :sm="8">
+              <t-statistic
+                title="剩余额度"
+                :value="account.balance"
+                :decimal-places="2"
+                suffix="USD"
+                :color="
+                  account.limitRemaining !== null && account.limitRemaining <= 1 ? 'red' : undefined
+                "
+              />
+            </t-col>
+            <t-col v-if="account.limit !== null" :xs="12" :sm="8">
+              <t-statistic
+                title="限额剩余"
+                :value="account.limitRemaining ?? 0"
+                :decimal-places="2"
+                suffix="USD"
+              />
+            </t-col>
+            <t-col :xs="12" :sm="8">
+              <t-statistic
+                title="今日用量"
+                :value="account.usageDaily"
+                :decimal-places="2"
+                suffix="USD"
+              />
+            </t-col>
+          </t-row>
         </div>
       </t-space>
     </template>
@@ -183,21 +166,36 @@ function expiryLabel(iso: string | null): string {
   margin-bottom: var(--td-size-4);
 }
 
+.account-name {
+  font-weight: 600;
+  font-size: var(--td-font-size-body-large);
+}
+
+.key-hint {
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-hint-secondary {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+}
+
+.detail-block {
+  margin-bottom: var(--td-size-4);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
 .muted {
   color: var(--td-text-color-placeholder);
   font-size: var(--td-font-size-body-small);
 }
 
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-placeholder);
-}
-
 .console-link {
   font-size: var(--td-font-size-body-small);
-}
-
-.meta-row {
-  margin-top: var(--td-size-4);
 }
 </style>

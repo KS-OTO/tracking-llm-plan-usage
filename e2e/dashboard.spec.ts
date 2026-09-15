@@ -36,11 +36,27 @@ test.describe('dashboard smoke', () => {
     expect(body.error.code).toBe('NOT_CONFIGURED')
   })
 
-  test('extras empty state lists the OpenCode Go credential', async ({ page }) => {
+  test('extras empty state covers only the balance-type credentials', async ({ page }) => {
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '扩展平台' }).click()
     await expect(page.getByText('未配置扩展平台密钥').first()).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByText(/OPENCODE_GO/).first()).toBeVisible()
+    // 限定在扩展平台面板内：v-show 的隐藏面板同样在 DOM 里，必须收窄查询范围
+    const panel = page.locator('#anchor-extras')
+    await expect(panel.getByText(/STEPFUN/).first()).toBeVisible()
+    // 套餐类密钥（OpenCode Go 等）已迁到「套餐订阅」，不再出现在本区块
+    await expect(panel.getByText(/OPENCODE_GO/)).toHaveCount(0)
+  })
+
+  test('subscription tab hosts the plan-type credentials (OpenCode Go)', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
+    await expect(page.getByText('未配置订阅套餐密钥').first()).toBeVisible({ timeout: 30_000 })
+    await expect(
+      page
+        .locator('#anchor-plans')
+        .getByText(/OPENCODE_GO/)
+        .first(),
+    ).toBeVisible()
   })
 
   test('overview is the default tab with alert, reset and nav cards', async ({ page }) => {

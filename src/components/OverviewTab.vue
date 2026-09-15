@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 
-import { isFailedAccount } from '../types'
+import { accountTitle, isFailedAccount } from '../types'
 import { useDashboardStore } from '../stores/dashboard'
 import { formatReset, formatTokens } from '../utils'
 
@@ -29,6 +29,7 @@ const {
   aliyun,
   tokenPlan,
   extras,
+  plans,
   baidu,
   openrouter,
   status,
@@ -45,6 +46,23 @@ interface WindowAlert {
   resetText: string
 }
 
+/** 窗口名缩写（预警行/最近重置行共用）。 */
+function shortWindow(window: string): string {
+  if (window === 'fiveHour') {
+    return '5h'
+  }
+  if (window === 'weekly') {
+    return '周'
+  }
+  if (window === 'monthly') {
+    return '月'
+  }
+  if (window === 'daily') {
+    return '日'
+  }
+  return window
+}
+
 const alerts = computed<WindowAlert[]>(() => {
   const list: WindowAlert[] = []
   for (const account of volcPlan.value.data?.accounts ?? []) {
@@ -57,15 +75,8 @@ const alerts = computed<WindowAlert[]>(() => {
       if (percent >= 70) {
         list.push({
           platform: '火山方舟',
-          account: account.label || account.keyHint,
-          window:
-            window.window === 'fiveHour'
-              ? '5h'
-              : window.window === 'daily'
-                ? '日'
-                : window.window === 'weekly'
-                  ? '周'
-                  : '月',
+          account: accountTitle(account),
+          window: shortWindow(window.window),
           percent,
           resetText: formatReset(window.resetTime),
         })
@@ -75,7 +86,7 @@ const alerts = computed<WindowAlert[]>(() => {
       if (window.percent >= 70) {
         list.push({
           platform: '火山 Coding',
-          account: account.label || account.keyHint,
+          account: accountTitle(account),
           window: window.level,
           percent: window.percent,
           resetText: formatReset(window.resetTime),
@@ -91,11 +102,30 @@ const alerts = computed<WindowAlert[]>(() => {
       if (window.percentage >= 70) {
         list.push({
           platform: '智谱',
-          account: account.label || account.keyHint,
-          window: window.window === 'fiveHour' ? '5h' : '周',
+          account: accountTitle(account),
+          window: shortWindow(window.window),
           percent: window.percentage,
           resetText: formatReset(window.nextResetTime),
         })
+      }
+    }
+  }
+  // 订阅套餐（Kimi / MiniMax / OpenCode Go）：上游限流的窗口同样计入预警
+  for (const group of plans.value.data?.plans ?? []) {
+    for (const account of group.accounts) {
+      if ('error' in account) {
+        continue
+      }
+      for (const window of account.windows) {
+        if (window.percent >= 70) {
+          list.push({
+            platform: group.provider,
+            account: accountTitle(account),
+            window: shortWindow(window.window),
+            percent: window.percent,
+            resetText: formatReset(window.resetTime),
+          })
+        }
       }
     }
   }
@@ -120,7 +150,7 @@ const earliestReset = computed(() => {
     if ('error' in account) {
       continue
     }
-    const name = account.label || account.keyHint
+    const name = accountTitle(account)
     for (const window of account.windows) {
       consider('火山方舟', name, window.window, window.resetTime)
     }
@@ -133,7 +163,17 @@ const earliestReset = computed(() => {
       continue
     }
     for (const window of account.codingPlan?.windows ?? []) {
-      consider('智谱', account.label || account.keyHint, window.window, window.nextResetTime)
+      consider('智谱', accountTitle(account), window.window, window.nextResetTime)
+    }
+  }
+  for (const group of plans.value.data?.plans ?? []) {
+    for (const account of group.accounts) {
+      if ('error' in account) {
+        continue
+      }
+      for (const window of account.windows) {
+        consider(group.provider, accountTitle(account), window.window, window.resetTime)
+      }
     }
   }
   return best as { platform: string; account: string; window: string; resetTime: number } | null
@@ -348,6 +388,32 @@ const summaries = computed<PlatformSummary[]>(() => {
     )
   }
 
+  // 订阅套餐（Kimi / MiniMax / OpenCode Go）：最紧窗口（含被上游限流的窗口）
+  const plansData = plans.value.data
+  if (plansData && plansData.configured > 0) {
+    let worstPercent = 0
+    let accounts = 0
+    for (const group of plansData.plans) {
+      for (const account of group.accounts) {
+        accounts += 1
+        if (!isFailedAccount(account)) {
+          for (const window of account.windows) {
+            worstPercent = Math.max(worstPercent, window.percent)
+          }
+        }
+      }
+    }
+    out.push({
+      key: 'plans',
+      name: '订阅套餐',
+      tab: 'subscription',
+      anchor: 'plans',
+      primary: `最紧窗口 ${Math.round(worstPercent)}%`,
+      secondary: `${accounts} 账号`,
+      danger: worstPercent >= 90,
+    })
+  }
+
   // 扩展平台计数
   const extrasData = extras.value.data
   if (extrasData && extrasData.configured > 0) {
@@ -373,10 +439,34 @@ const isEmpty = computed(
   () => !loading.value && alerts.value.length === 0 && summaries.value.length === 0,
 )
 
-/** 预警行跳转（清除死代码三元：智谱→zhipu 锚点，其余→volc-plan）。 */
+/** 窗口名中文标签（最近重置行）。 */
+function describeWindow(window: string): string {
+  if (window === 'fiveHour') {
+    return '5 小时窗口'
+  }
+  if (window === 'weekly') {
+    return '每周'
+  }
+  if (window === 'monthly') {
+    return '30 天窗口'
+  }
+  if (window === 'daily') {
+    return '每日'
+  }
+  return window
+}
+
+/** 预警行跳转：智谱 → zhipu 锚点；订阅套餐 → plans 锚点；其余 → volc-plan。 */
 function jumpFromAlert(alert: { platform: string }): void {
-  const isZhipu = alert.platform.includes('智谱')
-  emit('jump', 'subscription', isZhipu ? 'zhipu' : 'volc-plan')
+  if (alert.platform.includes('智谱')) {
+    emit('jump', 'subscription', 'zhipu')
+    return
+  }
+  if (/OpenCode|Kimi|MiniMax/.test(alert.platform)) {
+    emit('jump', 'subscription', 'plans')
+    return
+  }
+  emit('jump', 'subscription', 'volc-plan')
 }
 
 /** t-statistic 文本值：重置倒计时。 */
@@ -470,13 +560,7 @@ function jump(tab: string, anchor: string): void {
             />
             <div class="muted reset-meta">
               {{ earliestReset.platform }} · {{ earliestReset.account }} ·
-              {{
-                earliestReset.window === 'fiveHour'
-                  ? '5 小时窗口'
-                  : earliestReset.window === 'weekly'
-                    ? '每周'
-                    : earliestReset.window
-              }}
+              {{ describeWindow(earliestReset.window) }}
             </div>
           </template>
           <template #footer>

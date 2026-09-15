@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign, openDetail } from './mount'
 
 import ZhipuSection from '../components/ZhipuSection.vue'
 import type { ZhipuPackagesResponse } from '../types'
@@ -8,6 +8,7 @@ const fixture: ZhipuPackagesResponse = {
   accounts: [
     {
       keyHint: 'id1****abcd',
+      label: '智谱主号',
       codingPlan: {
         level: 'Max',
         windows: [
@@ -52,37 +53,73 @@ const fixture: ZhipuPackagesResponse = {
 }
 
 describe('ZhipuSection', () => {
-  it('renders coding plan level, window usage and balance', () => {
+  it('plan variant keeps only the coding plan windows on the card', () => {
     const wrapper = mountWithTDesign(ZhipuSection, {
-      props: { data: fixture, loading: false, error: null },
+      props: { data: fixture, loading: false, error: null, variant: 'plan' },
     })
     const text = wrapper.text()
-    expect(text).toContain('GLM Coding Plan：Max')
     expect(text).toContain('40.0K / 100.0K')
     expect(text).toContain('40.0%')
-    expect(text).toContain('可用余额')
-    expect(text).toContain('12.50')
-    expect(text).toContain('已开通')
+    // 余额与资源包在套餐订阅 Tab 属低优先级信息，已移出卡片
+    expect(text).not.toContain('可用余额')
+    expect(text).not.toContain('GLM 资源包 A')
   })
 
-  it('renders effective token packages with formatted totals', () => {
+  it('plan variant moves level, console link and packages into the detail dialog', async () => {
     const wrapper = mountWithTDesign(ZhipuSection, {
-      props: { data: fixture, loading: false, error: null },
+      props: { data: fixture, loading: false, error: null, variant: 'plan' },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('Coding Plan 等级')
+    expect(detail).toContain('Max')
+    expect(detail).toContain('控制台用量页')
+    expect(detail).toContain('GLM 资源包 A')
+    expect(detail).toContain('付费')
+    expect(detail).toContain('5.00M')
+    expect(detail).toContain('1.20M')
+    expect(detail).toContain('2026-12-31 23:59:59')
+  })
+
+  it('balance variant keeps only the two balance readings on the card', () => {
+    const wrapper = mountWithTDesign(ZhipuSection, {
+      props: { data: fixture, loading: false, error: null, variant: 'balance' },
     })
     const text = wrapper.text()
-    expect(text).toContain('GLM 资源包 A')
-    expect(text).toContain('付费')
-    expect(text).toContain('5.00M')
-    expect(text).toContain('1.20M')
+    expect(text).toContain('可用余额')
+    expect(text).toContain('12.50')
+    expect(text).toContain('账户余额')
+    expect(text).toContain('20.00')
+    expect(text).not.toContain('GLM 资源包 A')
+    expect(text).not.toContain('已开通')
+  })
+
+  it('balance variant moves secondary amounts and packages into the detail dialog', async () => {
+    const wrapper = mountWithTDesign(ZhipuSection, {
+      props: { data: fixture, loading: false, error: null, variant: 'balance' },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('信用支付')
+    expect(detail).toContain('已开通')
+    expect(detail).toContain('累计充值')
+    expect(detail).toContain('10.00 CNY')
+    expect(detail).toContain('GLM 资源包 A')
+  })
+
+  it('prefers the alias over the key hint', () => {
+    const wrapper = mountWithTDesign(ZhipuSection, {
+      props: { data: fixture, loading: false, error: null, variant: 'plan' },
+    })
+    const account = wrapper.find('.account-group')
+    expect(account.find('.account-name').text()).toBe('智谱主号')
+    expect(account.find('.key-hint').text()).toBe('id1****abcd')
   })
 
   it('shows an alert for the failed account', () => {
     const wrapper = mountWithTDesign(ZhipuSection, {
-      props: { data: fixture, loading: false, error: null },
+      props: { data: fixture, loading: false, error: null, variant: 'plan' },
     })
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
-    expect(alerts.length).toBe(1)
-    expect(alerts[0]!.text()).toContain('id2****failed')
+    expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('id2****failed')])
   })
 
   it('shows skeleton when loading without data', () => {

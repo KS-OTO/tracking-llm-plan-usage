@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign, openDetail } from './mount'
 
 import DeepSeekSection from '../components/DeepSeekSection.vue'
 import type { DeepSeekBalanceResponse } from '../types'
@@ -20,17 +20,39 @@ const fixture: DeepSeekBalanceResponse = {
 }
 
 describe('DeepSeekSection', () => {
-  it('renders masked account hint and balance values from fixture data', () => {
+  it('renders the alias as primary name and keeps the key hint as disambiguator', () => {
+    const wrapper = mountWithTDesign(DeepSeekSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    const account = wrapper.find('.account-group')
+    expect(account.find('.account-name').text()).toBe('主力号')
+    expect(account.find('.key-hint').text()).toBe('sk-0****cdef')
+    expect(account.find('.key-hint').classes()).toContain('key-hint-secondary')
+    expect(wrapper.text()).toContain('可用')
+  })
+
+  it('keeps only the total balance on the card', () => {
     const wrapper = mountWithTDesign(DeepSeekSection, {
       props: { data: fixture, loading: false, error: null },
     })
     const text = wrapper.text()
-    expect(text).toContain('sk-0****cdef')
     expect(text).toContain('CNY 总余额')
     expect(text).toContain('110.00')
-    expect(text).toContain('100.00 CNY')
-    expect(text).toContain('10.00 CNY')
-    expect(text).toContain('可用')
+    // 充值/赠金拆分属低优先级信息，已移出卡片
+    expect(text).not.toContain('100.00 CNY')
+    expect(text).not.toContain('10.00 CNY')
+  })
+
+  it('moves the top-up / granted breakdown into the detail dialog', async () => {
+    const wrapper = mountWithTDesign(DeepSeekSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('CNY 充值')
+    expect(detail).toContain('100.00 CNY')
+    expect(detail).toContain('CNY 赠金')
+    expect(detail).toContain('10.00 CNY')
+    expect(detail).toContain('主力号')
   })
 
   it('shows an alert for a failed account while keeping others rendered', () => {
@@ -38,17 +60,10 @@ describe('DeepSeekSection', () => {
       props: { data: fixture, loading: false, error: null },
     })
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
-    expect(alerts.length).toBe(1)
-    expect(alerts[0]!.text()).toContain('sk-9****aaaa')
-    expect(alerts[0]!.text()).toContain('NetworkError')
-  })
-
-  it('shows the configured alias as primary account name', () => {
-    const wrapper = mountWithTDesign(DeepSeekSection, {
-      props: { data: fixture, loading: false, error: null },
-    })
-    expect(wrapper.text()).toContain('主力号')
-    expect(wrapper.text()).toContain('sk-0****cdef')
+    expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('sk-9****aaaa')])
+    expect(wrapper.text()).toContain('NetworkError')
+    // 只有成功账号有「详情」入口
+    expect(wrapper.findAll('.detail-trigger').length).toBe(1)
   })
 
   it('renders neutral empty state (no red alert) when notConfigured', () => {

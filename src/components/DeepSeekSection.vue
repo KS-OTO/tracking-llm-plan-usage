@@ -1,9 +1,15 @@
 <script setup lang="ts">
+/**
+ * DeepSeek 余额。
+ *
+ * 卡片只留总余额读数；充值 / 赠金拆分收进「详情」弹窗。
+ */
 import type { DeepSeekBalanceResponse } from '../types'
-import { accountName, isFailedAccount } from '../types'
+import { accountTitle, isFailedAccount } from '../types'
 import { formatMoney } from '../utils'
 
 import AccountSection from './AccountSection.vue'
+import DetailDialog from './DetailDialog.vue'
 
 defineProps<{
   data: DeepSeekBalanceResponse | null
@@ -25,28 +31,64 @@ defineProps<{
   >
     <template v-if="data">
       <t-space direction="vertical" size="medium" class="accounts">
-        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+        <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
-            <t-space align="center" size="small">
-              <t-tag size="small" variant="light-outline" theme="primary">{{
-                accountName(account, i)
-              }}</t-tag>
-              <span class="muted key-hint">{{ account.keyHint }}</span>
-              <t-tag
-                v-if="!isFailedAccount(account)"
-                size="small"
-                variant="light-outline"
-                :theme="account.isAvailable ? 'success' : 'warning'"
-              >
-                {{ account.isAvailable ? '可用' : '不可用' }}
-              </t-tag>
-            </t-space>
+            <span v-if="account.label" class="account-name">{{ account.label }}</span>
+            <span class="key-hint" :class="{ 'key-hint-secondary': account.label }">
+              {{ account.keyHint }}
+            </span>
+            <t-tag
+              v-if="!isFailedAccount(account)"
+              size="small"
+              variant="light-outline"
+              :theme="account.isAvailable ? 'success' : 'warning'"
+            >
+              {{ account.isAvailable ? '可用' : '不可用' }}
+            </t-tag>
+            <DetailDialog
+              v-if="!isFailedAccount(account)"
+              :title="accountTitle(account)"
+              :subtitle="account.label ? account.keyHint : undefined"
+            >
+              <t-descriptions :column="2" size="small" class="detail-block">
+                <t-descriptions-item label="别名">
+                  {{ account.label || '未配置（用 DEEPSEEK_LABEL / DEEPSEEK_LABEL_N 设置）' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="Key">
+                  <span class="num">{{ account.keyHint }}</span>
+                </t-descriptions-item>
+                <t-descriptions-item label="可用状态">
+                  {{ account.isAvailable ? '可用' : '不可用' }}
+                </t-descriptions-item>
+                <t-descriptions-item
+                  v-for="entry in account.balances"
+                  :key="`total-${entry.currency}`"
+                  :label="`${entry.currency} 总余额`"
+                >
+                  {{ formatMoney(entry.total, entry.currency) }}
+                </t-descriptions-item>
+                <t-descriptions-item
+                  v-for="entry in account.balances"
+                  :key="`topup-${entry.currency}`"
+                  :label="`${entry.currency} 充值`"
+                >
+                  {{ formatMoney(entry.toppedUp, entry.currency) }}
+                </t-descriptions-item>
+                <t-descriptions-item
+                  v-for="entry in account.balances"
+                  :key="`granted-${entry.currency}`"
+                  :label="`${entry.currency} 赠金`"
+                >
+                  {{ formatMoney(entry.granted, entry.currency) }}
+                </t-descriptions-item>
+              </t-descriptions>
+            </DetailDialog>
           </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`${accountName(account, i)}（${account.keyHint}）查询失败`"
+            :title="`${accountTitle(account)} 查询失败`"
             :message="account.error"
             :max-line="5"
           />
@@ -58,14 +100,6 @@ defineProps<{
                 :decimal-places="2"
                 :suffix="entry.currency"
               />
-              <t-descriptions :column="2" size="small" layout="vertical" class="balance-detail">
-                <t-descriptions-item label="充值">
-                  {{ formatMoney(entry.toppedUp, entry.currency) }}
-                </t-descriptions-item>
-                <t-descriptions-item label="赠金">
-                  {{ formatMoney(entry.granted, entry.currency) }}
-                </t-descriptions-item>
-              </t-descriptions>
             </t-col>
           </t-row>
         </div>
@@ -79,9 +113,6 @@ defineProps<{
   width: 100%;
 }
 
-.balance-detail {
-  margin-top: 8px;
-}
 .account-group {
   background: var(--td-bg-color-secondarycontainer);
   border-radius: var(--td-radius-medium);
@@ -95,8 +126,28 @@ defineProps<{
   flex-wrap: wrap;
   margin-bottom: var(--td-size-4);
 }
-.muted {
-  color: var(--td-text-color-placeholder);
+
+.account-name {
+  font-weight: 600;
+  font-size: var(--td-font-size-body-large);
+}
+
+.key-hint {
   font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-hint-secondary {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+}
+
+.detail-block {
+  margin-bottom: var(--td-size-4);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
 }
 </style>

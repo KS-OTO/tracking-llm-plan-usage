@@ -8,6 +8,7 @@ import type {
   ExtrasResponse,
   GiteeBalanceResponse,
   InferenceUsageResponse,
+  PlansResponse,
   StatusResponse,
   TokenPlanResponse,
   VolcPlanResponse,
@@ -98,4 +99,5 @@ export const api = {
   baiduQianfan: () => get('/api/baidu/qianfan', z.custom<BaiduQianfanResponse>()),
   openrouterDetail: () => get('/api/openrouter/detail', z.custom<OpenRouterDetailResponse>()),
   extras: () => get('/api/extras', z.custom<ExtrasResponse>()),
+  plans: () => get('/api/plans', z.custom<PlansResponse>()),
 }

@@ -54,6 +54,9 @@ import {
  *   OPENCODE_GO_API_KEY     OpenCode Go 订阅额度（usage.rolling / weekly / monthly）
  *   HOST / PORT             监听地址（默认 127.0.0.1:8787）
  *
+ * 账号别名（可选）：`<PREFIX>_LABEL` / `<PREFIX>_LABEL_N` 与同序号凭据配对，
+ * 前端优先展示别名，Key 掩码退居次要位置（详见 README「账号别名」）。
+ *
  * Serves the built frontend from dist/ plus /api/* endpoints.
  * Dev mode: run `vp dev` (Vite proxies /api to this server).
  */
@@ -158,7 +161,10 @@ async function runAccounts<T>(entries: AccountEntry<T>[]): Promise<AccountResult
   return results.map((result, index) => {
     const { keyHint, label } = entries[index]
     if (result.status === 'fulfilled') {
-      return Object.assign({}, result.value, { keyHint, label })
+      // 未配置别名时不写入 label 字段：否则会用 undefined 覆盖供应商响应里原有的
+      // label（如 OpenRouter 的密钥名称），造成信息静默丢失
+      const identity = label === undefined ? { keyHint } : { keyHint, label }
+      return Object.assign({}, result.value, identity)
     }
     const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
     const reasonError = result.reason instanceof Error ? result.reason : null
@@ -207,7 +213,6 @@ export function createAppHandler(env: EnvGetter) {
   // 是一条独立于 AK/SK 的通道（无需 RAM 授权）。按序号与 ALIYUN_ACCESS_KEY_ID 配对；
   // Cookie 数量多于 AK/SK 时，多出的部分作为「仅有 Cookie」的独立账号。
   const ALIYUN_TOKENPLAN_COOKIES = readKeys('ALIYUN_TOKENPLAN_COOKIE', env)
-
   /**
    * Token Plan 查询来源：AK/SK（组织/座席/共享包）与会话 Cookie（个人版用量）按序号配对。
    * 同一账号两种凭据并存时合为一个来源，避免出现重复条目。
@@ -224,7 +229,6 @@ export function createAppHandler(env: EnvGetter) {
       }
     },
   )
-
   const baiduCredentialsList: BaiduCredentials[] = readKeyPairs(
     'BAIDU_ACCESS_KEY_ID',
     'BAIDU_SECRET_KEY',
@@ -250,7 +254,9 @@ export function createAppHandler(env: EnvGetter) {
   labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
   labelMap('opencode', 'OPENCODE_GO_API_KEY', 'OPENCODE_GO_LABEL')
   labelMap('baidu', 'BAIDU_ACCESS_KEY_ID', 'BAIDU_LABEL')
-  labelMap('openrouter', 'OPENROUTER_API_KEY', 'OPENROUTER_LABEL')
+  // Cookie 专属的 Token Plan 账号没有 AK/SK 可配对，因此单列一组别名前缀
+  // （已有 AK/SK 的账号仍优先用 ALIYUN_LABEL）
+  labelMap('tokenplan-cookie', 'ALIYUN_TOKENPLAN_COOKIE', 'ALIYUN_TOKENPLAN_LABEL')
   const labelOf = (provider: string, key: string): string | undefined =>
     LABELS.get(provider)?.get(key)
 
@@ -266,15 +272,15 @@ export function createAppHandler(env: EnvGetter) {
   // ---------------------------------------------------------------------------
 
   function handleStatus(): Response {
+    // 「扩展平台」只统计余额类凭据；套餐类（Kimi/MiniMax/OpenCode Go）归入 plans，
+    // 与前端「余额账户 / 套餐订阅」两个 Tab 的归属保持一致
     const extrasKeyHints = [
       ...STEPFUN_KEYS,
       ...SILICONFLOW_KEYS,
       ...OPENROUTER_KEYS,
       ...NOVITA_KEYS,
-      ...KIMI_KEYS,
-      ...MINIMAX_KEYS,
-      ...OPENCODE_GO_KEYS,
     ].map(maskKey)
+    const plansKeyHints = [...KIMI_KEYS, ...MINIMAX_KEYS, ...OPENCODE_GO_KEYS].map(maskKey)
     return json({
       providers: {
         deepseek: providerStatus(DEEPSEEK_KEYS.map(maskKey)),
@@ -285,12 +291,14 @@ export function createAppHandler(env: EnvGetter) {
         baidu: providerStatus(baiduCredentialsList.map((cred) => maskKey(cred.accessKey))),
         tokenplan: providerStatus(aliyunTokenPlanSources.map((source) => source.keyHint)),
         extras: providerStatus(extrasKeyHints),
+        plans: providerStatus(plansKeyHints),
       },
       incomplete: INCOMPLETE_VARS,
       now: Date.now(),
     })
   }
 
+  /** 余额类扩展平台（余额账户 Tab 的「扩展平台」区块）。 */
   async function handleExtras(): Promise<Response> {
     const balanceGroups: Array<{ provider: string; entries: AccountEntry<BalanceInfo>[] }> = [
       {
@@ -327,6 +335,24 @@ export function createAppHandler(env: EnvGetter) {
       },
     ].filter((group) => group.entries.length > 0)
 
+    const balanceGroupsResult = await Promise.all(
+      balanceGroups.map(async (group) => ({
+        provider: group.provider,
+        accounts: await runAccounts(group.entries),
+      })),
+    )
+
+    const configured = balanceGroups.reduce((sum, group) => sum + group.entries.length, 0)
+
+    return json({ balances: balanceGroupsResult, configured })
+  }
+
+  /**
+   * 套餐类扩展平台（套餐订阅 Tab 的「订阅套餐」区块）。
+   * 与 /api/extras 拆开是因为二者的归属 Tab 不同：这里是按窗口计的**订阅额度**，
+   * 与火山 Agent Plan / Coding Plan、智谱 Coding Plan、百炼 Token Plan 同类。
+   */
+  async function handlePlans(): Promise<Response> {
     const planGroups: Array<{ provider: string; entries: AccountEntry<TokenPlanInfo>[] }> = [
       {
         provider: 'Kimi For Coding',
@@ -354,26 +380,16 @@ export function createAppHandler(env: EnvGetter) {
       },
     ].filter((group) => group.entries.length > 0)
 
-    const [balanceGroupsResult, planGroupsResult] = await Promise.all([
-      Promise.all(
-        balanceGroups.map(async (group) => ({
-          provider: group.provider,
-          accounts: await runAccounts(group.entries),
-        })),
-      ),
-      Promise.all(
-        planGroups.map(async (group) => ({
-          provider: group.provider,
-          accounts: await runAccounts(group.entries),
-        })),
-      ),
-    ])
+    const planGroupsResult = await Promise.all(
+      planGroups.map(async (group) => ({
+        provider: group.provider,
+        accounts: await runAccounts(group.entries),
+      })),
+    )
 
-    const configured =
-      balanceGroups.reduce((sum, group) => sum + group.entries.length, 0) +
-      planGroups.reduce((sum, group) => sum + group.entries.length, 0)
+    const configured = planGroups.reduce((sum, group) => sum + group.entries.length, 0)
 
-    return json({ balances: balanceGroupsResult, plans: planGroupsResult, configured })
+    return json({ plans: planGroupsResult, configured })
   }
 
   async function handleGiteeBalance(): Promise<Response> {
@@ -504,7 +520,12 @@ export function createAppHandler(env: EnvGetter) {
     const accounts = await runAccounts(
       aliyunTokenPlanSources.map(({ credentials, cookie, keyHint }) => ({
         keyHint,
-        label: labelOf('aliyun', credentials?.accessKey ?? cookie ?? ''),
+        // 别名优先取与 AK/SK 配对的 ALIYUN_LABEL；Cookie 专属账号（无 AK/SK）走
+        // ALIYUN_TOKENPLAN_LABEL，否则别名会被静默丢弃
+        label:
+          labelOf('aliyun', credentials?.accessKey ?? '') ||
+          labelOf('tokenplan-cookie', cookie ?? '') ||
+          undefined,
         run: async () => {
           const [account, seats, sharedPackages, personal] = await Promise.all([
             // 组织 / 座席 / 共享包依赖 AK/SK；仅有会话 Cookie 时跳过（置 null，展示层隐藏）
@@ -636,6 +657,9 @@ export function createAppHandler(env: EnvGetter) {
       }
       if (url.pathname === '/api/extras') {
         return await handleExtras()
+      }
+      if (url.pathname === '/api/plans') {
+        return await handlePlans()
       }
       if (url.pathname.startsWith('/api/')) {
         return errorResponse(404, 'NOT_FOUND', `未知接口: ${url.pathname}`)
