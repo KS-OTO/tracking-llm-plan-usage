@@ -83,6 +83,8 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   const loading = ref(false)
   const lastUpdated = ref<Date | null>(null)
+  /** 下一次自动刷新的时刻；自动刷新关闭或页面隐藏时为 null（此时没有「下次」）。 */
+  const nextRefreshAt = ref<Date | null>(null)
   const autoRefresh = ref(true)
   const modelFilter = ref('')
 
@@ -159,38 +161,55 @@ export const useDashboardStore = defineStore('dashboard', () => {
     applyResult(result[0], volcInference)
   }
 
-  function onVisibilityChange(): void {
+  /**
+   * 定时器回调：页面隐藏或自动刷新关闭时**不刷新**，并把「下次刷新」置空。
+   * 显示一个根本不会发生的刷新时间，比不显示更糟（用户会以为数据在动）。
+   */
+  function tick(): void {
+    if (!autoRefresh.value || document.hidden) {
+      nextRefreshAt.value = null
+      return
+    }
+    void refresh()
+    nextRefreshAt.value = new Date(Date.now() + REFRESH_INTERVAL_MS)
+  }
+
+  function startTimer(): void {
+    clearInterval(refreshTimer)
+    refreshTimer = setInterval(tick, REFRESH_INTERVAL_MS)
+    nextRefreshAt.value = new Date(Date.now() + REFRESH_INTERVAL_MS)
+  }
+
+  function stopTimer(): void {
     clearInterval(refreshTimer)
     refreshTimer = undefined
-    if (!document.hidden && autoRefresh.value) {
+    nextRefreshAt.value = null
+  }
+
+  function onVisibilityChange(): void {
+    if (document.hidden) {
+      stopTimer()
+      return
+    }
+    if (autoRefresh.value) {
       void refresh()
-      refreshTimer = setInterval(() => {
-        if (autoRefresh.value && !document.hidden) {
-          void refresh()
-        }
-      }, REFRESH_INTERVAL_MS)
+      startTimer()
     }
   }
 
   watch(autoRefresh, (enabled) => {
-    clearInterval(refreshTimer)
-    refreshTimer = undefined
     if (enabled && !document.hidden) {
-      refreshTimer = setInterval(() => {
-        if (autoRefresh.value && !document.hidden) {
-          void refresh()
-        }
-      }, REFRESH_INTERVAL_MS)
+      startTimer()
+      return
     }
+    stopTimer()
   })
 
   onMounted(() => {
     void refresh()
-    refreshTimer = setInterval(() => {
-      if (autoRefresh.value && !document.hidden) {
-        void refresh()
-      }
-    }, REFRESH_INTERVAL_MS)
+    if (autoRefresh.value && !document.hidden) {
+      startTimer()
+    }
     document.addEventListener('visibilitychange', onVisibilityChange)
   })
 
@@ -214,6 +233,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     plans,
     loading,
     lastUpdated,
+    nextRefreshAt,
     autoRefresh,
     modelFilter,
     refresh,

@@ -67,6 +67,28 @@ test.describe('dashboard smoke', () => {
     await expect(page.getByText('未配置任何平台密钥').first()).toBeVisible()
   })
 
+  test('header shows the last update and the next auto-refresh time', async ({ page }) => {
+    await page.goto('/')
+    const stamp = page.locator('.last-updated')
+    await expect(stamp).toContainText('更新于', { timeout: 30_000 })
+    await expect(stamp).toContainText('下次刷新')
+    // 自动刷新默认开启：应给出具体时刻，而不是「已暂停」
+    await expect(stamp).toHaveText(/下次刷新 \d{1,2}:\d{2}:\d{2}/)
+  })
+
+  test('platform cards offer a new-tab 可用模型 docs link', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
+    await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
+      { timeout: 30_000 },
+    )
+    // 未配置密钥也出卡（中性空态），链接按平台名自动解析，不依赖有没有数据
+    const link = page.locator('#anchor-volc-plan a.models-link')
+    await expect(link).toBeVisible()
+    await expect(link).toHaveAttribute('target', '_blank')
+    await expect(link).toHaveAttribute('href', /volcengine/)
+  })
+
   test('nav card click jumps to anchored section in the right tab', async () => {
     test.skip(true, 'needs configured providers; hermetic env has no nav cards')
   })

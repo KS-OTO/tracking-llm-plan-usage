@@ -8,7 +8,11 @@
  * body 变纵向弹性容器、卡内 .grid-cards 吃掉剩余高度，于是「同排区块卡等高」会
  * 一路传导到卡内的账号卡与窗口块，不再出现卡内子卡片参差。
  */
-defineProps<{
+import { computed } from 'vue'
+
+import { modelDocsUrl } from '../modelDocs'
+
+const props = defineProps<{
   title: string
   subtitle?: string
   loading?: boolean
@@ -18,11 +22,37 @@ defineProps<{
   /** 数据为空（已配置但无记录）。 */
   empty?: boolean
   emptyText?: string
+  /** 「可用模型」文档地址；省略时按卡片标题（平台名）查 modelDocs 表。 */
+  modelsUrl?: string
 }>()
+
+/**
+ * 标题旁的「可用模型」外链。
+ *
+ * 默认按平台名查表（src/modelDocs.ts）：平台卡标题即平台名，统一在外壳解析
+ * 可以保证「新增平台卡自动生效」，也不会出现某张卡漏接链接。
+ */
+const modelsLink = computed(() => props.modelsUrl ?? modelDocsUrl(props.title))
 </script>
 
 <template>
-  <t-card class="section-card" :title="title" :subtitle="subtitle" header-bordered bordered>
+  <t-card class="section-card" :subtitle="subtitle" header-bordered bordered>
+    <template #title>
+      <!-- 标题与外链同一行：链接弱化到 body-small，不与平台名抢视觉重心 -->
+      <span class="section-title">
+        <span>{{ title }}</span>
+        <a
+          v-if="modelsLink"
+          class="models-link"
+          :href="modelsLink"
+          target="_blank"
+          rel="noopener noreferrer"
+          :aria-label="`${title} 可用模型文档（新窗口打开）`"
+        >
+          可用模型 ↗
+        </a>
+      </span>
+    </template>
     <template #actions>
       <slot name="actions" />
     </template>

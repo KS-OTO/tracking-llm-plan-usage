@@ -108,3 +108,26 @@ describe('OverviewTab nav card ordering', () => {
     expect(names).toEqual(['模力方舟', '百度千帆', 'DeepSeek'])
   })
 })
+
+describe('OverviewTab 可用模型链接', () => {
+  it('gives every platform nav card a new-tab docs link', () => {
+    const wrapper = mountWithCounts()
+    const links = wrapper.findAll('.nav-card a.models-link')
+    expect(links).toHaveLength(3)
+    for (const link of links) {
+      expect(link.attributes('target')).toBe('_blank')
+      expect(link.attributes('rel')).toContain('noopener')
+    }
+    const giteeCard = wrapper.findAll('.nav-card').find((card) => card.text().includes('模力方舟'))
+    expect(giteeCard?.find('a.models-link').attributes('href')).toBe(
+      'https://ai.gitee.com/serverless-api',
+    )
+  })
+
+  it('does not scroll to the platform card when the docs link is clicked', async () => {
+    const wrapper = mountWithCounts()
+    // 整卡点击 = 跳到该平台；链接点击必须 stop，否则「打开文档」会顺带把页面滚走
+    await wrapper.findAll('.nav-card a.models-link')[0]?.trigger('click')
+    expect(wrapper.emitted('jump')).toBeUndefined()
+  })
+})

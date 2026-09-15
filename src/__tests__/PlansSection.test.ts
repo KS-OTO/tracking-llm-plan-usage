@@ -25,8 +25,9 @@ describe('PlansSection', () => {
     const wrapper = mountWithTDesign(PlansSection, {
       props: { group: openCode },
     })
-    // 卡片标题即平台名（用户实测：2 个 OpenCode Go Key，标题却是「订阅套餐」）
-    expect(wrapper.find('.t-card__title').text()).toBe('OpenCode Go')
+    // 卡片标题即平台名（用户实测：2 个 OpenCode Go Key，标题却是「订阅套餐」）。
+    // 标题槽里除平台名外还有「可用模型」外链，因此精确取平台名那个 span，不用整个标题文本
+    expect(wrapper.find('.section-title > span').text()).toBe('OpenCode Go')
     expect(wrapper.text()).not.toContain('订阅套餐')
   })
 
@@ -63,7 +64,7 @@ describe('PlansSection', () => {
           },
         },
       })
-      expect(wrapper.find('.t-card__title').text()).toBe(provider)
+      expect(wrapper.find('.section-title > span').text()).toBe(provider)
       expect(wrapper.text()).toContain(`${percent.toFixed(1)}%`)
     }
   })

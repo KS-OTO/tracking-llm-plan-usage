@@ -33,6 +33,7 @@ const {
   plans,
   loading,
   lastUpdated,
+  nextRefreshAt,
   autoRefresh,
   modelFilter,
 } = storeToRefs(dashboard)
@@ -334,6 +335,19 @@ const lastUpdatedText = computed(() => {
   }
   return lastUpdated.value.toLocaleTimeString('zh-CN', { hour12: false })
 })
+
+/**
+ * 下一次自动刷新的时刻。
+ *
+ * 为空代表**没有下一次**（自动刷新已关闭，或页面在后台被暂停），
+ * 此时文案落到「已暂停」——比显示一个永不到来的时间更诚实。
+ */
+const nextRefreshText = computed(() => {
+  if (!nextRefreshAt.value) {
+    return ''
+  }
+  return nextRefreshAt.value.toLocaleTimeString('zh-CN', { hour12: false })
+})
 </script>
 
 <template>
@@ -349,7 +363,7 @@ const lastUpdatedText = computed(() => {
         <template #operations>
           <t-space size="medium" align="center">
             <span class="last-updated" aria-live="polite">
-              更新于 {{ lastUpdatedText || '—' }}
+              更新于 {{ lastUpdatedText || '—' }} · 下次刷新 {{ nextRefreshText || '已暂停' }}
             </span>
             <t-tooltip content="每 60 秒自动刷新，页面隐藏时暂停">
               <span class="switch-wrap">
