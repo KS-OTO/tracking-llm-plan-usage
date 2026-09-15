@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 
 import { accountTitle, isFailedAccount } from '../types'
 import { useDashboardStore } from '../stores/dashboard'
-import { formatReset, formatTokens, providerSlug } from '../utils'
+import { formatReset, formatTokens, providerSlug, sortPlatformSections } from '../utils'
 
 const emit = defineEmits<{
   /** 跳转到指定平台卡片：切 Tab + 滚动到锚点。 */
@@ -184,6 +184,8 @@ interface PlatformSummary {
   name: string
   tab: string
   anchor: string
+  /** 该平台的 Key（账号）数 —— 导航卡排序第一关键字（与 App.vue 区块卡同一套规则）。 */
+  count: number
   primary: string
   secondary?: string
   danger?: boolean
@@ -222,6 +224,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: '火山方舟',
         tab: 'subscription',
         anchor: 'volc-plan',
+        count: volcAll.length,
         primary: `最紧窗口 ${Math.round(worstPercent)}%`,
         secondary: worstReset > 0 ? formatReset(worstReset) : undefined,
         danger: worstPercent >= 90,
@@ -247,6 +250,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: '智谱 GLM',
         tab: 'subscription',
         anchor: 'zhipu',
+        count: zhipuAll.length,
         primary: `${level} · ${Math.round(worstPercent)}%`,
         secondary: `${zhipuAccounts.length} 账号`,
         danger: worstPercent >= 90,
@@ -273,6 +277,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: '阿里 Token Plan',
         tab: 'subscription',
         anchor: 'tokenplan',
+        count: tpAll.length,
         primary: `${seats} 座席`,
         secondary: `剩 ${remaining >= 1e6 ? `${(remaining / 1e6).toFixed(2)}M` : Math.round(remaining)} CREDITS`,
       },
@@ -294,6 +299,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: 'DeepSeek',
         tab: 'balance',
         anchor: 'deepseek',
+        count: dsAll.length,
         primary: `${total.toFixed(2)} CNY`,
         secondary: `${dsAccounts.length} 账号`,
       },
@@ -318,6 +324,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: '模力方舟',
         tab: 'balance',
         anchor: 'gitee',
+        count: giteeAll.length,
         primary: `${balance.toFixed(2)} CNY`,
         secondary: voucher > 0 ? `代金券 ${voucher.toFixed(2)}` : undefined,
       },
@@ -336,6 +343,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: '阿里资源包',
         tab: 'balance',
         anchor: 'aliyun',
+        count: aliyunAll.length,
         primary: `${packages} 个包`,
         secondary: `${aliyunAccounts.length} 账号`,
       },
@@ -355,6 +363,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: '百度千帆',
         tab: 'balance',
         anchor: 'baidu',
+        count: baiduAll.length,
         primary: tokens > 0 ? `7 天 ${formatTokens(tokens)}` : `${pkgs} 量包`,
         secondary: baiduAccounts.length > 1 ? `${baiduAccounts.length} 账号` : undefined,
       },
@@ -374,6 +383,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: 'OpenRouter',
         tab: 'balance',
         anchor: 'openrouter',
+        count: orAll.length,
         primary: `${balance.toFixed(2)} USD`,
         secondary:
           withLimit.length > 0
@@ -404,6 +414,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: group.provider,
         tab: 'subscription',
         anchor: `plans-${slug}`,
+        count: group.accounts.length,
         primary: `最紧窗口 ${Math.round(worstPercent)}%`,
         secondary: `${group.accounts.length} 账号`,
         danger: worstPercent >= 90,
@@ -412,7 +423,9 @@ const summaries = computed<PlatformSummary[]>(() => {
     )
   }
 
-  return out
+  // 导航卡与 App.vue 的区块卡用同一套顺序：Key 多的平台优先，同数按平台名首字母。
+  // 两处若各自排序，就会出现「导航卡第一张点进去是页面第三张」的错位感。
+  return sortPlatformSections(out)
 })
 
 const updatedText = computed(() =>

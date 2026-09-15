@@ -12,8 +12,13 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
 页面特性：
 
 - **响应式多列布局**：桌面多列并排、平板两列、手机单列；平台按「套餐订阅 / 余额账户」Tab 分组，告别单列长下拉。
-  布局只由 `src/assets/layout.css` 的语义化网格原语决定（组件不写断点），**同一行的卡片恒等宽等高**；
+  布局只由 `src/assets/layout.css` 的语义化网格原语决定（组件不写断点）：**每一层卡片都铺满上一层给它的高度**，
+  所以同一行的区块卡 → 卡内账号卡 → 账号卡内窗口块**三层都严格等高**；
   卡内挂了 ≥2 个 Key 的区块会自动**独占整行**，让多个 Key 并排而不是被挤成「一行一个 + 换行」。
+- **平台卡排序**：**Key（账号）多的平台排前面**（3 Key > 2 Key > 1 Key），数量相同时按平台名首字母 A→Z。
+  首字母对中文取拼音、对拉丁名取字母，混在同一个序列里（阿里→A、百度→B、DeepSeek→D、模力→M、
+  OpenRouter→O、智谱→Z），而不是把英文平台一律丢到汉字后面。
+  「套餐订阅」「余额账户」两个 Tab 与总览的「平台导航」卡片用同一套顺序，导航卡点哪家就落在页面对应位置。
 - **暗色模式**：一键切换并持久化（localStorage），默认跟随系统 `prefers-color-scheme`。
 - **可访问性**：语义化地标（header/main/footer）、键盘可达、aria 标注、对比度对齐 TDesign 官方 token。
 - **骨架屏 / 错误告警 / 空状态**：统一由 TDesign Skeleton / Alert / Empty 承载。
@@ -317,10 +322,13 @@ src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
   api.ts          前端 API 客户端（错误信封 zod 校验）
   stores/         Pinia stores（dashboard 数据编排 / theme 暗色主题）
   types.ts        共享类型（多账号 AccountEnvelope 判别联合）
-  utils.ts        展示格式化工具
+  utils.ts        展示格式化工具 + 平台卡排序（sortPlatformSections：Key 数降序 → 首字母）
   components/     各平台区块组件（AccountSection 统一外壳 + DetailDialog 详情弹窗）
                   套餐订阅 Tab：PlansSection 一平台一卡（Kimi / MiniMax / OpenCode Go）
   assets/layout.css 全站唯一布局层（语义化网格原语 + 断点；组件不写断点、不重复定义）
+                  「逐层铺满」契约：区块卡 → 账号卡 → 窗口块，每层都吃掉上一层剩余高度
+                  弹窗几何：placement="center" 决定屏幕居中（TDesign 默认 top = 视口 20vh 顶距），
+                  宽度/高度兜底与正文内部滚动在同文件第 5 节
 e2e/              Playwright E2E 冒烟
 worker/           Cloudflare Workers 入口（复用 server/app.ts）
 cloud-functions/  EdgeOne Makers 云函数（/api/* 全捕获 + /api/diag 自诊断）
