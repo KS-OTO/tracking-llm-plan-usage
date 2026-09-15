@@ -3,20 +3,20 @@ import { computed, nextTick, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RefreshIcon, MoonIcon, SunnyIcon } from 'tdesign-icons-vue-next'
 
+import AccountSection from './components/AccountSection.vue'
 import AliyunSection from './components/AliyunSection.vue'
 import BaiduSection from './components/BaiduSection.vue'
 import DeepSeekSection from './components/DeepSeekSection.vue'
-import ExtraSection from './components/ExtraSection.vue'
 import GiteeSection from './components/GiteeSection.vue'
 import OverviewTab from './components/OverviewTab.vue'
 import OpenRouterSection from './components/OpenRouterSection.vue'
 import PlansSection from './components/PlansSection.vue'
 import TokenPlanSection from './components/TokenPlanSection.vue'
 import VolcPlanSection from './components/VolcPlanSection.vue'
-import VolcUsageSection from './components/VolcUsageSection.vue'
 import ZhipuSection from './components/ZhipuSection.vue'
 import { useDashboardStore } from './stores/dashboard'
 import { useThemeStore } from './stores/theme'
+import { providerSlug, shouldSpanFullRow } from './utils'
 
 const dashboard = useDashboardStore()
 const {
@@ -30,7 +30,6 @@ const {
   gitee,
   baidu,
   openrouter,
-  extras,
   plans,
   loading,
   lastUpdated,
@@ -90,10 +89,34 @@ const failedProviders = computed(() => {
   check('模力方舟', gitee.value)
   check('百度千帆', baidu.value)
   check('OpenRouter', openrouter.value)
-  check('扩展平台', extras.value)
   check('订阅套餐（Kimi/MiniMax/OpenCode Go）', plans.value)
   return entries
 })
+
+/** 取某个切片的账号数（尚未拿到数据时记 0）。 */
+function accountCount(slice: { data: { accounts: readonly unknown[] } | null }): number {
+  return slice.data?.accounts.length ?? 0
+}
+
+/**
+ * 各区块的账号数：决定卡片是否需要**独占整行**。
+ *
+ * 半宽单元格放不下两张账号卡（1440 视口下每格约 676px，卡内可用约 628px < 2×360px），
+ * 于是 2 个 Key 会被挤成「一行一个 + 换行」；整行后卡内 .grid-cards 自然排成两列。
+ */
+const accountCounts = computed(() => ({
+  volcPlan: accountCount(volcPlan.value),
+  zhipu: accountCount(zhipu.value),
+  tokenPlan: accountCount(tokenPlan.value),
+  deepseek: accountCount(deepseek.value),
+  aliyun: accountCount(aliyun.value),
+  gitee: accountCount(gitee.value),
+  baidu: accountCount(baidu.value),
+  openrouter: accountCount(openrouter.value),
+}))
+
+/** 订阅套餐按平台展开：一个平台一个网格单元，卡片标题即平台名。 */
+const plansGroups = computed(() => plans.value.data?.plans ?? [])
 
 const lastUpdatedText = computed(() => {
   if (!lastUpdated.value) {
@@ -113,7 +136,6 @@ const lastUpdatedText = computed(() => {
         <t-menu-item value="overview">总览</t-menu-item>
         <t-menu-item value="subscription">套餐订阅</t-menu-item>
         <t-menu-item value="balance">余额账户</t-menu-item>
-        <t-menu-item value="extras">扩展平台</t-menu-item>
         <template #operations>
           <t-space size="medium" align="center">
             <span class="last-updated" aria-live="polite">
@@ -167,27 +189,29 @@ const lastUpdatedText = computed(() => {
         <OverviewTab @jump="jumpToAnchor" />
       </div>
       <div v-show="activeTab === 'subscription'">
-        <!-- 区块网格：同一行卡片强制等高、等宽（断点与原语见 assets/layout.css） -->
+        <!-- 区块网格：同一行卡片强制等高、等宽（断点与原语见 assets/layout.css）；
+             多 Key 的区块再加 .grid-span-all 独占整行，让卡内 Key 两两并排 -->
         <div class="grid-sections">
-          <div id="anchor-volc-plan">
+          <div
+            id="anchor-volc-plan"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.volcPlan) }"
+          >
+            <!-- 火山方舟推理用量已并入 Agent Plan 的详情弹窗（同一对 AK/SK、同一个账号） -->
             <VolcPlanSection
               :data="volcPlan.data"
+              :inference="volcInference.data"
+              :inference-error="volcInference.error"
+              :model="modelFilter"
               :loading="loading && volcPlan.data === null"
               :error="volcPlan.error"
               :not-configured="volcPlan.notConfigured"
-            />
-          </div>
-          <div id="anchor-volc-usage">
-            <VolcUsageSection
-              :data="volcInference.data"
-              :loading="loading && volcInference.data === null"
-              :error="volcInference.error"
-              :not-configured="volcInference.notConfigured"
-              :model="modelFilter"
               @update:model="onFilterInput"
             />
           </div>
-          <div id="anchor-zhipu">
+          <div
+            id="anchor-zhipu"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.zhipu) }"
+          >
             <ZhipuSection
               variant="plan"
               :data="zhipu.data"
@@ -196,7 +220,10 @@ const lastUpdatedText = computed(() => {
               :not-configured="zhipu.notConfigured"
             />
           </div>
-          <div id="anchor-tokenplan">
+          <div
+            id="anchor-tokenplan"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.tokenPlan) }"
+          >
             <TokenPlanSection
               :data="tokenPlan.data"
               :loading="loading && tokenPlan.data === null"
@@ -204,20 +231,33 @@ const lastUpdatedText = computed(() => {
               :not-configured="tokenPlan.notConfigured"
             />
           </div>
-          <!-- 订阅套餐（Kimi / MiniMax / OpenCode Go）：同为按窗口计的订阅额度，归入「套餐订阅」 -->
-          <div id="anchor-plans">
-            <PlansSection
-              :data="plans.data"
+          <!-- 订阅套餐（Kimi / MiniMax / OpenCode Go）：一平台一卡，标题即平台名 -->
+          <div
+            v-for="group in plansGroups"
+            :key="group.provider"
+            :id="`anchor-plans-${providerSlug(group.provider)}`"
+            :class="{ 'grid-span-all': shouldSpanFullRow(group.accounts.length) }"
+          >
+            <PlansSection :group="group" />
+          </div>
+          <div v-if="plansGroups.length === 0" id="anchor-plans">
+            <AccountSection
+              title="订阅套餐"
               :loading="loading && plans.data === null"
               :error="plans.error"
               :not-configured="plans.notConfigured"
+              :empty="plans.data?.configured === 0"
+              empty-text="未配置订阅套餐密钥（KIMI_API_KEY / MINIMAX_API_KEY / OPENCODE_GO_API_KEY）"
             />
           </div>
         </div>
       </div>
       <div v-show="activeTab === 'balance'">
         <div class="grid-sections grid-sections--3">
-          <div id="anchor-zhipu-balance">
+          <div
+            id="anchor-zhipu-balance"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.zhipu) }"
+          >
             <ZhipuSection
               variant="balance"
               :data="zhipu.data"
@@ -226,7 +266,10 @@ const lastUpdatedText = computed(() => {
               :not-configured="zhipu.notConfigured"
             />
           </div>
-          <div id="anchor-deepseek">
+          <div
+            id="anchor-deepseek"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.deepseek) }"
+          >
             <DeepSeekSection
               :data="deepseek.data"
               :loading="loading && deepseek.data === null"
@@ -234,7 +277,10 @@ const lastUpdatedText = computed(() => {
               :not-configured="deepseek.notConfigured"
             />
           </div>
-          <div id="anchor-aliyun">
+          <div
+            id="anchor-aliyun"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.aliyun) }"
+          >
             <AliyunSection
               :data="aliyun.data"
               :loading="loading && aliyun.data === null"
@@ -242,7 +288,10 @@ const lastUpdatedText = computed(() => {
               :not-configured="aliyun.notConfigured"
             />
           </div>
-          <div id="anchor-gitee">
+          <div
+            id="anchor-gitee"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.gitee) }"
+          >
             <GiteeSection
               :data="gitee.data"
               :loading="loading && gitee.data === null"
@@ -250,7 +299,10 @@ const lastUpdatedText = computed(() => {
               :not-configured="gitee.notConfigured"
             />
           </div>
-          <div id="anchor-baidu">
+          <div
+            id="anchor-baidu"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.baidu) }"
+          >
             <BaiduSection
               :data="baidu.data"
               :loading="loading && baidu.data === null"
@@ -258,7 +310,10 @@ const lastUpdatedText = computed(() => {
               :not-configured="baidu.notConfigured"
             />
           </div>
-          <div id="anchor-openrouter">
+          <div
+            id="anchor-openrouter"
+            :class="{ 'grid-span-all': shouldSpanFullRow(accountCounts.openrouter) }"
+          >
             <OpenRouterSection
               :data="openrouter.data"
               :loading="loading && openrouter.data === null"
@@ -268,22 +323,13 @@ const lastUpdatedText = computed(() => {
           </div>
         </div>
       </div>
-      <div v-show="activeTab === 'extras'">
-        <div class="grid-sections">
-          <div id="anchor-extras">
-            <ExtraSection
-              :data="extras.data"
-              :loading="loading && extras.data === null"
-              :error="extras.error"
-              :not-configured="extras.notConfigured"
-            />
-          </div>
-        </div>
-      </div>
 
       <footer class="app-footer">
         <span>密钥仅保存在服务端环境变量中，页面不接触任何 Key。</span>
-        <span>数据来源：DeepSeek · 火山方舟 · 智谱 · 阿里云 · 模力方舟 · 扩展平台</span>
+        <span>
+          数据来源：DeepSeek · 火山方舟 · 智谱 · 阿里云 · 模力方舟 · 百度千帆 · OpenRouter ·
+          订阅套餐
+        </span>
       </footer>
     </main>
 

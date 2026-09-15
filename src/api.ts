@@ -5,7 +5,6 @@ import type {
   BaiduQianfanResponse,
   OpenRouterDetailResponse,
   DeepSeekBalanceResponse,
-  ExtrasResponse,
   GiteeBalanceResponse,
   InferenceUsageResponse,
   PlansResponse,
@@ -98,6 +97,5 @@ export const api = {
   giteeBalance: () => get('/api/gitee/balance', z.custom<GiteeBalanceResponse>()),
   baiduQianfan: () => get('/api/baidu/qianfan', z.custom<BaiduQianfanResponse>()),
   openrouterDetail: () => get('/api/openrouter/detail', z.custom<OpenRouterDetailResponse>()),
-  extras: () => get('/api/extras', z.custom<ExtrasResponse>()),
   plans: () => get('/api/plans', z.custom<PlansResponse>()),
 }

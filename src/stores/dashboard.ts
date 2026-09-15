@@ -14,7 +14,6 @@ import type {
   BaiduQianfanResponse,
   OpenRouterDetailResponse,
   DeepSeekBalanceResponse,
-  ExtrasResponse,
   GiteeBalanceResponse,
   InferenceUsageResponse,
   PlansResponse,
@@ -80,7 +79,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     error: null,
     notConfigured: false,
   })
-  const extras = ref<Slice<ExtrasResponse>>({ data: null, error: null, notConfigured: false })
   const plans = ref<Slice<PlansResponse>>({ data: null, error: null, notConfigured: false })
 
   const loading = ref(false)
@@ -113,7 +111,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
       api.giteeBalance(),
       api.baiduQianfan(),
       api.openrouterDetail(),
-      api.extras(),
       api.plans(),
     ])
     inFlight = false
@@ -133,8 +130,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     applyResult(results[7], gitee)
     applyResult(results[8], baidu)
     applyResult(results[9], openrouter)
-    applyResult(results[10], extras)
-    applyResult(results[11], plans)
+    applyResult(results[10], plans)
 
     // 至少一个请求成功才更新时间戳：全部失败时保留旧时间，避免“刚刷新但数据是旧的”误导
     if (results.some((result) => result.status === 'fulfilled')) {
@@ -215,7 +211,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     gitee,
     baidu,
     openrouter,
-    extras,
     plans,
     loading,
     lastUpdated,
