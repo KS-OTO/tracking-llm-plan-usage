@@ -19,6 +19,13 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
   首字母对中文取拼音、对拉丁名取字母，混在同一个序列里（阿里→A、百度→B、DeepSeek→D、模力→M、
   OpenRouter→O、智谱→Z），而不是把英文平台一律丢到汉字后面。
   「套餐订阅」「余额账户」两个 Tab 与总览的「平台导航」卡片用同一套顺序，导航卡点哪家就落在页面对应位置。
+- **「可用模型」直达文档**：每张平台卡的标题旁都有「可用模型 ↗」，新标签打开该平台官方的模型/计费文档
+  ——火山方舟、智谱 GLM、阿里云百炼、DeepSeek、模力方舟、百度千帆、OpenRouter、OpenCode Go、Kimi、MiniMax 全覆盖。
+  链接按**卡片标题（平台名）**在 `src/modelDocs.ts` 统一查表：同一平台在不同 Tab 标题不同
+  （如「智谱 GLM Coding Plan」与「智谱 GLM 余额」）也只需一条关键词映射，新增平台卡补一行即自动生效。
+  总览「平台导航」卡上同样有该链接；点链接只开文档，不会顺带触发卡片本身的锚点跳转。
+- **刷新节奏可预期**：顶部同时显示「更新于 HH:MM:SS」与「下次刷新 HH:MM:SS」（默认每 60 秒）；
+  关掉自动刷新或页面切到后台时后者显示「已暂停」——不给一个根本不会到来的时间。
 - **暗色模式**：一键切换并持久化（localStorage），默认跟随系统 `prefers-color-scheme`。
 - **可访问性**：语义化地标（header/main/footer）、键盘可达、aria 标注、对比度对齐 TDesign 官方 token。
 - **骨架屏 / 错误告警 / 空状态**：统一由 TDesign Skeleton / Alert / Empty 承载。
@@ -96,7 +103,8 @@ bun run deploy            # = vp build && wrangler deploy
 
 平台面板配置环境变量时有两条硬约束，配置前请先读「Cookie 怎么填」：
 
-- **值不能含空格/换行/制表符** —— 所以百炼 Cookie 只粘 ticket 的**值**，别粘整段 `Cookie` 头。
+- **值不能含空格/换行/制表符** —— 所以百炼 Cookie 只粘 ticket 的**值**，别粘整段 `Cookie` 头；
+  必须用整段的（模力方舟会话 Cookie）先 `encodeURIComponent`，详见「Cookie 怎么填」。
 - **面板不做 `$` 变量展开** —— 直接粘原值，**不要**加 `\$`（那是本地 `.env` 才需要的写法）。
 
 另外两点容易踩：
@@ -178,7 +186,7 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 | `ALIYUN_SECRET_KEY`       | 否   | 阿里云 AccessKey Secret                                                                                    |
 | `ALIYUN_TOKENPLAN_COOKIE` | 否   | 百炼控制台 Cookie 中 `login_aliyunid_ticket` 的**值**（Token Plan 个人版用量，无需授权；详见下文取值注意） |
 | `GITEE_AI_API_KEY`        | 否   | 模力方舟（Gitee AI）访问令牌（资源包余额），在 https://ai.gitee.com 生成                                   |
-| `GITEE_AI_SESSION_COOKIE` | 否   | 模力方舟 Web 会话 Cookie（代金券查询，约 30 天过期需轮换；多账号 `_N` 后缀与 Key 配对）                    |
+| `GITEE_AI_SESSION_COOKIE` | 否   | 模力方舟 Web 会话 Cookie（代金券查询；整段含空格，平台面板需填编码值，见「Cookie 怎么填」）                |
 | `STEPFUN_API_KEY`         | 否   | StepFun 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://platform.stepfun.com 获取                 |
 | `SILICONFLOW_API_KEY`     | 否   | SiliconFlow 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://cloud.siliconflow.cn 获取             |
 | `OPENROUTER_API_KEY`      | 否   | OpenRouter 剩余额度与限额，在 https://openrouter.ai/keys 获取                                              |
@@ -291,6 +299,31 @@ bun -e 'console.log(process.env.ALIYUN_TOKENPLAN_COOKIE?.length ?? "not set")'
 
 输出的长度应与你在浏览器里复制的值一致；**明显变短就说明 `$` 被展开吃掉了**。
 
+#### 整段 Cookie（模力方舟）在平台面板上：填 `encodeURIComponent` 后的值
+
+百炼可以「只粘 ticket 的值」绕开空格限制，**模力方舟不行**——代金券查询要的就是整段会话 Cookie
+（`uuser_locale=zh-CN; abymg_id=…; BEC=…` 这种），天生带 `; `，面板必定拒绝保存。
+
+解法是**存编码后的值**：空格变 `%20`、分号变 `%3B`，没有空格与换行，面板照收；
+服务端 `normalizeSessionCookie()`（`server/gitee.ts`）检测到值里含 `%` 且解码后出现 `=` 就自动还原，
+业务代码拿到的始终是原始 Cookie 串，无需任何额外配置。
+
+```bash
+# 单引号保留空格；printf 不带尾部换行（echo 会写进 \n，同样是面板拒绝的字符）
+COOKIE='uuser_locale=zh-CN; abymg_id=…; BEC=…'
+printf '%s' "$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$COOKIE")" \
+  | vercel env add GITEE_AI_SESSION_COOKIE production
+```
+
+只把空格换成 `%20`、分号保持原样也可以（启发式只看「含 `%` 且解码后有 `=`」）；
+本地 `.env` 两种写法都收，**不要**加 `\$`（面板与 `.env` 的差异见上一节）。
+
+自检（还原后应看到带 `; ` 的整段，与浏览器里复制的一致）：
+
+```bash
+bun -e 'console.log(decodeURIComponent(process.env.GITEE_AI_SESSION_COOKIE ?? ""))'
+```
+
 ## 常用命令
 
 ```bash
@@ -323,6 +356,7 @@ src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
   stores/         Pinia stores（dashboard 数据编排 / theme 暗色主题）
   types.ts        共享类型（多账号 AccountEnvelope 判别联合）
   utils.ts        展示格式化工具 + 平台卡排序（sortPlatformSections：Key 数降序 → 首字母）
+  modelDocs.ts    平台名 → 官方「可用模型」文档地址（卡片标题旁的外链，按关键词匹配）
   components/     各平台区块组件（AccountSection 统一外壳 + DetailDialog 详情弹窗）
                   套餐订阅 Tab：PlansSection 一平台一卡（Kimi / MiniMax / OpenCode Go）
   assets/layout.css 全站唯一布局层（语义化网格原语 + 断点；组件不写断点、不重复定义）

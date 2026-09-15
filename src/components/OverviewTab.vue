@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { accountTitle, isFailedAccount } from '../types'
+import { modelDocsUrl } from '../modelDocs'
 import { useDashboardStore } from '../stores/dashboard'
 import { formatReset, formatTokens, providerSlug, sortPlatformSections } from '../utils'
 
@@ -189,6 +190,8 @@ interface PlatformSummary {
   primary: string
   secondary?: string
   danger?: boolean
+  /** 「可用模型」文档地址：由 push 按平台名统一注入，各出卡点无需重复传。 */
+  modelsUrl?: string | null
 }
 
 const summaries = computed<PlatformSummary[]>(() => {
@@ -196,10 +199,11 @@ const summaries = computed<PlatformSummary[]>(() => {
 
   /** 平台出卡：失败时显示「查询失败」而非整卡消失（P0-4：失败平台静默蒸发）。 */
   function push(entry: PlatformSummary, failed: boolean): void {
+    const withLink = { ...entry, modelsUrl: modelDocsUrl(entry.name) }
     if (failed) {
-      out.push({ ...entry, primary: '查询失败', danger: true })
+      out.push({ ...withLink, primary: '查询失败', danger: true })
     } else {
-      out.push(entry)
+      out.push(withLink)
     }
   }
 
@@ -604,7 +608,23 @@ function jump(tab: string, anchor: string): void {
           @click="jump(item.tab, item.anchor)"
           @keydown.enter="jump(item.tab, item.anchor)"
         >
-          <div class="nav-name">{{ item.name }}</div>
+          <div class="nav-head">
+            <span class="nav-name">{{ item.name }}</span>
+            <!-- 外链与整卡跳转共存：卡片点击是「滚到该平台」，链接是「打开文档」，
+                 两者必须 stop 隔开，否则点链接会顺带把页面滚走 -->
+            <a
+              v-if="item.modelsUrl"
+              class="models-link"
+              :href="item.modelsUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              :aria-label="`${item.name} 可用模型文档（新窗口打开）`"
+              @click.stop
+              @keydown.enter.stop
+            >
+              可用模型 ↗
+            </a>
+          </div>
           <div class="nav-primary" :class="{ 'text-danger': item.danger }">{{ item.primary }}</div>
           <div v-if="item.secondary" class="muted nav-secondary">{{ item.secondary }}</div>
         </t-card>
@@ -642,6 +662,13 @@ function jump(tab: string, anchor: string): void {
 .nav-card:focus-visible {
   outline: 2px solid var(--td-brand-color);
   outline-offset: 2px;
+}
+
+.nav-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--td-size-2);
 }
 
 .nav-name {
