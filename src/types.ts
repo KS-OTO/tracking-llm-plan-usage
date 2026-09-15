@@ -13,6 +13,7 @@ export interface StatusResponse {
     gitee: ProviderStatus
     baidu: ProviderStatus
     tokenplan: ProviderStatus
+    /** 余额类扩展平台（`/api/extras`）：服务端仍统计，页面已不再有独立 Tab。 */
     extras: ProviderStatus
     /** 套餐类扩展平台（Kimi / MiniMax / OpenCode Go），与「套餐订阅」Tab 对应。 */
     plans: ProviderStatus
@@ -327,16 +328,6 @@ export interface GiteeBalanceResponse {
   accounts: AccountEnvelope<GiteePackageBalance>[]
 }
 
-export interface ExtrasBalance {
-  provider: string
-  balance: number
-  total?: number
-  used?: number
-  unit: string
-  note?: string
-  error?: string
-}
-
 export interface ExtrasPlanWindow {
   window: 'fiveHour' | 'weekly' | 'monthly'
   percent: number
@@ -351,26 +342,17 @@ export interface ExtrasPlan {
   error?: string
 }
 
-export interface ExtrasBalanceGroup {
-  provider: string
-  accounts: AccountEnvelope<ExtrasBalance>[]
-}
-
 export interface ExtrasPlanGroup {
   provider: string
   accounts: AccountEnvelope<ExtrasPlan>[]
 }
 
 /**
- * 余额类扩展平台（余额账户 Tab）：StepFun / SiliconFlow / OpenRouter / Novita。
- * 套餐类（Kimi / MiniMax / OpenCode Go）已随 PlansResponse 归入「套餐订阅」Tab。
+ * 套餐类扩展平台（套餐订阅 Tab）的窗口用量。
+ *
+ * 余额类平台（StepFun / SiliconFlow / OpenRouter / Novita，服务端 `/api/extras`）已不再
+ * 有独立 Tab：OpenRouter 有自己的区块与接口（`/api/openrouter/detail`），其余三家未接入页面。
  */
-export interface ExtrasResponse {
-  balances: ExtrasBalanceGroup[]
-  configured: number
-}
-
-/** 套餐类扩展平台（套餐订阅 Tab）的窗口用量。 */
 export interface PlansResponse {
   plans: ExtrasPlanGroup[]
   configured: number
