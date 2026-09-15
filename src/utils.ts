@@ -59,6 +59,35 @@ export const PLAN_WINDOW_LABELS: Record<string, string> = {
 }
 
 /**
+ * 平台名 → 锚点 slug（跨组件共享，保证「跳转方」与「落点方」用同一套命名）。
+ *
+ * 订阅套餐按平台拆卡后，每张卡一个锚点：`anchor-plans-<slug>`。
+ * 若两处各写各的转换，改个平台名就会静默跳失（锚点找不到时 jumpToAnchor 直接 return，
+ * 表现为「点了没反应」这种最难查的症状）。
+ */
+export function providerSlug(provider: string): string {
+  return (
+    provider
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'unknown'
+  )
+}
+
+/**
+ * 卡内 Key（账号）数是否已多到需要独占整行。
+ *
+ * 半宽单元格放不下两张账号卡，2 个 Key 会被挤成「一行一个 + 换行」，
+ * 既浪费纵向空间又看不出是对等账号。达到阈值的区块由 App.vue 加 .grid-span-all，
+ * 卡内 .grid-cards 随即排成两列。阈值取 2：**2 个 Key 就该并排**。
+ */
+export const MIN_ACCOUNTS_FOR_FULL_ROW = 2
+
+export function shouldSpanFullRow(accountCount: number): boolean {
+  return accountCount >= MIN_ACCOUNTS_FOR_FULL_ROW
+}
+
+/**
  * 进度条状态：基于使用百分比映射 TDesign 桌面端 Progress status。
  * 桌面端 status 可选值 success/warning/error/active（无 danger）。
  */

@@ -121,7 +121,7 @@ function packageRows(packages: TokenPlanSharedPackage[] | null) {
     empty-text="未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY 或 ALIYUN_TOKENPLAN_COOKIE"
   >
     <template v-if="data">
-      <div class="stack">
+      <div class="grid-cards grid-cards--wide">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>

@@ -2,37 +2,40 @@ import { describe, expect, it } from 'vite-plus/test'
 import { mountWithTDesign, openDetail } from './mount'
 
 import PlansSection from '../components/PlansSection.vue'
-import type { PlansResponse } from '../types'
+import type { ExtrasPlanGroup } from '../types'
 
-const openCode: PlansResponse = {
-  plans: [
+const openCode: ExtrasPlanGroup = {
+  provider: 'OpenCode Go',
+  accounts: [
     {
+      keyHint: 'sk-0****go',
+      label: '后端团队专用',
       provider: 'OpenCode Go',
-      accounts: [
-        {
-          keyHint: 'sk-0****go',
-          label: '后端团队专用',
-          provider: 'OpenCode Go',
-          windows: [
-            { window: 'fiveHour', percent: 0, resetTime: Date.now() + 3_600_000 },
-            { window: 'weekly', percent: 19, resetTime: Date.now() + 86_400_000 },
-            { window: 'monthly', percent: 5, resetTime: Date.now() + 86_400_000 },
-          ],
-        },
+      windows: [
+        { window: 'fiveHour', percent: 0, resetTime: Date.now() + 3_600_000 },
+        { window: 'weekly', percent: 19, resetTime: Date.now() + 86_400_000 },
+        { window: 'monthly', percent: 5, resetTime: Date.now() + 86_400_000 },
       ],
     },
   ],
-  configured: 1,
 }
 
 describe('PlansSection', () => {
+  it('titles the card with the platform name instead of a generic group name', () => {
+    const wrapper = mountWithTDesign(PlansSection, {
+      props: { group: openCode },
+    })
+    // 卡片标题即平台名（用户实测：2 个 OpenCode Go Key，标题却是「订阅套餐」）
+    expect(wrapper.find('.t-card__title').text()).toBe('OpenCode Go')
+    expect(wrapper.text()).not.toContain('订阅套餐')
+  })
+
   it('renders all three OpenCode Go windows including the 30-day one', () => {
     const wrapper = mountWithTDesign(PlansSection, {
-      props: { data: openCode, loading: false, error: null },
+      props: { group: openCode },
     })
 
     const text = wrapper.text()
-    expect(text).toContain('OpenCode Go')
     expect(text).toContain('5 小时窗口')
     expect(text).toContain('每周窗口')
     expect(text).toContain('30 天窗口')
@@ -40,51 +43,34 @@ describe('PlansSection', () => {
     expect(text).toContain('5.0%')
   })
 
-  it('renders Kimi and MiniMax plan groups with window progress', () => {
-    const wrapper = mountWithTDesign(PlansSection, {
-      props: {
-        data: {
-          plans: [
-            {
-              provider: 'Kimi For Coding',
-              accounts: [
-                {
-                  keyHint: 'sk-0****mn',
-                  provider: 'Kimi For Coding',
-                  windows: [
-                    { window: 'fiveHour', percent: 55.5, resetTime: Date.now() + 3_600_000 },
-                  ],
-                },
-              ],
-            },
-            {
-              provider: 'MiniMax',
-              accounts: [
-                {
-                  keyHint: 'sk-0****mm',
-                  provider: 'MiniMax',
-                  windows: [{ window: 'weekly', percent: 2.5, resetTime: Date.now() + 86_400_000 }],
-                },
-              ],
-            },
-          ],
-          configured: 2,
+  it('renders the Kimi and MiniMax groups as their own cards', () => {
+    const cases: Array<[string, number]> = [
+      ['Kimi For Coding', 55.5],
+      ['MiniMax', 2.5],
+    ]
+    for (const [provider, percent] of cases) {
+      const wrapper = mountWithTDesign(PlansSection, {
+        props: {
+          group: {
+            provider,
+            accounts: [
+              {
+                keyHint: `sk-0****${provider.length}`,
+                provider,
+                windows: [{ window: 'weekly', percent, resetTime: Date.now() + 86_400_000 }],
+              },
+            ],
+          },
         },
-        loading: false,
-        error: null,
-      },
-    })
-
-    const text = wrapper.text()
-    expect(text).toContain('Kimi For Coding')
-    expect(text).toContain('55.5%')
-    expect(text).toContain('MiniMax')
-    expect(text).toContain('2.5%')
+      })
+      expect(wrapper.find('.t-card__title').text()).toBe(provider)
+      expect(wrapper.text()).toContain(`${percent.toFixed(1)}%`)
+    }
   })
 
   it('prefers the alias over the key hint', () => {
     const wrapper = mountWithTDesign(PlansSection, {
-      props: { data: openCode, loading: false, error: null },
+      props: { group: openCode },
     })
     const account = wrapper.find('.account-group')
     expect(account.find('.account-name').text()).toBe('后端团队专用')
@@ -94,13 +80,14 @@ describe('PlansSection', () => {
 
   it('moves account identity and window details into the detail dialog', async () => {
     const wrapper = mountWithTDesign(PlansSection, {
-      props: { data: openCode, loading: false, error: null },
+      props: { group: openCode },
     })
     // 卡片上没有端点与上游状态列
     expect(wrapper.text()).not.toContain('opencode.ai/zen/go/v1/usage')
 
     const detail = await openDetail(wrapper)
     expect(detail).toContain('别名')
+    expect(detail).toContain('OpenCode Go')
     expect(detail).toContain('opencode.ai/zen/go/v1/usage')
     expect(detail).toContain('重置时间')
     expect(detail).toContain('3 个额度窗口')
@@ -109,30 +96,23 @@ describe('PlansSection', () => {
   it('flags a rate-limited window instead of silently showing 100% as usage', () => {
     const wrapper = mountWithTDesign(PlansSection, {
       props: {
-        data: {
-          plans: [
+        group: {
+          provider: 'OpenCode Go',
+          accounts: [
             {
+              keyHint: 'sk-0****go',
               provider: 'OpenCode Go',
-              accounts: [
+              windows: [
                 {
-                  keyHint: 'sk-0****go',
-                  provider: 'OpenCode Go',
-                  windows: [
-                    {
-                      window: 'monthly',
-                      percent: 100,
-                      resetTime: Date.now() + 86_400_000,
-                      status: 'rate-limited',
-                    },
-                  ],
+                  window: 'monthly',
+                  percent: 100,
+                  resetTime: Date.now() + 86_400_000,
+                  status: 'rate-limited',
                 },
               ],
             },
           ],
-          configured: 1,
         },
-        loading: false,
-        error: null,
       },
     })
 
@@ -144,23 +124,16 @@ describe('PlansSection', () => {
   it('renders no status tag for a normal window', () => {
     const wrapper = mountWithTDesign(PlansSection, {
       props: {
-        data: {
-          plans: [
+        group: {
+          provider: 'OpenCode Go',
+          accounts: [
             {
+              keyHint: 'sk-0****go',
               provider: 'OpenCode Go',
-              accounts: [
-                {
-                  keyHint: 'sk-0****go',
-                  provider: 'OpenCode Go',
-                  windows: [{ window: 'weekly', percent: 19, resetTime: Date.now() + 86_400_000 }],
-                },
-              ],
+              windows: [{ window: 'weekly', percent: 19, resetTime: Date.now() + 86_400_000 }],
             },
           ],
-          configured: 1,
         },
-        loading: false,
-        error: null,
       },
     })
 
@@ -170,67 +143,32 @@ describe('PlansSection', () => {
   it('keeps an unrecognised upstream status verbatim', () => {
     const wrapper = mountWithTDesign(PlansSection, {
       props: {
-        data: {
-          plans: [
+        group: {
+          provider: 'OpenCode Go',
+          accounts: [
             {
+              keyHint: 'sk-0****go',
               provider: 'OpenCode Go',
-              accounts: [
-                {
-                  keyHint: 'sk-0****go',
-                  provider: 'OpenCode Go',
-                  windows: [{ window: 'weekly', percent: 50, resetTime: 0, status: 'exhausted' }],
-                },
-              ],
+              windows: [{ window: 'weekly', percent: 50, resetTime: 0, status: 'exhausted' }],
             },
           ],
-          configured: 1,
         },
-        loading: false,
-        error: null,
       },
     })
 
     expect(wrapper.text()).toContain('exhausted')
   })
 
-  it('shows an alert for a failed plan-group account', () => {
+  it('shows an alert for a failed account', () => {
     const wrapper = mountWithTDesign(PlansSection, {
       props: {
-        data: {
-          plans: [
-            {
-              provider: 'Kimi For Coding',
-              accounts: [{ keyHint: 'sk-9****failed', error: 'InvalidApiKey' }],
-            },
-          ],
-          configured: 1,
+        group: {
+          provider: 'Kimi For Coding',
+          accounts: [{ keyHint: 'sk-9****failed', error: 'InvalidApiKey' }],
         },
-        loading: false,
-        error: null,
       },
     })
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
     expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('sk-9****failed')])
-  })
-
-  it('shows the not-configured empty state when configured is zero', () => {
-    const wrapper = mountWithTDesign(PlansSection, {
-      props: {
-        data: { plans: [], configured: 0 },
-        loading: false,
-        error: null,
-        notConfigured: true,
-      },
-    })
-    const text = wrapper.text()
-    expect(text).toContain('未配置订阅套餐密钥')
-    expect(text).toContain('OPENCODE_GO_API_KEY')
-  })
-
-  it('shows skeleton when loading without data', () => {
-    const wrapper = mountWithTDesign(PlansSection, {
-      props: { data: null, loading: true, error: null },
-    })
-    expect(wrapper.findComponent({ name: 'TSkeleton' }).exists()).toBe(true)
   })
 })

@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 
 import { accountTitle, isFailedAccount } from '../types'
 import { useDashboardStore } from '../stores/dashboard'
-import { formatReset, formatTokens } from '../utils'
+import { formatReset, formatTokens, providerSlug } from '../utils'
 
 const emit = defineEmits<{
   /** 跳转到指定平台卡片：切 Tab + 滚动到锚点。 */
@@ -28,7 +28,6 @@ const {
   gitee,
   aliyun,
   tokenPlan,
-  extras,
   plans,
   baidu,
   openrouter,
@@ -388,42 +387,29 @@ const summaries = computed<PlatformSummary[]>(() => {
     )
   }
 
-  // 订阅套餐（Kimi / MiniMax / OpenCode Go）：最紧窗口（含被上游限流的窗口）
-  const plansData = plans.value.data
-  if (plansData && plansData.configured > 0) {
+  // 订阅套餐（Kimi / MiniMax / OpenCode Go）：区块已按平台拆卡，导航卡同样一平台一张，
+  // 这样点哪家就直达哪家的卡（锚点与 App.vue 用同一个 providerSlug 生成）
+  for (const group of plans.value.data?.plans ?? []) {
+    const accounts = okAccounts(group.accounts)
     let worstPercent = 0
-    let accounts = 0
-    for (const group of plansData.plans) {
-      for (const account of group.accounts) {
-        accounts += 1
-        if (!isFailedAccount(account)) {
-          for (const window of account.windows) {
-            worstPercent = Math.max(worstPercent, window.percent)
-          }
-        }
+    for (const account of accounts) {
+      for (const window of account.windows) {
+        worstPercent = Math.max(worstPercent, window.percent)
       }
     }
-    out.push({
-      key: 'plans',
-      name: '订阅套餐',
-      tab: 'subscription',
-      anchor: 'plans',
-      primary: `最紧窗口 ${Math.round(worstPercent)}%`,
-      secondary: `${accounts} 账号`,
-      danger: worstPercent >= 90,
-    })
-  }
-
-  // 扩展平台计数
-  const extrasData = extras.value.data
-  if (extrasData && extrasData.configured > 0) {
-    out.push({
-      key: 'extras',
-      name: '扩展平台',
-      tab: 'extras',
-      anchor: 'extras',
-      primary: `${extrasData.configured} 凭据`,
-    })
+    const slug = providerSlug(group.provider)
+    push(
+      {
+        key: `plans-${slug}`,
+        name: group.provider,
+        tab: 'subscription',
+        anchor: `plans-${slug}`,
+        primary: `最紧窗口 ${Math.round(worstPercent)}%`,
+        secondary: `${group.accounts.length} 账号`,
+        danger: worstPercent >= 90,
+      },
+      accounts.length === 0,
+    )
   }
 
   return out
@@ -456,14 +442,19 @@ function describeWindow(window: string): string {
   return window
 }
 
-/** 预警行跳转：智谱 → zhipu 锚点；订阅套餐 → plans 锚点；其余 → volc-plan。 */
+/** 订阅套餐的已配置平台名（预警行跳转时用来判断「这条预警属于哪张卡」）。 */
+const plansProviders = computed(
+  () => new Set((plans.value.data?.plans ?? []).map((group) => group.provider)),
+)
+
+/** 预警行跳转：智谱 → zhipu 锚点；订阅套餐 → 该平台自己的卡；其余 → 火山 Agent Plan。 */
 function jumpFromAlert(alert: { platform: string }): void {
   if (alert.platform.includes('智谱')) {
     emit('jump', 'subscription', 'zhipu')
     return
   }
-  if (/OpenCode|Kimi|MiniMax/.test(alert.platform)) {
-    emit('jump', 'subscription', 'plans')
+  if (plansProviders.value.has(alert.platform)) {
+    emit('jump', 'subscription', `plans-${providerSlug(alert.platform)}`)
     return
   }
   emit('jump', 'subscription', 'volc-plan')
@@ -588,7 +579,7 @@ function jump(tab: string, anchor: string): void {
 
     <!-- 平台导航卡：点击直达对应区块 -->
     <t-divider align="left">平台导航（点击直达）</t-divider>
-    <div class="grid-cards grid-cards--tight">
+    <div class="grid-cards grid-cards--tight grid-cards--stretch">
       <div v-for="item in summaries" :key="item.key">
         <t-card
           size="small"
@@ -621,6 +612,18 @@ function jump(tab: string, anchor: string): void {
 
 .nav-card {
   cursor: pointer;
+  /* 同行导航卡等高（.grid-cards--stretch 把 t-card 纵向铺满单元格），
+     卡内改为纵向弹性：次级文案被推到卡底，各卡的读数行因此严格对齐 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* t-card 的 body 默认 display:flow-root（不参与纵向分配），
+   这里只在本组件自己的 .nav-card 范围内把它变成弹性列，让内容能吃掉多余高度 */
+.nav-card :deep(.t-card__body) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .nav-card:focus-visible {
@@ -640,9 +643,11 @@ function jump(tab: string, anchor: string): void {
   margin-top: var(--td-size-2);
 }
 
-/* .muted 已给出字号，这里只补上「与主读数之间」的呼吸 */
+/* .muted 已给出字号，这里只补上「与主读数之间」的呼吸；
+ * margin-top:auto 让本行永远贴着卡底——导航卡等高后，短卡不会留下悬空的白 */
 .nav-secondary {
-  margin-top: var(--td-size-1);
+  margin-top: auto;
+  padding-top: var(--td-size-1);
 }
 
 /* .muted 已给出字号与边距，这里只补上与其他块的间距 */

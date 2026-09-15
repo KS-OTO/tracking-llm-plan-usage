@@ -110,7 +110,7 @@ const packageRowsByHint = computed(() => {
     empty-text="未配置 ZHIPU_API_KEY"
   >
     <template v-if="data">
-      <div class="stack">
+      <div class="grid-cards grid-cards--wide">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>

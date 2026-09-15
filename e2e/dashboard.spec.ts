@@ -36,17 +36,6 @@ test.describe('dashboard smoke', () => {
     expect(body.error.code).toBe('NOT_CONFIGURED')
   })
 
-  test('extras empty state covers only the balance-type credentials', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('.t-menu__item', { hasText: '扩展平台' }).click()
-    await expect(page.getByText('未配置扩展平台密钥').first()).toBeVisible({ timeout: 30_000 })
-    // 限定在扩展平台面板内：v-show 的隐藏面板同样在 DOM 里，必须收窄查询范围
-    const panel = page.locator('#anchor-extras')
-    await expect(panel.getByText(/STEPFUN/).first()).toBeVisible()
-    // 套餐类密钥（OpenCode Go 等）已迁到「套餐订阅」，不再出现在本区块
-    await expect(panel.getByText(/OPENCODE_GO/)).toHaveCount(0)
-  })
-
   test('subscription tab hosts the plan-type credentials (OpenCode Go)', async ({ page }) => {
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
@@ -57,6 +46,15 @@ test.describe('dashboard smoke', () => {
         .getByText(/OPENCODE_GO/)
         .first(),
     ).toBeVisible()
+  })
+
+  test('扩展平台 Tab 已移除，余额账户直接给出 OpenRouter', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('.t-menu__item', { hasText: '扩展平台' })).toHaveCount(0)
+
+    await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
+    await expect(page.locator('#anchor-openrouter')).toBeVisible({ timeout: 30_000 })
+    await expect(page.locator('#anchor-extras')).toHaveCount(0)
   })
 
   test('overview is the default tab with alert, reset and nav cards', async ({ page }) => {
@@ -125,9 +123,12 @@ test.describe('dashboard smoke', () => {
     )
 
     const shell = page.locator('.app-main')
-    /** 可见网格单元的取整宽度（v-show 隐藏面板里的元素 offsetParent 为 null，需排除）。 */
+    /**
+     * 可见网格单元的取整宽度（v-show 隐藏面板里的元素 offsetParent 为 null，需排除）。
+     * `.grid-span-all` 单元被设计成独占整行（多 Key 卡），宽度天然等于整行，不参与「等宽」比较。
+     */
     const cellWidths = (): Promise<number[]> =>
-      page.$$eval<number[], HTMLElement>('.grid-sections > *', (nodes) =>
+      page.$$eval<number[], HTMLElement>('.grid-sections > *:not(.grid-span-all)', (nodes) =>
         nodes
           .filter((node) => node.offsetParent !== null)
           .map((node) => Math.round(node.getBoundingClientRect().width)),
