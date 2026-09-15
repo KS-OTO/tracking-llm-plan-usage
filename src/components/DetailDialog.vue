@@ -29,13 +29,17 @@ const visible = ref(false)
   >
     详情
   </t-button>
-  <!-- 桌面宽度意图由 width 给出；窄屏兜底（max-width:100vw-2*16px）统一在 assets/layout.css -->
+  <!-- 桌面宽度意图由 width 给出；窄屏宽度兜底与高度封顶统一在 assets/layout.css。
+       placement 必须显式给 center：TDesign 默认 'top' 会把弹窗顶边钉在视口 20% 处
+       （`.t-dialog--top { align-items:flex-start; padding-top:20vh }`），
+       看起来就是「没有相对屏幕居中」——留白在外层容器上，用 CSS 兜底改不动。 -->
   <t-dialog
     v-if="visible"
     v-model:visible="visible"
     :header="title"
     :footer="false"
     width="720px"
+    placement="center"
     attach="body"
   >
     <div v-if="subtitle" class="muted detail-subtitle">Key {{ subtitle }}</div>

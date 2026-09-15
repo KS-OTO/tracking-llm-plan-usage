@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 
-import { formatMoney, formatReset, formatTokens, maskKey, progressStatus, ratioOf } from '../utils'
+import {
+  formatMoney,
+  formatReset,
+  formatTokens,
+  maskKey,
+  platformInitial,
+  progressStatus,
+  ratioOf,
+  sortPlatformSections,
+} from '../utils'
 
 describe('maskKey', () => {
   it('keeps only the first and last 4 characters', () => {
@@ -89,5 +98,101 @@ describe('progressStatus', () => {
   it('maps critical usage to error (desktop Progress has no danger)', () => {
     expect(progressStatus(90)).toBe('error')
     expect(progressStatus(100)).toBe('error')
+  })
+})
+
+describe('platformInitial', () => {
+  it('takes the pinyin initial for Chinese platform names', () => {
+    // 中文按拼音首字母（zh/ch/sh 归入 z/c/s），与拉丁名混在同一个 A→Z 序列里
+    expect(platformInitial('阿里云百炼 资源包')).toBe('A')
+    expect(platformInitial('百度千帆')).toBe('B')
+    expect(platformInitial('火山方舟 Agent Plan')).toBe('H')
+    expect(platformInitial('模力方舟（Gitee AI）')).toBe('M')
+    expect(platformInitial('智谱 GLM Coding Plan')).toBe('Z')
+    expect(platformInitial('知了')).toBe('Z')
+  })
+
+  it('takes the latin initial for ascii names (case-insensitive)', () => {
+    expect(platformInitial('DeepSeek 余额')).toBe('D')
+    expect(platformInitial('openrouter')).toBe('O')
+    expect(platformInitial('  OpenCode Go')).toBe('O')
+  })
+
+  it('falls back to # when there is no leading letter', () => {
+    expect(platformInitial('')).toBe('#')
+    expect(platformInitial('   ')).toBe('#')
+    expect(platformInitial('2026 平台')).toBe('#')
+  })
+})
+
+/** 构造排序输入项（就是平台卡描述符里参与排序的那两个字段）。 */
+function section(name: string, count: number) {
+  return { name, count }
+}
+
+describe('sortPlatformSections', () => {
+  it('puts the platform with more keys first (3 keys > 2 keys > 1 key)', () => {
+    const sorted = sortPlatformSections([
+      section('火山方舟 Agent Plan', 1),
+      section('OpenCode Go', 3),
+      section('智谱 GLM Coding Plan', 2),
+    ])
+    expect(sorted.map((item) => item.name)).toEqual([
+      'OpenCode Go',
+      '智谱 GLM Coding Plan',
+      '火山方舟 Agent Plan',
+    ])
+  })
+
+  it('breaks ties by platform initial, mixing pinyin with latin', () => {
+    const sorted = sortPlatformSections([
+      section('智谱 GLM 余额', 1),
+      section('OpenRouter', 1),
+      section('阿里资源包', 1),
+      section('DeepSeek 余额', 1),
+      section('百度千帆', 1),
+      section('火山方舟', 1),
+    ])
+    expect(sorted.map((item) => item.name)).toEqual([
+      '阿里资源包',
+      '百度千帆',
+      'DeepSeek 余额',
+      '火山方舟',
+      'OpenRouter',
+      '智谱 GLM 余额',
+    ])
+  })
+
+  it('keeps a full page ordering stable regardless of input order', () => {
+    const sections = [
+      section('模力方舟（Gitee AI）', 2),
+      section('OpenCode Go', 2),
+      section('阿里云百炼 资源包', 1),
+      section('阿里云百炼 Token Plan', 1),
+      section('百度千帆', 1),
+      section('智谱 GLM 余额', 1),
+      section('DeepSeek 余额', 1),
+      section('火山方舟 Agent Plan', 1),
+      section('OpenRouter', 1),
+    ]
+    const expected = [
+      '模力方舟（Gitee AI）',
+      'OpenCode Go',
+      '阿里云百炼 资源包',
+      '阿里云百炼 Token Plan',
+      '百度千帆',
+      'DeepSeek 余额',
+      '火山方舟 Agent Plan',
+      'OpenRouter',
+      '智谱 GLM 余额',
+    ]
+    expect(sortPlatformSections(sections).map((item) => item.name)).toEqual(expected)
+    expect(sortPlatformSections(sections.toReversed()).map((item) => item.name)).toEqual(expected)
+  })
+
+  it('does not mutate the input array', () => {
+    const sections = [section('火山方舟', 1), section('OpenCode Go', 2)]
+    sortPlatformSections(sections)
+    expect(sections.map((item) => item.name)).toEqual(['火山方舟', 'OpenCode Go'])
   })
 })

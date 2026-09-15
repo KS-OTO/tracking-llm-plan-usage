@@ -88,6 +88,87 @@ export function shouldSpanFullRow(accountCount: number): boolean {
 }
 
 /**
+ * 平台名首字母（中文取拼音首字母，拉丁取首字母）。
+ *
+ * 为什么不用 `localeCompare(name, 'zh')` 直接比整个名字：ICU 的 zh 排序规则把
+ * **全部拉丁字母排在汉字之后**，于是 `DeepSeek / OpenRouter` 会掉到「智谱 / 火山」后面，
+ * 完全不像「按首字母排序」。这里把首字母单独抽出来比较，中英文平台就能混在
+ * 同一个 A→Z 序列里（阿里 A · 百度 B · DeepSeek D · 模力 M · OpenRouter O · 智谱 Z）。
+ *
+ * 实现方式是对 23 个拼音首字母的锚点字做一次 zh 排序定位（拼音无 i/u/v 开头的音节，
+ * 且 zh/ch/sh 分别归入 z/c/s），因此不需要引入任何拼音词典。
+ */
+const PINYIN_ANCHORS: ReadonlyArray<readonly [string, string]> = [
+  ['A', '阿'],
+  ['B', '芭'],
+  ['C', '擦'],
+  ['D', '搭'],
+  ['E', '蛾'],
+  ['F', '发'],
+  ['G', '噶'],
+  ['H', '哈'],
+  ['J', '击'],
+  ['K', '喀'],
+  ['L', '垃'],
+  ['M', '妈'],
+  ['N', '拿'],
+  ['O', '哦'],
+  ['P', '啪'],
+  ['Q', '七'],
+  ['R', '然'],
+  ['S', '撒'],
+  ['T', '塌'],
+  ['W', '挖'],
+  ['X', '夕'],
+  ['Y', '压'],
+  ['Z', '匝'],
+]
+
+const PINYIN_COLLATOR = new Intl.Collator('zh-Hans-CN')
+
+export function platformInitial(name: string): string {
+  // 只看首字符：平台名首字符是汉字或拉丁字母，charAt 足够（无需按码点切分）
+  const first = name.trim().charAt(0)
+  if (/[a-z]/i.test(first)) {
+    return first.toUpperCase()
+  }
+  for (let index = PINYIN_ANCHORS.length - 1; index >= 0; index -= 1) {
+    const anchor = PINYIN_ANCHORS[index]
+    if (anchor && PINYIN_COLLATOR.compare(anchor[1], first) <= 0) {
+      return anchor[0]
+    }
+  }
+  return '#'
+}
+
+/**
+ * 平台卡片排序：**Key（账号）多的平台优先**；账号数相同时按平台名首字母 A→Z。
+ *
+ * 用户实测场景：OpenCode Go 挂了 3 个 Key、某平台 2 个、某平台 1 个
+ * → 顺序应为 OpenCode Go、2 Key 平台、1 Key 平台；同 Key 数的再按首字母。
+ * 末位以全名做兜底比较，保证输出与输入顺序无关（即排序结果稳定可断言）。
+ */
+export function comparePlatformSections(
+  a: { name: string; count: number },
+  b: { name: string; count: number },
+): number {
+  if (a.count !== b.count) {
+    return b.count - a.count
+  }
+  const byInitial = platformInitial(a.name).localeCompare(platformInitial(b.name))
+  if (byInitial !== 0) {
+    return byInitial
+  }
+  return PINYIN_COLLATOR.compare(a.name, b.name)
+}
+
+export function sortPlatformSections<T extends { name: string; count: number }>(
+  sections: readonly T[],
+): T[] {
+  return sections.toSorted(comparePlatformSections)
+}
+
+/**
  * 进度条状态：基于使用百分比映射 TDesign 桌面端 Progress status。
  * 桌面端 status 可选值 success/warning/error/active（无 danger）。
  */
