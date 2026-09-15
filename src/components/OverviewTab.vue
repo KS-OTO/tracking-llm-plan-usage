@@ -493,9 +493,9 @@ function jump(tab: string, anchor: string): void {
       title="检测到不完整的凭据配置"
       :message="`以下变量缺少配对项，对应平台不会启用：${incompleteVars.join('、')}（请补齐后重启服务）`"
     />
-    <t-row :gutter="[16, 16]">
+    <div class="grid-sections grid-sections--3">
       <!-- 预警汇总 -->
-      <t-col :xs="24" :lg="10">
+      <div>
         <t-card title="额度预警" header-bordered size="small">
           <template #actions>
             <t-space size="small">
@@ -531,25 +531,25 @@ function jump(tab: string, anchor: string): void {
                       {{ alert.percent.toFixed(0) }}%
                     </t-tag>
                     <span>{{ alert.platform }}</span>
-                    <span class="alert-meta">{{ alert.account }}</span>
-                    <span class="alert-meta">{{ alert.window }}</span>
+                    <span class="text-secondary">{{ alert.account }}</span>
+                    <span class="text-secondary">{{ alert.window }}</span>
                   </t-space>
                 </template>
                 <template #action>
-                  <span class="alert-meta">{{ alert.resetText }}</span>
+                  <span class="text-secondary">{{ alert.resetText }}</span>
                 </template>
               </t-list-item>
             </t-list>
-            <div v-if="alerts.length > 8" class="muted more-hint">
+            <div v-if="alerts.length > 8" class="muted">
               还有 {{ alerts.length - 8 }} 项预警未展示
             </div>
             <t-empty v-if="alerts.length === 0" description="无 ≥70% 的额度窗口" />
           </template>
         </t-card>
-      </t-col>
+      </div>
 
       <!-- 最早重置 + 更新时间 -->
-      <t-col :xs="24" :sm="12" :lg="7">
+      <div>
         <t-card title="最近重置" header-bordered size="small">
           <t-empty v-if="!earliestReset" description="无重置窗口" />
           <template v-else>
@@ -567,35 +567,29 @@ function jump(tab: string, anchor: string): void {
             <span class="muted">数据更新于 {{ updatedText || '—' }}</span>
           </template>
         </t-card>
-      </t-col>
+      </div>
 
       <!-- 快速统计 -->
-      <t-col :xs="24" :sm="12" :lg="7">
+      <div>
         <t-card title="平台总览" header-bordered size="small">
           <t-empty v-if="summaries.length === 0 && !loading" description="未配置任何平台密钥" />
-          <t-row v-else :gutter="[16, 8]">
-            <t-col :span="8">
-              <t-statistic title="已配置平台" :value="summaries.length" />
-            </t-col>
-            <t-col :span="8">
-              <t-statistic
-                title="紧急 (≥90%)"
-                :value="criticalCount"
-                :color="criticalCount > 0 ? 'red' : undefined"
-              />
-            </t-col>
-            <t-col :span="8">
-              <t-statistic title="注意 (≥70%)" :value="warningCount" />
-            </t-col>
-          </t-row>
+          <div v-else class="grid-metrics">
+            <t-statistic title="已配置平台" :value="summaries.length" />
+            <t-statistic
+              title="紧急 (≥90%)"
+              :value="criticalCount"
+              :color="criticalCount > 0 ? 'red' : undefined"
+            />
+            <t-statistic title="注意 (≥70%)" :value="warningCount" />
+          </div>
         </t-card>
-      </t-col>
-    </t-row>
+      </div>
+    </div>
 
     <!-- 平台导航卡：点击直达对应区块 -->
     <t-divider align="left">平台导航（点击直达）</t-divider>
-    <t-row :gutter="[16, 16]">
-      <t-col v-for="item in summaries" :key="item.key" :xs="12" :sm="8" :md="6" :lg="4">
+    <div class="grid-cards grid-cards--tight">
+      <div v-for="item in summaries" :key="item.key">
         <t-card
           size="small"
           hover-shadow
@@ -610,8 +604,8 @@ function jump(tab: string, anchor: string): void {
           <div class="nav-primary" :class="{ 'text-danger': item.danger }">{{ item.primary }}</div>
           <div v-if="item.secondary" class="muted nav-secondary">{{ item.secondary }}</div>
         </t-card>
-      </t-col>
-    </t-row>
+      </div>
+    </div>
 
     <t-empty
       v-if="isEmpty"
@@ -635,7 +629,7 @@ function jump(tab: string, anchor: string): void {
 }
 
 .nav-name {
-  font-size: 13px;
+  font-size: var(--td-font-size-body-medium);
   color: var(--td-text-color-secondary);
 }
 
@@ -646,20 +640,12 @@ function jump(tab: string, anchor: string): void {
   margin-top: var(--td-size-2);
 }
 
+/* .muted 已给出字号，这里只补上「与主读数之间」的呼吸 */
 .nav-secondary {
-  font-size: 12px;
-  margin-top: 2px;
+  margin-top: var(--td-size-1);
 }
 
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-.alert-meta {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-secondary);
-}
-
+/* .muted 已给出字号与边距，这里只补上与其他块的间距 */
 .reset-meta {
   margin-top: var(--td-size-2);
 }
