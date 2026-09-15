@@ -130,30 +130,34 @@ function windowRows(account: ExtrasPlan) {
         />
 
         <template v-else>
-          <div v-for="window in account.windows" :key="window.window" class="window-block">
-            <t-space align="center" justify="space-between" class="window-head">
-              <t-space align="center" size="small">
-                <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
-                <t-tag v-if="window.status" size="small" theme="warning" variant="light-outline">
-                  {{ windowStatusLabel(window.status) }}
-                </t-tag>
+          <!-- .window-list 负责间距与「N 个窗口块各占 1/N 高度」（见 assets/layout.css）：
+               并排的两个账号即使其中一个多了「上游限流」说明行，窗口块也逐行同高同顶 -->
+          <div v-if="account.windows.length > 0" class="window-list">
+            <div v-for="window in account.windows" :key="window.window" class="window-block">
+              <t-space align="center" justify="space-between" class="window-head">
+                <t-space align="center" size="small">
+                  <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
+                  <t-tag v-if="window.status" size="small" theme="warning" variant="light-outline">
+                    {{ windowStatusLabel(window.status) }}
+                  </t-tag>
+                </t-space>
+                <span class="muted">{{ formatReset(window.resetTime) }}</span>
               </t-space>
-              <span class="muted">{{ formatReset(window.resetTime) }}</span>
-            </t-space>
-            <t-progress
-              :percentage="Math.round(Math.min(100, window.percent))"
-              :status="progressStatus(window.percent)"
-              :label="false"
-            />
-            <t-space align="center" justify="space-between" class="window-meta">
-              <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
-              <span class="num-strong">{{ window.percent.toFixed(1) }}%</span>
-            </t-space>
-            <div v-if="window.status" class="muted window-foot">
-              {{ windowStatusNote(window.status) }}
+              <t-progress
+                :percentage="Math.round(Math.min(100, window.percent))"
+                :status="progressStatus(window.percent)"
+                :label="false"
+              />
+              <t-space align="center" justify="space-between" class="window-meta">
+                <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
+                <span class="num-strong">{{ window.percent.toFixed(1) }}%</span>
+              </t-space>
+              <div v-if="window.status" class="muted window-foot">
+                {{ windowStatusNote(window.status) }}
+              </div>
             </div>
           </div>
-          <t-empty v-if="account.windows.length === 0" description="无额度数据" />
+          <t-empty v-else description="无额度数据" />
         </template>
       </div>
     </div>

@@ -69,6 +69,32 @@
 }
 
 /**
+ * 区块卡外壳（AccountSection 的 t-card）：把「单元格高度」继续往下传。
+ *
+ * 网格只做到「同排区块卡等高」，卡**内部**的子卡片并不知情 ——
+ * 内容少的区块卡里，账号卡会缩成一小块贴在顶部，与同排邻居差出几十像素。
+ * 因此把 body 变成纵向弹性容器，并把剩余高度交给卡内的 .grid-cards（见第 3 节）：
+ * 逐层铺满之后，同一屏里每一层的卡片都是等高的。
+ *
+ * 注意 DOM 不是「卡 → body」两层：TDesign 的 t-card 会把 body 包在 loading 容器里，
+ * 实测结构是 `.t-card > .t-card__header + .t-loading__parent > .t-card__body`
+ * （1.20.6）。高度要穿过中间这层，所以下面必须显式写上 `.t-loading__parent`，
+ * 并且 body 用后代选择器 —— 写成 `> .t-card__body` 会一条也匹配不上（静默失效）。
+ */
+.section-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.section-card > .t-loading__parent,
+.section-card .t-card__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/**
  * 变体：该单元格独占整行。
  *
  * 用于「卡内挂了多个 Key」的区块——一个 Key 一张账号卡，两个 Key 并排才好看。
@@ -83,7 +109,7 @@
 }
 
 /* ============================================================
- * 2. 指标网格：卡片内部的读数瓦片（t-statistic 等）
+ * 2. 指标网格：卡片内部的读数瓦片（t-statistic / .window-block 等）
  *    用 auto-fit + minmax，瓦片永远等宽；窄屏自动回落成一列/两列，
  *    宽屏按可用宽度排满，不需要任何断点声明。
  * ============================================================ */
@@ -91,7 +117,11 @@
   display: grid;
   gap: var(--td-size-5) var(--td-size-6);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--metric-min, 150px)), 1fr));
-  align-items: start;
+  /* stretch（而非 start）：同一行的瓦片强制等高。
+   * t-statistic 是纯文本，等高与否看不出来；但 .window-block 是**有底色和圆角的卡片**，
+   * 同行里只要有一个多出一行说明文字，start 就会让另一张矮一截 —— 这正是「子卡片高度不统一」
+   * 最直观的来源。 */
+  align-items: stretch;
 }
 
 /** 指标较少、希望更紧凑的场合（如两项计数）。 */
@@ -113,6 +143,19 @@
 /* 网格单元默认 min-width:auto，内含宽表格时会把轨道撑破；显式归零由内容自行收缩 */
 .grid-cards > * {
   min-width: 0;
+}
+
+/**
+ * 卡片网格铺满容器剩余高度。
+ *
+ * .grid-cards 是区块卡 body 里唯一的内容块时，让它吃掉 body 的剩余高度；
+ * 行高随之外扩，网格项默认 stretch，于是**同排账号卡严格等高，且与区块卡同高**。
+ * 没有这一条时，账号卡只按自身内容撑高：同为一行区块卡的三个平台会分别是
+ * 184 / 122 / 160 px，看起来就是「卡内子卡片高度不统一」。
+ * 选择器用后代形式：body 与 .grid-cards 之间夹着 t-card 的 loading 容器（见第 1 节）。
+ */
+.section-card .t-card__body > .grid-cards {
+  flex: 1 1 auto;
 }
 
 /** 变体：单元格内的卡片纵向铺满整格 —— 同一行卡片等高，内容少的卡不塌陷。 */
@@ -143,6 +186,17 @@
   border-radius: var(--td-radius-medium);
   padding: var(--td-size-5) var(--td-size-6);
   height: 100%;
+  /* 纵向弹性：账号卡自身已被网格拉伸到与同行邻居等高，
+   * 剩下的高度继续交给卡内最后一个内容块（读数网格 / 窗口列表），
+   * 让「账号卡 → 窗口块」两级都铺满，两个并排账号的窗口块才能逐行对齐。 */
+  display: flex;
+  flex-direction: column;
+}
+
+.account-group > .grid-metrics,
+.account-group > .window-list {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .account-head {
@@ -186,8 +240,21 @@
   border-radius: var(--td-radius-medium);
 }
 
-.window-block + .window-block {
-  margin-top: var(--td-size-4);
+/**
+ * 纵向堆叠的窗口块（PlansSection 用；其余组件都放在 .grid-metrics 网格里）。
+ *
+ * 两件事必须由容器负责，而不是靠 `.window-block + .window-block` 的 margin：
+ * 1. 间距：用 grid gap，避免 margin 泄漏进网格项 —— 早期那条 `+` 规则在
+ *    **网格布局里也命中**，把同一行的第 2、3 个窗口块各下推 8px，
+ *    于是「首个贴顶、其余下移」的错位（火山 / 智谱卡片实测可见）。
+ * 2. 等分行高：`grid-auto-rows: 1fr` 让 N 个窗口块各占 1/N 高度。
+ *    配合上层铺满（账号卡等高 + 本容器 flex:1），并排两个账号的窗口块
+ *    每个都严格同高同顶，即使其中一个多了「上游限流」说明行也不会错位。
+ */
+.window-list {
+  display: grid;
+  gap: var(--td-size-4);
+  grid-auto-rows: 1fr;
 }
 
 /* 窗口块内部的排版节奏：标题行 / 进度行 / 脚注行。
@@ -247,23 +314,50 @@
 }
 
 /* ============================================================
- * 5. 两条组件级兜底（原则仍是「不覆盖 TDesign 组件样式」）
+ * 5. 弹窗几何：相对**屏幕**居中 + 高度封顶
+ *    （原则仍是「不覆盖 TDesign 组件样式」，下面两条是组件确实没有的能力）
  * ============================================================ */
 
-/* 5.1 弹窗宽度
- * t-dialog 只接受固定宽度（默认 480px，本项目详情弹窗传 720px），
- * 且组件本身没有任何 max-width 兜底 —— 在 375px 视口下会硬溢出屏幕。
- * 只补一条 max-width（优先级天然高于内联 width），桌面端宽度意图不变。 */
+/* 5.1 居中方式交给组件自带的 placement —— 见 DetailDialog.vue 的 placement="center"。
+ *
+ * 背景（为什么不能用 CSS 兜底修）：TDesign 的 Dialog 默认 placement 是 'top'，对应
+ *     .t-dialog__position.t-dialog--top { align-items: flex-start; padding-top: 20vh }
+ * 弹窗顶边因此被钉在**视口高度的 20%** 处 —— 视口越高，弹窗越靠下、下方留白越大，
+ * 看上去就是「没有按屏幕居中」。实测顶距：1440×1000 → 200px，1440×800 → 160px，
+ * 1280×720 → 144px，三次都恰好是 20vh。
+ * 注意这段留白在**外层** `.t-dialog__position` 的 padding 上，不在 .t-dialog 上，
+ * 所以给弹窗自己写 align-self / margin:auto 一律无效，必须用组件的 'center' 变体
+ * （`.t-dialog--center { align-items: center }`，容器已有 `justify-content: center`）。
+ */
+
+/* 5.2 尺寸：宽度兜底 + 高度封顶
+ *
+ * 宽度：t-dialog 只接受固定宽度（默认 480px，本项目详情弹窗传 720px），
+ * 组件自身没有任何 max-width 兜底 —— 在 375px 视口下会硬溢出屏幕。
+ * 这里只补一条 max-width（优先级天然高于内联 width），桌面端宽度意图不变。
+ * 用 100%（= 遮罩层内容宽度，已排除滚动条）而非 100vw（含滚动条宽度）。
+ *
+ * 高度：弹窗整体必须不高于「视口 − 上下各 48px 留白」。48px 是 TDesign 给
+ * `.t-dialog__position` 的 `padding: 48px 0`，6rem = 48px × 2。
+ * 同时把弹窗变成纵向三段容器：正文吃掉剩余高度并在**内部**滚动，标题行永远可见。
+ * 早期只给 .t-dialog__body 写了 max-height: calc(100vh - 12rem)，两个毛病：
+ * 既没扣掉这 96px 留白，也没把 dialog 变成 flex 容器 —— 长弹窗照样高过视口，
+ * 于是滚动的是整个遮罩层（.t-dialog__wrap），标题行被滚走。 */
 .t-dialog {
-  max-width: calc(100vw - 2 * var(--td-size-6));
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100% - 2 * var(--td-size-6));
+  max-height: calc(100vh - 6rem);
+  /* dvh：移动端地址栏收起/展开时视口高度会变，vh 会把它算错（上面一行做兜底） */
+  max-height: calc(100dvh - 6rem);
 }
 
-/* 5.2 弹窗高度
- * t-dialog__body 只有 `overflow:auto` 而没有高度上限，内容一长弹窗就会长得比视口还高，
- * 此时滚动的是整个遮罩层（.t-dialog__wrap），标题行会跟着滚走。
- * 详情弹窗要容纳「元信息 + 额度明细 + 推理用量 + 调用明细」四段，必然超出一屏，
- * 因此给它一个视口相关的上限：超出部分在 body 内部滚动，标题行始终可见。
- * 上限 = 视口 − 上下留白(48×2) − 标题行(约 56) − 余量。 */
+.t-dialog__header,
+.t-dialog__footer {
+  flex: none;
+}
+
 .t-dialog__body {
-  max-height: calc(100vh - 12rem);
+  flex: 1 1 auto;
+  min-height: 0;
 }
