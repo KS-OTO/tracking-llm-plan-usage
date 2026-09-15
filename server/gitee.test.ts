@@ -90,4 +90,17 @@ describe('normalizeSessionCookie', () => {
   it('leaves percent signs alone when the value is not an encoded cookie', () => {
     expect(normalizeSessionCookie('token%invalid')).toBe('token%invalid')
   })
+
+  it('restores a real Gitee cookie header with spaces and semicolons', () => {
+    // 平台面板（Vercel / EdgeOne）直接拒绝含空格的值，而整段 Cookie 天生带 `; `，
+    // 所以线上只能存 encodeURIComponent 后的形态；服务端必须能原样还原。
+    const raw = 'uuser_locale=zh-CN; abymg_id=abc123; BEC=7f3d; session-token=xyz'
+    expect(normalizeSessionCookie(encodeURIComponent(raw))).toBe(raw)
+  })
+
+  it('restores a cookie whose spaces were encoded by hand', () => {
+    // 只把空格换成 %20、分号保持原样也能还原：启发式只看「含 % 且解码后有 =」
+    const raw = 'a=1; session-token=xyz'
+    expect(normalizeSessionCookie(raw.replaceAll(' ', '%20'))).toBe(raw)
+  })
 })
