@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign, openDetail } from './mount'
 
 import GiteeSection from '../components/GiteeSection.vue'
 import type { GiteeBalanceResponse } from '../types'
@@ -40,7 +40,7 @@ const fixture: GiteeBalanceResponse = {
 }
 
 describe('GiteeSection', () => {
-  it('renders balance statistics and package detail table', () => {
+  it('renders the three balance statistics on the card', () => {
     const wrapper = mountWithTDesign(GiteeSection, {
       props: { data: fixture, loading: false, error: null },
     })
@@ -49,23 +49,34 @@ describe('GiteeSection', () => {
     expect(text).toContain('45.50')
     expect(text).toContain('54.50')
     expect(text).toContain('100.00')
-    expect(text).toContain('启航包')
+    // 资源包明细与代金券已移出卡片
+    expect(text).not.toContain('启航包')
+    expect(text).not.toContain('代金券')
   })
 
-  it('renders voucher balances and coupon table when voucher data present', () => {
+  it('moves the package detail table into the detail dialog', async () => {
     const wrapper = mountWithTDesign(GiteeSection, {
       props: { data: fixture, loading: false, error: null },
     })
-    const text = wrapper.text()
-    expect(text).toContain('代金券（demo-ns）')
-    expect(text).toContain('现金代金券余额')
-    expect(text).toContain('333.13')
-    expect(text).toContain('黑客松奖品券')
-    expect(text).toContain('200.00 CNY')
-    expect(text).toContain('已用尽')
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('资源包明细（1）')
+    expect(detail).toContain('启航包')
   })
 
-  it('shows warning alert when voucher cookie expired', () => {
+  it('moves voucher balances and coupon table into the detail dialog', async () => {
+    const wrapper = mountWithTDesign(GiteeSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('代金券（demo-ns）')
+    expect(detail).toContain('现金代金券余额')
+    expect(detail).toContain('333.13')
+    expect(detail).toContain('黑客松奖品券')
+    expect(detail).toContain('200.00 CNY')
+    expect(detail).toContain('已用尽')
+  })
+
+  it('shows warning alert when voucher cookie expired', async () => {
     const wrapper = mountWithTDesign(GiteeSection, {
       props: {
         data: {
@@ -84,11 +95,11 @@ describe('GiteeSection', () => {
         error: null,
       },
     })
-    const text = wrapper.text()
-    expect(text).toContain('代金券查询失败')
-    expect(text).toContain('Cookie 已过期')
-    // 资源包余额不受代金券失败影响
-    expect(text).toContain('剩余余额')
+    // 资源包余额不受代金券失败影响，仍是卡片上的读数
+    expect(wrapper.text()).toContain('剩余余额')
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('代金券查询失败')
+    expect(detail).toContain('Cookie 已过期')
   })
 
   it('shows an alert for the failed account', () => {
@@ -96,11 +107,10 @@ describe('GiteeSection', () => {
       props: { data: fixture, loading: false, error: null },
     })
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
-    expect(alerts.length).toBe(1)
-    expect(alerts[0]!.text()).toContain('UC03****failed')
+    expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('UC03****failed')])
   })
 
-  it('shows empty packages message when details list is empty', () => {
+  it('shows empty packages message in the dialog when details list is empty', async () => {
     const wrapper = mountWithTDesign(GiteeSection, {
       props: {
         data: {
@@ -118,7 +128,9 @@ describe('GiteeSection', () => {
         error: null,
       },
     })
-    expect(wrapper.text()).toContain('没有资源包')
+    expect(wrapper.text()).not.toContain('没有资源包')
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('没有资源包')
   })
 
   it('renders neutral empty state (no red alert) when notConfigured', () => {

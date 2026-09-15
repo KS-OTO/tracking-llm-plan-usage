@@ -10,6 +10,7 @@ import ExtraSection from './components/ExtraSection.vue'
 import GiteeSection from './components/GiteeSection.vue'
 import OverviewTab from './components/OverviewTab.vue'
 import OpenRouterSection from './components/OpenRouterSection.vue'
+import PlansSection from './components/PlansSection.vue'
 import TokenPlanSection from './components/TokenPlanSection.vue'
 import VolcPlanSection from './components/VolcPlanSection.vue'
 import VolcUsageSection from './components/VolcUsageSection.vue'
@@ -30,6 +31,7 @@ const {
   baidu,
   openrouter,
   extras,
+  plans,
   loading,
   lastUpdated,
   autoRefresh,
@@ -89,6 +91,7 @@ const failedProviders = computed(() => {
   check('百度千帆', baidu.value)
   check('OpenRouter', openrouter.value)
   check('扩展平台', extras.value)
+  check('订阅套餐（Kimi/MiniMax/OpenCode Go）', plans.value)
   return entries
 })
 
@@ -200,6 +203,15 @@ const lastUpdatedText = computed(() => {
               :not-configured="tokenPlan.notConfigured"
             />
           </t-col>
+          <!-- 订阅套餐（Kimi / MiniMax / OpenCode Go）：同为按窗口计的订阅额度，归入「套餐订阅」 -->
+          <t-col :xs="24" id="anchor-plans">
+            <PlansSection
+              :data="plans.data"
+              :loading="loading && plans.data === null"
+              :error="plans.error"
+              :not-configured="plans.notConfigured"
+            />
+          </t-col>
         </t-row>
       </div>
       <div v-show="activeTab === 'balance'">
@@ -268,7 +280,7 @@ const lastUpdatedText = computed(() => {
 
       <footer class="app-footer">
         <span>密钥仅保存在服务端环境变量中，页面不接触任何 Key。</span>
-        <span>数据来源：DeepSeek · 火山方舟 · 智谱 · 阿里云 · 模力方舟</span>
+        <span>数据来源：DeepSeek · 火山方舟 · 智谱 · 阿里云 · 模力方舟 · 扩展平台</span>
       </footer>
     </main>
 

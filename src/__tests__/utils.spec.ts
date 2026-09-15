@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vite-plus/test'
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 
 import { formatMoney, formatReset, formatTokens, maskKey, progressStatus, ratioOf } from '../utils'
 
@@ -44,23 +44,34 @@ describe('formatMoney', () => {
 })
 
 describe('formatReset', () => {
+  // formatReset 内部会重新采样时钟，与用例构造时间戳时存在毫秒级间隙；
+  // `Date.now() + 90 * 60_000` 恰好落在分钟边界上，慢机器上会从 30 分抖到 29 分。
+  // 用假时钟钉住系统时间，让断言对宿主速度不敏感。
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('shows a dash for non-applicable windows', () => {
     expect(formatReset(-1)).toBe('—')
     expect(formatReset(0)).toBe('—')
   })
 
   it('reports past timestamps as reset', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     expect(formatReset(Date.now() - 1000)).toBe('已重置')
   })
 
   it('reports hours and minutes until reset', () => {
-    const in90Minutes = Date.now() + 90 * 60_000
-    expect(formatReset(in90Minutes)).toMatch(/^1 小时 3\d 分后重置$/)
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    expect(formatReset(Date.now() + 90 * 60_000)).toBe('1 小时 30 分后重置')
   })
 
   it('reports days for far away resets', () => {
-    const in3Days = Date.now() + 3 * 24 * 3_600_000
-    expect(formatReset(in3Days)).toBe('3 天后重置')
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+    expect(formatReset(Date.now() + 3 * 24 * 3_600_000)).toBe('3 天后重置')
   })
 })
 
