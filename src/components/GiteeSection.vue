@@ -79,7 +79,7 @@ function formatDate(ms: number): string {
     empty-text="未配置 GITEE_AI_API_KEY"
   >
     <template v-if="data">
-      <div class="stack stack--tight">
+      <div class="grid-cards grid-cards--wide">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
