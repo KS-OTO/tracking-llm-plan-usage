@@ -83,7 +83,7 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
     empty-text="未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY"
   >
     <template v-if="data">
-      <t-space direction="vertical" size="large" class="accounts">
+      <div class="stack">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
@@ -150,36 +150,30 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
           />
 
           <template v-else>
-            <t-row :gutter="[16, 16]">
-              <t-col
-                v-for="window in account.windows"
-                :key="window.window"
-                :xs="24"
-                :sm="12"
-                :lg="6"
-              >
-                <div class="window-block">
-                  <t-space align="center" justify="space-between" class="window-head">
-                    <strong>{{ PLAN_WINDOW_LABELS[window.window] ?? window.window }}</strong>
-                    <span class="muted">{{ formatReset(window.resetTime) }}</span>
-                  </t-space>
-                  <t-progress
-                    :percentage="Math.round(ratioOf(window.used, window.quota))"
-                    :status="progressStatus(ratioOf(window.used, window.quota))"
-                    :label="false"
-                  />
-                  <t-space align="center" justify="space-between" class="window-meta">
-                    <span class="num"
-                      >{{ formatTokens(window.used) }} / {{ formatTokens(window.quota) }}</span
-                    >
-                    <span class="num">{{ ratioOf(window.used, window.quota).toFixed(1) }}%</span>
-                  </t-space>
-                  <div class="muted window-foot">
-                    重置 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}
-                  </div>
+            <div class="grid-metrics">
+              <div v-for="window in account.windows" :key="window.window" class="window-block">
+                <t-space align="center" justify="space-between" class="window-head">
+                  <strong>{{ PLAN_WINDOW_LABELS[window.window] ?? window.window }}</strong>
+                  <span class="muted">{{ formatReset(window.resetTime) }}</span>
+                </t-space>
+                <t-progress
+                  :percentage="Math.round(ratioOf(window.used, window.quota))"
+                  :status="progressStatus(ratioOf(window.used, window.quota))"
+                  :label="false"
+                />
+                <t-space align="center" justify="space-between" class="window-meta">
+                  <span class="num-strong"
+                    >{{ formatTokens(window.used) }} / {{ formatTokens(window.quota) }}</span
+                  >
+                  <span class="num-strong"
+                    >{{ ratioOf(window.used, window.quota).toFixed(1) }}%</span
+                  >
+                </t-space>
+                <div class="muted window-foot">
+                  重置 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}
                 </div>
-              </t-col>
-            </t-row>
+              </div>
+            </div>
 
             <div v-if="account.codingPlan" class="coding-block">
               <t-space align="center" size="small" class="section-head">
@@ -197,115 +191,46 @@ function totalOf(account: NonNullable<VolcPlanResponse['accounts']>[number]): st
                   {{ account.codingPlan.status }}
                 </t-tag>
               </t-space>
-              <t-row v-if="account.codingPlan.windows.length > 0" :gutter="[16, 16]">
-                <t-col
+              <div v-if="account.codingPlan.windows.length > 0" class="grid-metrics">
+                <div
                   v-for="window in account.codingPlan.windows"
                   :key="window.level"
-                  :xs="24"
-                  :sm="12"
-                  :lg="6"
+                  class="window-block"
                 >
-                  <div class="window-block">
-                    <t-space align="center" justify="space-between" class="window-head">
-                      <strong>{{ codingWindowLabel(window.level) }}</strong>
-                      <span class="muted">{{ formatReset(window.resetTime) }}</span>
-                    </t-space>
-                    <t-progress
-                      :percentage="Math.round(Math.min(100, window.percent))"
-                      :status="progressStatus(window.percent)"
-                      :label="false"
-                    />
-                    <t-space align="center" justify="space-between" class="window-meta">
-                      <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
-                      <span class="num">{{ window.percent.toFixed(1) }}%</span>
-                    </t-space>
-                    <div class="muted window-foot">
-                      重置于 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}
-                    </div>
+                  <t-space align="center" justify="space-between" class="window-head">
+                    <strong>{{ codingWindowLabel(window.level) }}</strong>
+                    <span class="muted">{{ formatReset(window.resetTime) }}</span>
+                  </t-space>
+                  <t-progress
+                    :percentage="Math.round(Math.min(100, window.percent))"
+                    :status="progressStatus(window.percent)"
+                    :label="false"
+                  />
+                  <t-space align="center" justify="space-between" class="window-meta">
+                    <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
+                    <span class="num">{{ window.percent.toFixed(1) }}%</span>
+                  </t-space>
+                  <div class="muted window-foot">
+                    重置于 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}
                   </div>
-                </t-col>
-              </t-row>
+                </div>
+              </div>
               <t-empty v-else description="无 Coding Plan 额度数据（订阅可能已回收或未开通）" />
             </div>
           </template>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: var(--td-font-size-body-large);
-}
-
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.key-hint-secondary {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.detail-block {
-  margin-bottom: var(--td-size-4);
-}
-
-.window-block {
-  padding: var(--td-size-5) var(--td-size-6);
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
-}
-
-.window-head {
-  margin-bottom: 8px;
-}
-
-.window-meta {
-  margin-top: 8px;
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.window-foot {
-  margin-top: 4px;
-}
-
+/* 布局与卡片内公共块统一在 assets/layout.css，此处仅保留本区块特有样式 */
 .coding-block {
-  margin-top: 16px;
+  margin-top: var(--td-size-6);
 }
 
 .section-head {
-  margin-bottom: 12px;
-}
-
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
+  margin-bottom: var(--td-size-5);
 }
 </style>

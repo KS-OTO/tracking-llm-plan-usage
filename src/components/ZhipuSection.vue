@@ -110,7 +110,7 @@ const packageRowsByHint = computed(() => {
     empty-text="未配置 ZHIPU_API_KEY"
   >
     <template v-if="data">
-      <t-space direction="vertical" size="large" class="accounts">
+      <div class="stack">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
@@ -167,7 +167,7 @@ const packageRowsByHint = computed(() => {
               >
                 <template #name="{ row }">
                   <div>{{ row._name }}</div>
-                  <div class="muted scene">{{ row._scene }}</div>
+                  <div class="muted text-narrow">{{ row._scene }}</div>
                 </template>
                 <template #type="{ row }">{{ packageTypeLabel(row.type) }}</template>
                 <template #total="{ row }">{{ formatTokens(row.tokensMagnitude) }}</template>
@@ -192,141 +192,65 @@ const packageRowsByHint = computed(() => {
           />
 
           <template v-else>
-            <t-row
+            <div
               v-if="
                 variant !== 'balance' && account.codingPlan && account.codingPlan.windows.length > 0
               "
-              :gutter="[16, 16]"
+              class="grid-metrics"
             >
-              <t-col
+              <div
                 v-for="window in account.codingPlan.windows"
                 :key="window.window"
-                :xs="24"
-                :sm="12"
+                class="window-block"
               >
-                <div class="window-block">
-                  <t-space align="center" justify="space-between" class="window-head">
-                    <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
-                    <span class="muted">{{ formatReset(window.nextResetTime) }}</span>
-                  </t-space>
-                  <t-progress
-                    :percentage="Math.round(Math.min(100, window.percentage))"
-                    :status="progressStatus(window.percentage)"
-                    :label="false"
-                  />
-                  <t-space align="center" justify="space-between" class="window-meta">
-                    <span class="num"
-                      >{{ formatTokens(window.used) }} / {{ formatTokens(window.total) }}</span
-                    >
-                    <span class="num">{{ window.percentage.toFixed(1) }}%</span>
-                  </t-space>
-                  <div class="muted window-foot">
-                    剩余 {{ formatTokens(window.remaining) }} · 重置于
-                    {{ window.nextResetTime > 0 ? formatDateTime(window.nextResetTime) : '—' }}
-                  </div>
+                <t-space align="center" justify="space-between" class="window-head">
+                  <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
+                  <span class="muted">{{ formatReset(window.nextResetTime) }}</span>
+                </t-space>
+                <t-progress
+                  :percentage="Math.round(Math.min(100, window.percentage))"
+                  :status="progressStatus(window.percentage)"
+                  :label="false"
+                />
+                <t-space align="center" justify="space-between" class="window-meta">
+                  <span class="num-strong"
+                    >{{ formatTokens(window.used) }} / {{ formatTokens(window.total) }}</span
+                  >
+                  <span class="num-strong">{{ window.percentage.toFixed(1) }}%</span>
+                </t-space>
+                <div class="muted window-foot">
+                  剩余 {{ formatTokens(window.remaining) }} · 重置于
+                  {{ window.nextResetTime > 0 ? formatDateTime(window.nextResetTime) : '—' }}
                 </div>
-              </t-col>
-            </t-row>
+              </div>
+            </div>
             <t-empty
               v-else-if="variant !== 'balance'"
               description="未查询到 Coding Plan 额度（可能未订阅）"
             />
 
             <t-divider v-if="variant !== 'plan'" align="left">余额</t-divider>
-            <t-row v-if="variant !== 'plan'" :gutter="[16, 16]">
-              <t-col :xs="12" :sm="8" :lg="6">
-                <t-statistic
-                  title="可用余额"
-                  :value="account.balance?.availableBalance ?? 0"
-                  :decimal-places="2"
-                  suffix="CNY"
-                />
-              </t-col>
-              <t-col :xs="12" :sm="8" :lg="6">
-                <t-statistic
-                  title="账户余额"
-                  :value="account.balance?.balance ?? 0"
-                  :decimal-places="2"
-                  suffix="CNY"
-                />
-              </t-col>
-            </t-row>
+            <div v-if="variant !== 'plan'" class="grid-metrics">
+              <t-statistic
+                title="可用余额"
+                :value="account.balance?.availableBalance ?? 0"
+                :decimal-places="2"
+                suffix="CNY"
+              />
+              <t-statistic
+                title="账户余额"
+                :value="account.balance?.balance ?? 0"
+                :decimal-places="2"
+                suffix="CNY"
+              />
+            </div>
           </template>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-
-.window-block {
-  padding: var(--td-size-5) var(--td-size-6);
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
-}
-
-.window-head {
-  margin-bottom: 8px;
-}
-
-.window-meta {
-  margin-top: 8px;
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.window-foot {
-  margin-top: 4px;
-}
-
-.scene {
-  max-width: 220px;
-  white-space: normal;
-}
-
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: var(--td-font-size-body-large);
-}
-
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.key-hint-secondary {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.detail-block {
-  margin-bottom: var(--td-size-4);
-}
+/* 布局与卡片内公共块统一在 assets/layout.css，此处无区块特有样式 */
 </style>

@@ -49,18 +49,13 @@ function expiryLabel(iso: string | null): string {
     empty-text="未配置 OPENROUTER_API_KEY"
   >
     <template #actions>
-      <a
-        class="muted console-link"
-        href="https://openrouter.ai/credits"
-        target="_blank"
-        rel="noreferrer"
-      >
+      <a class="muted" href="https://openrouter.ai/credits" target="_blank" rel="noreferrer">
         控制台 ↗
       </a>
     </template>
 
     <template v-if="data">
-      <t-space direction="vertical" size="medium" class="accounts">
+      <div class="stack stack--tight">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
@@ -112,90 +107,36 @@ function expiryLabel(iso: string | null): string {
             :max-line="5"
           />
 
-          <t-row v-else :gutter="[16, 16]">
-            <t-col :xs="12" :sm="8">
-              <t-statistic
-                title="剩余额度"
-                :value="account.balance"
-                :decimal-places="2"
-                suffix="USD"
-                :color="
-                  account.limitRemaining !== null && account.limitRemaining <= 1 ? 'red' : undefined
-                "
-              />
-            </t-col>
-            <t-col v-if="account.limit !== null" :xs="12" :sm="8">
-              <t-statistic
-                title="限额剩余"
-                :value="account.limitRemaining ?? 0"
-                :decimal-places="2"
-                suffix="USD"
-              />
-            </t-col>
-            <t-col :xs="12" :sm="8">
-              <t-statistic
-                title="今日用量"
-                :value="account.usageDaily"
-                :decimal-places="2"
-                suffix="USD"
-              />
-            </t-col>
-          </t-row>
+          <div v-else class="grid-metrics">
+            <t-statistic
+              title="剩余额度"
+              :value="account.balance"
+              :decimal-places="2"
+              suffix="USD"
+              :color="
+                account.limitRemaining !== null && account.limitRemaining <= 1 ? 'red' : undefined
+              "
+            />
+            <t-statistic
+              v-if="account.limit !== null"
+              title="限额剩余"
+              :value="account.limitRemaining ?? 0"
+              :decimal-places="2"
+              suffix="USD"
+            />
+            <t-statistic
+              title="今日用量"
+              :value="account.usageDaily"
+              :decimal-places="2"
+              suffix="USD"
+            />
+          </div>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: var(--td-font-size-body-large);
-}
-
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.key-hint-secondary {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.detail-block {
-  margin-bottom: var(--td-size-4);
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-}
-
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: var(--td-font-size-body-small);
-}
-
-.console-link {
-  font-size: var(--td-font-size-body-small);
-}
+/* 布局与卡片内公共块统一在 assets/layout.css，此处无区块特有样式 */
 </style>

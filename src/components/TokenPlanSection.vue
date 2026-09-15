@@ -121,7 +121,7 @@ function packageRows(packages: TokenPlanSharedPackage[] | null) {
     empty-text="未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY 或 ALIYUN_TOKENPLAN_COOKIE"
   >
     <template v-if="data">
-      <t-space direction="vertical" size="large" class="accounts">
+      <div class="stack">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
@@ -301,107 +301,37 @@ function packageRows(packages: TokenPlanSharedPackage[] | null) {
               :max-line="4"
             />
 
-            <div class="personal-head">
+            <div class="account-head">
               <strong>个人版套餐用量</strong>
             </div>
-            <t-row v-if="'data' in account.personal" :gutter="[16, 16]">
-              <t-col
+            <div v-if="'data' in account.personal" class="grid-metrics">
+              <div
                 v-for="item in personalWindows(account.personal.data)"
                 :key="item.key"
-                :xs="24"
-                :md="12"
+                class="window-block"
               >
-                <div class="window-block">
-                  <t-space align="center" justify="space-between" class="window-head">
-                    <strong>{{ item.label }}</strong>
-                    <span class="muted">{{ formatReset(item.resetTime) }}</span>
-                  </t-space>
-                  <t-progress
-                    :percentage="Math.round(Math.min(100, item.percent))"
-                    :status="progressStatus(item.percent)"
-                    :label="false"
-                  />
-                  <t-space align="center" justify="space-between" class="window-meta">
-                    <span class="muted">已用 {{ item.percent.toFixed(1) }}%</span>
-                    <span class="num">{{ item.percent.toFixed(1) }}%</span>
-                  </t-space>
-                </div>
-              </t-col>
-            </t-row>
+                <t-space align="center" justify="space-between" class="window-head">
+                  <strong>{{ item.label }}</strong>
+                  <span class="muted">{{ formatReset(item.resetTime) }}</span>
+                </t-space>
+                <t-progress
+                  :percentage="Math.round(Math.min(100, item.percent))"
+                  :status="progressStatus(item.percent)"
+                  :label="false"
+                />
+                <t-space align="center" justify="space-between" class="window-meta">
+                  <span class="muted">已用 {{ item.percent.toFixed(1) }}%</span>
+                  <span class="num">{{ item.percent.toFixed(1) }}%</span>
+                </t-space>
+              </div>
+            </div>
           </template>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: var(--td-font-size-body-large);
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-}
-
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.key-hint-secondary {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
-
-.window-block {
-  padding: var(--td-size-5) var(--td-size-6);
-  background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
-}
-
-.window-head {
-  margin-bottom: 8px;
-}
-
-.window-meta {
-  margin-top: 8px;
-}
-
-.personal-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
-
-.detail-block {
-  margin-bottom: var(--td-size-4);
-}
+/* 布局与卡片内公共块统一在 assets/layout.css，此处无区块特有样式 */
 </style>

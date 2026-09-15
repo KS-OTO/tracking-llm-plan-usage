@@ -106,23 +106,66 @@ test.describe('dashboard smoke', () => {
     await expect(html).not.toHaveAttribute('theme-mode', 'dark')
   })
 
-  test('responsive: subscription grid reflows between desktop and mobile', async ({ page }) => {
+  /**
+   * 布局回归：卡片宽度只能由 assets/layout.css 的网格原语决定。
+   * 断言的是「不变量」而不是具体像素值，因此对断点调整保持鲁棒。
+   *
+   * 锁定两个历史 bug：
+   * 1) .app-main 用 `margin:0 auto` 在 t-layout（flex column）下压过了 align-items:stretch，
+   *    主容器退化为「按内容收缩」——1440 视口实测仅 1046px，内层网格随之整体塌陷
+   *    （扩展平台卡片只剩 232px）。修复：显式 width:100%。
+   * 2) 早期用 t-row/t-col 按 24 列书写，而 TDesign 栅格是 12 列，所有断点错位一倍，
+   *    同一屏里同时出现满宽卡 / 2-3 卡 / 2 卡，且同排卡片宽度对不齐。
+   */
+  test('responsive: shell fills viewport and same-row cards share one width', async ({ page }) => {
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
     await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
       { timeout: 30_000 },
     )
 
-    // 桌面（≥992px）：区块卡片渲染（限定可见面板，v-show 隐藏面板的卡片不算）
-    await page.setViewportSize({ width: 1440, height: 900 })
-    const cards = page.locator('.t-card:visible')
-    await expect(cards.first()).toBeVisible({ timeout: 10_000 })
-    const desktopCount = await cards.count()
-    expect(desktopCount).toBeGreaterThan(0)
+    const shell = page.locator('.app-main')
+    /** 可见网格单元的取整宽度（v-show 隐藏面板里的元素 offsetParent 为 null，需排除）。 */
+    const cellWidths = (): Promise<number[]> =>
+      page.$$eval<number[], HTMLElement>('.grid-sections > *', (nodes) =>
+        nodes
+          .filter((node) => node.offsetParent !== null)
+          .map((node) => Math.round(node.getBoundingClientRect().width)),
+      )
+    const shellWidth = async (): Promise<number> =>
+      Math.round((await shell.boundingBox())?.width ?? 0)
 
-    // 手机（<768px）：单列布局，页面仍可用
+    // 桌面 1440：外壳撑满视口（未被内容宽度收缩），同 Tab 内区块卡一律等宽
+    await page.setViewportSize({ width: 1440, height: 900 })
+    expect(await shellWidth()).toBe(1440)
+    const desktop = await cellWidths()
+    expect(desktop.length).toBeGreaterThan(1)
+    expect(new Set(desktop).size).toBe(1)
+
+    // 总览 Tab 曾是同排不等宽的重灾区（旧写 `:lg="10"` / `:lg="7"` / `:lg="7"`
+    // 在 12 列栅格下等于 83% / 58% / 58%），单独锁一遍
+    await page.locator('.t-menu__item', { hasText: '总览' }).click()
+    await expect(page.getByText('平台导航（点击直达）')).toBeVisible({ timeout: 30_000 })
+    const overview = await cellWidths()
+    expect(overview.length).toBe(3)
+    expect(new Set(overview).size).toBe(1)
+
+    // 平板 1024：两列，仍然等宽
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
+    await expect(
+      page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first(),
+    ).toBeVisible()
+    await page.setViewportSize({ width: 1024, height: 900 })
+    const tablet = await cellWidths()
+    expect(new Set(tablet).size).toBe(1)
+
+    // 手机 375：单列，卡片必须撑满容器内容宽（视口减去左右 24px 内边距）
     await page.setViewportSize({ width: 375, height: 667 })
+    expect(await shellWidth()).toBe(375)
     await expect(page.getByText('LLM 用量监控', { exact: true }).first()).toBeVisible()
+    const mobile = await cellWidths()
+    expect(new Set(mobile).size).toBe(1)
+    expect(mobile[0]).toBe(375 - 2 * 24)
   })
 
   test('back-to-top appears after scrolling and returns to top', async ({ page }) => {

@@ -71,7 +71,7 @@ function availableCount(account: NonNullable<AliyunPackagesResponse['accounts']>
     empty-text="未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY"
   >
     <template v-if="data">
-      <t-space direction="vertical" size="medium" class="accounts">
+      <div class="stack stack--tight">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
@@ -129,65 +129,16 @@ function availableCount(account: NonNullable<AliyunPackagesResponse['accounts']>
             :message="account.error"
             :max-line="5"
           />
-          <t-row v-else :gutter="[16, 16]">
-            <t-col :xs="12" :sm="8">
-              <t-statistic title="资源包实例" :value="account.totalCount ?? 0" />
-            </t-col>
-            <t-col :xs="12" :sm="8">
-              <t-statistic title="可用实例" :value="availableCount(account)" />
-            </t-col>
-          </t-row>
+          <div v-else class="grid-metrics">
+            <t-statistic title="资源包实例" :value="account.totalCount ?? 0" />
+            <t-statistic title="可用实例" :value="availableCount(account)" />
+          </div>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-}
-
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: var(--td-font-size-body-large);
-}
-
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.key-hint-secondary {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.detail-block {
-  margin-bottom: var(--td-size-4);
-}
+/* 布局与卡片内公共块统一在 assets/layout.css，此处无区块特有样式 */
 </style>
