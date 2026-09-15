@@ -171,4 +171,43 @@ describe('PlansSection', () => {
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
     expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('sk-9****failed')])
   })
+
+  it('wraps the stacked windows in .window-list so parallel accounts line up', () => {
+    // 两个账号各 3 个窗口：其中一个多一行「上游限流」说明
+    const group: ExtrasPlanGroup = {
+      provider: 'OpenCode Go',
+      accounts: [
+        {
+          keyHint: 'sk-0****go',
+          provider: 'OpenCode Go',
+          windows: [
+            { window: 'fiveHour', percent: 0, resetTime: 0 },
+            { window: 'weekly', percent: 19, resetTime: 0 },
+            { window: 'monthly', percent: 5, resetTime: 0 },
+          ],
+        },
+        {
+          keyHint: 'sk-1****go',
+          provider: 'OpenCode Go',
+          windows: [
+            { window: 'fiveHour', percent: 0, resetTime: 0 },
+            { window: 'weekly', percent: 100, resetTime: 0, status: 'rate-limited' },
+            { window: 'monthly', percent: 5, resetTime: 0 },
+          ],
+        },
+      ],
+    }
+    const wrapper = mountWithTDesign(PlansSection, { props: { group } })
+
+    // .window-list 负责「间距 + N 个窗口块各占 1/N 高度」（见 assets/layout.css）：
+    // 曾经窗口块是 .account-group 的直接子元素、靠 `.window-block + .window-block` 的
+    // margin 拉间距，margin 会泄漏进网格项，并排账号的窗口块因此逐块错位。
+    const lists = wrapper.findAll('.window-list')
+    expect(lists).toHaveLength(2)
+    for (const list of lists) {
+      const children = Array.from(list.element.children)
+      expect(children).toHaveLength(3)
+      expect(children.every((child) => child.classList.contains('window-block'))).toBe(true)
+    }
+  })
 })

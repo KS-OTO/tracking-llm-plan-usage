@@ -3,6 +3,10 @@
  * 区块统一外壳：TDesign Card 承载，统一 loading / error / notConfigured / empty 状态。
  *
  * 状态优先级：loading → error(有数据时降级为顶部横幅) → 未配置(中性空态) → 空数据 → 内容。
+ *
+ * `section-card` 类（定义在 assets/layout.css）让 Card 把所在网格单元的高度继续往下传：
+ * body 变纵向弹性容器、卡内 .grid-cards 吃掉剩余高度，于是「同排区块卡等高」会
+ * 一路传导到卡内的账号卡与窗口块，不再出现卡内子卡片参差。
  */
 defineProps<{
   title: string
@@ -18,7 +22,7 @@ defineProps<{
 </script>
 
 <template>
-  <t-card :title="title" :subtitle="subtitle" header-bordered bordered>
+  <t-card class="section-card" :title="title" :subtitle="subtitle" header-bordered bordered>
     <template #actions>
       <slot name="actions" />
     </template>
