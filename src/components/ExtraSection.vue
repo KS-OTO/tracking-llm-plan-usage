@@ -1,36 +1,25 @@
 <script setup lang="ts">
+/**
+ * 扩展平台 —— 余额类（余额账户 Tab）：StepFun / SiliconFlow / OpenRouter / Novita。
+ *
+ * 套餐类扩展平台（Kimi / MiniMax / OpenCode Go）已随 `/api/plans` 归入「套餐订阅」Tab，
+ * 不再出现在这里。
+ *
+ * 卡片只留「余额」这一个高优先级读数；总额/已用/备注属于基本信息，收进「详情」弹窗。
+ */
 import type { ExtrasResponse } from '../types'
-import { isFailedAccount } from '../types'
-import { formatDateTime, formatMoney, formatReset, progressStatus } from '../utils'
+import { accountTitle, isFailedAccount } from '../types'
+import { formatMoney } from '../utils'
 
 import AccountSection from './AccountSection.vue'
+import DetailDialog from './DetailDialog.vue'
 
 defineProps<{
   data: ExtrasResponse | null
   loading: boolean
   error: string | null
+  notConfigured?: boolean
 }>()
-
-const WINDOW_LABELS: Record<string, string> = {
-  fiveHour: '5 小时窗口',
-  weekly: '每周窗口',
-  monthly: '30 天窗口',
-}
-
-/** 上游窗口状态的展示文案；未收录的状态原样回退显示，不隐藏信息。 */
-const WINDOW_STATUS_LABELS: Record<string, string> = {
-  'rate-limited': '上游限流中',
-}
-
-function windowStatusLabel(status: string): string {
-  return WINDOW_STATUS_LABELS[status] ?? status
-}
-
-function windowStatusNote(status: string): string {
-  return status === 'rate-limited'
-    ? '该窗口已被上游限流，期间的请求可能被拒绝；百分比仍为已用额度'
-    : `上游返回的窗口状态：${status}`
-}
 </script>
 
 <template>
@@ -39,8 +28,9 @@ function windowStatusNote(status: string): string {
     :subtitle="`${data?.configured ?? 0} 凭据`"
     :loading="loading"
     :error="error"
+    :not-configured="notConfigured"
     :empty="data?.configured === 0"
-    empty-text="未配置扩展平台密钥（STEPFUN / SILICONFLOW / OPENROUTER / NOVITA / KIMI / MINIMAX / OPENCODE_GO）"
+    empty-text="未配置扩展平台密钥（STEPFUN / SILICONFLOW / OPENROUTER / NOVITA）"
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
@@ -57,114 +47,52 @@ function windowStatusNote(status: string): string {
               :sm="12"
               :lg="8"
             >
-              <t-card size="small" header-bordered>
-                <template #header>
-                  <t-tag size="small" variant="light-outline" theme="primary">
+              <div class="account-group">
+                <div class="account-head">
+                  <span v-if="account.label" class="account-name">{{ account.label }}</span>
+                  <span class="key-hint" :class="{ 'key-hint-secondary': account.label }">
                     {{ account.keyHint }}
-                  </t-tag>
-                </template>
-                <t-alert
-                  v-if="isFailedAccount(account)"
-                  theme="error"
-                  :title="`账号 ${account.keyHint} 查询失败`"
-                  :message="account.error"
-                  :max-line="5"
-                />
-                <template v-else>
-                  <t-statistic
-                    title="余额"
-                    :value="account.balance"
-                    :decimal-places="2"
-                    :suffix="account.unit"
-                  />
-                  <t-descriptions
-                    v-if="account.total !== undefined"
-                    :column="1"
-                    size="small"
-                    layout="vertical"
-                    class="extra-detail"
+                  </span>
+                  <DetailDialog
+                    v-if="!isFailedAccount(account)"
+                    :title="accountTitle(account)"
+                    :subtitle="account.label ? account.keyHint : undefined"
                   >
-                    <t-descriptions-item label="总额">
-                      {{ formatMoney(account.total, account.unit) }}
-                    </t-descriptions-item>
-                    <t-descriptions-item label="已用">
-                      {{ formatMoney(account.used ?? 0, account.unit) }}
-                    </t-descriptions-item>
-                  </t-descriptions>
-                  <div v-if="account.note" class="muted extra-note">{{ account.note }}</div>
-                </template>
-              </t-card>
-            </t-col>
-          </t-row>
-        </template>
+                    <t-descriptions :column="1" size="small" class="detail-meta">
+                      <t-descriptions-item label="别名">
+                        {{ account.label || '未配置（用 *_LABEL / *_LABEL_N 设置）' }}
+                      </t-descriptions-item>
+                      <t-descriptions-item label="平台">
+                        {{ group.provider }}
+                      </t-descriptions-item>
+                      <t-descriptions-item v-if="account.total !== undefined" label="总额">
+                        {{ formatMoney(account.total, account.unit) }}
+                      </t-descriptions-item>
+                      <t-descriptions-item v-if="account.total !== undefined" label="已用">
+                        {{ formatMoney(account.used ?? 0, account.unit) }}
+                      </t-descriptions-item>
+                      <t-descriptions-item v-if="account.note" label="备注">
+                        {{ account.note }}
+                      </t-descriptions-item>
+                    </t-descriptions>
+                  </DetailDialog>
+                </div>
 
-        <template v-for="group in data.plans" :key="group.provider">
-          <t-divider align="left">
-            <t-space align="center" size="small">
-              <strong>{{ group.provider }}</strong>
-              <span class="muted">Token Plan · {{ group.accounts.length }} 账号</span>
-            </t-space>
-          </t-divider>
-          <t-row :gutter="[16, 16]">
-            <t-col
-              v-for="account in group.accounts"
-              :key="account.keyHint"
-              :xs="24"
-              :sm="12"
-              :lg="8"
-            >
-              <t-card size="small" header-bordered>
-                <template #header>
-                  <t-tag size="small" variant="light-outline" theme="primary">
-                    {{ account.keyHint }}
-                  </t-tag>
-                </template>
                 <t-alert
                   v-if="isFailedAccount(account)"
                   theme="error"
-                  :title="`账号 ${account.keyHint} 查询失败`"
+                  :title="`${accountTitle(account)} 查询失败`"
                   :message="account.error"
                   :max-line="5"
                 />
-                <template v-else>
-                  <t-row v-if="account.windows.length > 0" :gutter="[16, 16]">
-                    <t-col v-for="window in account.windows" :key="window.window" :xs="24">
-                      <div class="window-block">
-                        <t-space align="center" justify="space-between" class="window-head">
-                          <t-space align="center" size="small">
-                            <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
-                            <t-tag
-                              v-if="window.status"
-                              size="small"
-                              theme="warning"
-                              variant="light-outline"
-                            >
-                              {{ windowStatusLabel(window.status) }}
-                            </t-tag>
-                          </t-space>
-                          <span class="muted">{{ formatReset(window.resetTime) }}</span>
-                        </t-space>
-                        <t-progress
-                          :percentage="Math.round(Math.min(100, window.percent))"
-                          :status="progressStatus(window.percent)"
-                          :label="false"
-                        />
-                        <t-space align="center" justify="space-between" class="window-meta">
-                          <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
-                          <span class="num">{{ window.percent.toFixed(1) }}%</span>
-                        </t-space>
-                        <div v-if="window.status" class="muted window-foot">
-                          {{ windowStatusNote(window.status) }}
-                        </div>
-                        <div v-if="window.resetTime > 0" class="muted window-foot">
-                          重置于 {{ formatDateTime(window.resetTime) }}
-                        </div>
-                      </div>
-                    </t-col>
-                  </t-row>
-                  <t-empty v-else description="无额度数据" />
-                </template>
-              </t-card>
+                <t-statistic
+                  v-else
+                  title="余额"
+                  :value="account.balance"
+                  :decimal-places="2"
+                  :suffix="account.unit"
+                />
+              </div>
             </t-col>
           </t-row>
         </template>
@@ -186,39 +114,43 @@ function windowStatusNote(status: string): string {
   padding: 4px 0;
 }
 
-.window-block {
-  padding: var(--td-size-5) var(--td-size-6);
-  background: var(--td-bg-color-container);
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
   border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+  height: 100%;
 }
 
-.window-head {
-  margin-bottom: 8px;
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
 }
 
-.window-meta {
-  margin-top: 8px;
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
+.account-name {
   font-weight: 600;
+  font-size: var(--td-font-size-body-large);
+}
+
+.key-hint {
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-hint-secondary {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+}
+
+.detail-meta {
+  margin-bottom: var(--td-size-4);
 }
 
 .muted {
   color: var(--td-text-color-placeholder);
   font-size: 12px;
-}
-
-.window-foot {
-  margin-top: 4px;
-}
-
-.extra-detail {
-  margin-top: 8px;
-}
-
-.extra-note {
-  margin-top: 8px;
 }
 </style>

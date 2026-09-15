@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign, openDetail } from './mount'
 
 import VolcPlanSection from '../components/VolcPlanSection.vue'
 import type { VolcPlanResponse } from '../types'
@@ -57,20 +57,32 @@ const fixture: VolcPlanResponse = {
 }
 
 describe('VolcPlanSection', () => {
-  it('renders plan type, window usage and quota from fixture data', () => {
+  it('renders window usage and quota from fixture data', () => {
     const wrapper = mountWithTDesign(VolcPlanSection, {
       props: { data: fixture, loading: false, error: null },
     })
     const text = wrapper.text()
-    expect(text).toContain('AgentPlan 套餐')
     expect(text).toContain('5 小时窗口')
     expect(text).toContain('每周')
     expect(text).toContain('500 / 1.0K')
     expect(text).toContain('9.8K / 10.0K')
-    expect(text).toContain('2026-08-08 ~ 2026-08-14')
-    expect(text).toContain('doubao-pro')
-    expect(text).toContain('套餐内')
-    expect(text).toContain('套餐外')
+    // 套餐类型与调用明细属低优先级信息，已移出卡片
+    expect(text).not.toContain('AgentPlan 套餐')
+    expect(text).not.toContain('doubao-pro')
+  })
+
+  it('moves plan type, detail range and usage table into the detail dialog', async () => {
+    const wrapper = mountWithTDesign(VolcPlanSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('套餐类型')
+    expect(detail).toContain('AgentPlan')
+    expect(detail).toContain('2026-08-08 ~ 2026-08-14')
+    expect(detail).toContain('模型调用明细（2）')
+    expect(detail).toContain('doubao-pro')
+    expect(detail).toContain('套餐内')
+    expect(detail).toContain('套餐外')
   })
 
   it('renders coding plan sub-block with status tag', () => {
@@ -88,8 +100,7 @@ describe('VolcPlanSection', () => {
       props: { data: fixture, loading: false, error: null },
     })
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
-    expect(alerts.length).toBe(1)
-    expect(alerts[0]!.text()).toContain('AKLT****failed')
+    expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('AKLT****failed')])
   })
 
   it('renders neutral empty state (no red alert) when notConfigured', () => {

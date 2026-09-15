@@ -1,14 +1,20 @@
 <script setup lang="ts">
+/**
+ * 模力方舟（Gitee AI）。
+ *
+ * 卡片只留余额三项读数；资源包明细表与代金券（余额 + 券明细）收进「详情」弹窗。
+ */
 import type {
   GiteeBalanceResponse,
   GiteeVoucher,
   GiteeVoucherCoupon,
   GiteeVoucherSlice,
 } from '../types'
-import { accountName, isFailedAccount } from '../types'
+import { accountTitle, isFailedAccount } from '../types'
 import { formatMoney, formatTokens } from '../utils'
 
 import AccountSection from './AccountSection.vue'
+import DetailDialog from './DetailDialog.vue'
 
 defineProps<{
   data: GiteeBalanceResponse | null
@@ -74,124 +80,127 @@ function formatDate(ms: number): string {
   >
     <template v-if="data">
       <t-space direction="vertical" size="medium" class="accounts">
-        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+        <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
-            <t-tag size="small" variant="light-outline" theme="primary">{{
-              accountName(account, i)
-            }}</t-tag>
-            <span class="muted key-hint">{{ account.keyHint }}</span>
+            <span v-if="account.label" class="account-name">{{ account.label }}</span>
+            <span class="key-hint" :class="{ 'key-hint-secondary': account.label }">
+              {{ account.keyHint }}
+            </span>
+            <DetailDialog
+              v-if="!isFailedAccount(account)"
+              :title="accountTitle(account)"
+              :subtitle="account.label ? account.keyHint : undefined"
+            >
+              <t-divider align="left">资源包明细（{{ account.details.length }}）</t-divider>
+              <t-table
+                v-if="account.details.length > 0"
+                :data="account.details"
+                :columns="columns"
+                row-key="ident"
+                max-height="360"
+                size="small"
+              >
+                <template #name="{ row }">{{ row.name || row.ident || '未命名资源包' }}</template>
+                <template #amount="{ row }">{{ formatMoney(row.amount, 'CNY') }}</template>
+                <template #balance="{ row }">{{ formatMoney(row.balance, 'CNY') }}</template>
+              </t-table>
+              <t-empty v-else description="没有资源包" />
+
+              <template v-if="account.voucher">
+                <t-divider align="left">
+                  <span
+                    >代金券（{{
+                      voucherOk(account.voucher) ? account.voucher.data.namespace : '—'
+                    }}）</span
+                  >
+                </t-divider>
+
+                <t-alert
+                  v-if="voucherFailed(account.voucher)"
+                  theme="warning"
+                  title="代金券查询失败"
+                  :message="account.voucher.error"
+                  :max-line="5"
+                />
+                <template v-else-if="voucherOk(account.voucher)">
+                  <t-row :gutter="[16, 16]">
+                    <t-col :xs="24" :sm="12">
+                      <t-statistic
+                        title="现金代金券余额"
+                        :value="account.voucher.data.couponCashBalance"
+                        :decimal-places="2"
+                        suffix="CNY"
+                      />
+                    </t-col>
+                    <t-col :xs="24" :sm="12">
+                      <t-statistic
+                        title="算力代金券余额"
+                        :value="account.voucher.data.couponComputeBalance"
+                        :format="formatTokens"
+                      />
+                    </t-col>
+                  </t-row>
+
+                  <t-table
+                    v-if="account.voucher.data.coupons.length > 0"
+                    :data="account.voucher.data.coupons"
+                    :columns="voucherColumns"
+                    row-key="id"
+                    max-height="300"
+                    size="small"
+                  >
+                    <template #catalog="{ row }">
+                      <div>{{ row.catalog }}</div>
+                      <div class="muted scene">{{ row.serviceTypes.join(' / ') }}</div>
+                    </template>
+                    <template #amount="{ row }">{{ formatMoney(row.amount, 'CNY') }}</template>
+                    <template #balance="{ row }">{{ formatMoney(row.balance, 'CNY') }}</template>
+                    <template #expiredAt="{ row }">{{ formatDate(row.expiredAt) }}</template>
+                    <template #status="{ row }">
+                      <t-tag size="small" variant="light-outline" :theme="voucherStatus(row).theme">
+                        {{ voucherStatus(row).label }}
+                      </t-tag>
+                    </template>
+                  </t-table>
+                  <t-empty v-else description="没有代金券" />
+                </template>
+              </template>
+            </DetailDialog>
           </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`${accountName(account, i)}（${account.keyHint}）查询失败`"
+            :title="`${accountTitle(account)} 查询失败`"
             :message="account.error"
             :max-line="5"
           />
-          <template v-else>
-            <t-row :gutter="[16, 16]">
-              <t-col :xs="24" :sm="8">
-                <t-statistic
-                  title="剩余余额"
-                  :value="account.balance"
-                  :decimal-places="2"
-                  suffix="CNY"
-                />
-              </t-col>
-              <t-col :xs="24" :sm="8">
-                <t-statistic
-                  title="已使用"
-                  :value="account.usedAmount"
-                  :decimal-places="2"
-                  suffix="CNY"
-                />
-              </t-col>
-              <t-col :xs="24" :sm="8">
-                <t-statistic
-                  title="总金额"
-                  :value="account.totalAmount"
-                  :decimal-places="2"
-                  suffix="CNY"
-                />
-              </t-col>
-            </t-row>
-
-            <t-divider align="left">资源包明细（{{ account.details.length }}）</t-divider>
-            <t-table
-              v-if="account.details.length > 0"
-              :data="account.details"
-              :columns="columns"
-              row-key="ident"
-              max-height="360"
-              size="small"
-            >
-              <template #name="{ row }">{{ row.name || row.ident || '未命名资源包' }}</template>
-              <template #amount="{ row }">{{ formatMoney(row.amount, 'CNY') }}</template>
-              <template #balance="{ row }">{{ formatMoney(row.balance, 'CNY') }}</template>
-            </t-table>
-            <t-empty v-else description="没有资源包" />
-
-            <template v-if="account.voucher">
-              <t-divider align="left">
-                <span
-                  >代金券（{{
-                    voucherOk(account.voucher) ? account.voucher.data.namespace : '—'
-                  }}）</span
-                >
-              </t-divider>
-
-              <t-alert
-                v-if="voucherFailed(account.voucher)"
-                theme="warning"
-                title="代金券查询失败"
-                :message="account.voucher.error"
-                :max-line="5"
+          <t-row v-else :gutter="[16, 16]">
+            <t-col :xs="24" :sm="8">
+              <t-statistic
+                title="剩余余额"
+                :value="account.balance"
+                :decimal-places="2"
+                suffix="CNY"
               />
-              <template v-else-if="voucherOk(account.voucher)">
-                <t-row :gutter="[16, 16]">
-                  <t-col :xs="24" :sm="12">
-                    <t-statistic
-                      title="现金代金券余额"
-                      :value="account.voucher.data.couponCashBalance"
-                      :decimal-places="2"
-                      suffix="CNY"
-                    />
-                  </t-col>
-                  <t-col :xs="24" :sm="12">
-                    <t-statistic
-                      title="算力代金券余额"
-                      :value="account.voucher.data.couponComputeBalance"
-                      :format="formatTokens"
-                    />
-                  </t-col>
-                </t-row>
-
-                <t-table
-                  v-if="account.voucher.data.coupons.length > 0"
-                  :data="account.voucher.data.coupons"
-                  :columns="voucherColumns"
-                  row-key="id"
-                  max-height="300"
-                  size="small"
-                >
-                  <template #catalog="{ row }">
-                    <div>{{ row.catalog }}</div>
-                    <div class="muted scene">{{ row.serviceTypes.join(' / ') }}</div>
-                  </template>
-                  <template #amount="{ row }">{{ formatMoney(row.amount, 'CNY') }}</template>
-                  <template #balance="{ row }">{{ formatMoney(row.balance, 'CNY') }}</template>
-                  <template #expiredAt="{ row }">{{ formatDate(row.expiredAt) }}</template>
-                  <template #status="{ row }">
-                    <t-tag size="small" variant="light-outline" :theme="voucherStatus(row).theme">
-                      {{ voucherStatus(row).label }}
-                    </t-tag>
-                  </template>
-                </t-table>
-                <t-empty v-else description="没有代金券" />
-              </template>
-            </template>
-          </template>
+            </t-col>
+            <t-col :xs="24" :sm="8">
+              <t-statistic
+                title="已使用"
+                :value="account.usedAmount"
+                :decimal-places="2"
+                suffix="CNY"
+              />
+            </t-col>
+            <t-col :xs="24" :sm="8">
+              <t-statistic
+                title="总金额"
+                :value="account.totalAmount"
+                :decimal-places="2"
+                suffix="CNY"
+              />
+            </t-col>
+          </t-row>
         </div>
       </t-space>
     </template>
@@ -225,8 +234,20 @@ function formatDate(ms: number): string {
   flex-wrap: wrap;
   margin-bottom: var(--td-size-4);
 }
+
+.account-name {
+  font-weight: 600;
+  font-size: var(--td-font-size-body-large);
+}
+
 .key-hint {
   font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-hint-secondary {
   color: var(--td-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

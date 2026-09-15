@@ -1,10 +1,18 @@
 <script setup lang="ts">
+/**
+ * 智谱 GLM。
+ *
+ * - plan 变体（套餐订阅 Tab）：卡片只留 Coding Plan 窗口额度；等级、控制台入口、
+ *   账户余额与资源包明细收进「详情」弹窗。
+ * - balance 变体（余额账户 Tab）：卡片留余额读数；资源包明细表收进「详情」弹窗。
+ */
 import { computed } from 'vue'
 import type { ZhipuPackagesResponse } from '../types'
-import { accountName, isFailedAccount } from '../types'
+import { accountTitle, isFailedAccount } from '../types'
 import { formatDateTime, formatReset, formatTokens, progressStatus } from '../utils'
 
 import AccountSection from './AccountSection.vue'
+import DetailDialog from './DetailDialog.vue'
 
 const props = defineProps<{
   data: ZhipuPackagesResponse | null
@@ -18,11 +26,6 @@ const props = defineProps<{
 const WINDOW_LABELS: Record<string, string> = {
   fiveHour: '5 小时窗口',
   weekly: '每周窗口',
-}
-
-/** 信用支付状态 → 数值占位（t-statistic 值必须为 number，文本经 format 呈现）。 */
-function creditStatusNumber(status: string): number {
-  return status === 'ENABLE' ? 1 : 0
 }
 
 function creditStatusLabel(status: string): string {
@@ -47,6 +50,9 @@ function packageTypeLabel(type: string): string {
   }
   return type || '—'
 }
+
+/** 别名提示：不同变体对应不同 Tab，提示保持同一份即可（前缀相同）。 */
+const ALIAS_HINT = '未配置（用 ZHIPU_LABEL / ZHIPU_LABEL_N 设置）'
 
 const packageColumns = [
   { colKey: 'name', title: '资源包', width: 180, cell: 'name' },
@@ -105,50 +111,87 @@ const packageRowsByHint = computed(() => {
   >
     <template v-if="data">
       <t-space direction="vertical" size="large" class="accounts">
-        <div v-for="(account, i) in data.accounts" :key="account.keyHint" class="account-group">
+        <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
-            <t-space align="center" size="small" break-line>
-              <t-tag size="small" variant="light-outline" theme="primary">{{
-                accountName(account, i)
-              }}</t-tag>
-              <span class="muted key-hint">{{ account.keyHint }}</span>
-              <t-tag
-                v-if="variant !== 'balance' && !isFailedAccount(account)"
+            <span v-if="account.label" class="account-name">{{ account.label }}</span>
+            <span class="key-hint" :class="{ 'key-hint-secondary': account.label }">
+              {{ account.keyHint }}
+            </span>
+            <DetailDialog
+              v-if="!isFailedAccount(account)"
+              :title="accountTitle(account)"
+              :subtitle="account.label ? account.keyHint : undefined"
+            >
+              <t-descriptions :column="2" size="small" class="detail-block">
+                <t-descriptions-item label="别名">
+                  {{ account.label || ALIAS_HINT }}
+                </t-descriptions-item>
+                <t-descriptions-item label="Key">
+                  <span class="num">{{ account.keyHint }}</span>
+                </t-descriptions-item>
+                <t-descriptions-item label="Coding Plan 等级">
+                  {{ account.codingPlan?.level || '未查询到（可能未订阅）' }}
+                </t-descriptions-item>
+                <t-descriptions-item label="控制台用量页">
+                  <a
+                    href="https://www.bigmodel.cn/coding-plan/personal/usage"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    打开 ↗
+                  </a>
+                </t-descriptions-item>
+                <!-- 余额账户变体：次级金额指标已从卡片移到这里，避免卡片堆满数字 -->
+                <template v-if="variant === 'balance'">
+                  <t-descriptions-item label="信用支付">
+                    {{ creditStatusLabel(account.balance?.creditStatus ?? '') }}
+                  </t-descriptions-item>
+                  <t-descriptions-item label="累计充值">
+                    {{ (account.balance?.rechargeAmount ?? 0).toFixed(2) }} CNY
+                  </t-descriptions-item>
+                  <t-descriptions-item label="赠送金额">
+                    {{ (account.balance?.giveAmount ?? 0).toFixed(2) }} CNY
+                  </t-descriptions-item>
+                </template>
+              </t-descriptions>
+
+              <t-divider align="left">
+                资源包（{{ packageRowsByHint.get(account.keyHint)?.length ?? 0 }}）
+              </t-divider>
+              <t-table
+                :data="packageRowsByHint.get(account.keyHint) ?? []"
+                :columns="packageColumns"
+                row-key="_key"
+                max-height="360"
                 size="small"
-                variant="light-outline"
-                theme="warning"
               >
-                GLM Coding Plan：{{ account.codingPlan?.level || '未知' }}
-              </t-tag>
-            </t-space>
+                <template #name="{ row }">
+                  <div>{{ row._name }}</div>
+                  <div class="muted scene">{{ row._scene }}</div>
+                </template>
+                <template #type="{ row }">{{ packageTypeLabel(row.type) }}</template>
+                <template #total="{ row }">{{ formatTokens(row.tokensMagnitude) }}</template>
+                <template #remaining="{ row }">{{ formatTokens(row.availableBalance) }}</template>
+                <template #expire="{ row }">{{
+                  row.packageExpirationTime ? row.packageExpirationTime.replace('T', ' ') : '—'
+                }}</template>
+              </t-table>
+              <t-empty
+                v-if="(packageRowsByHint.get(account.keyHint)?.length ?? 0) === 0"
+                description="没有生效中的资源包"
+              />
+            </DetailDialog>
           </div>
 
           <t-alert
             v-if="isFailedAccount(account)"
             theme="error"
-            :title="`账号 ${account.keyHint} 查询失败`"
+            :title="`${accountTitle(account)} 查询失败`"
             :message="account.error"
             :max-line="5"
           />
 
           <template v-else>
-            <t-space
-              v-if="variant !== 'balance'"
-              align="center"
-              size="small"
-              break-line
-              class="account-head"
-            >
-              <a
-                class="muted"
-                href="https://www.bigmodel.cn/coding-plan/personal/usage"
-                target="_blank"
-                rel="noreferrer"
-              >
-                控制台用量页 ↗
-              </a>
-            </t-space>
-
             <t-row
               v-if="
                 variant !== 'balance' && account.codingPlan && account.codingPlan.windows.length > 0
@@ -191,7 +234,7 @@ const packageRowsByHint = computed(() => {
 
             <t-divider v-if="variant !== 'plan'" align="left">余额</t-divider>
             <t-row v-if="variant !== 'plan'" :gutter="[16, 16]">
-              <t-col :xs="12" :sm="8" :lg="4">
+              <t-col :xs="12" :sm="8" :lg="6">
                 <t-statistic
                   title="可用余额"
                   :value="account.balance?.availableBalance ?? 0"
@@ -199,7 +242,7 @@ const packageRowsByHint = computed(() => {
                   suffix="CNY"
                 />
               </t-col>
-              <t-col :xs="12" :sm="8" :lg="4">
+              <t-col :xs="12" :sm="8" :lg="6">
                 <t-statistic
                   title="账户余额"
                   :value="account.balance?.balance ?? 0"
@@ -207,53 +250,7 @@ const packageRowsByHint = computed(() => {
                   suffix="CNY"
                 />
               </t-col>
-              <t-col :xs="12" :sm="8" :lg="4">
-                <t-statistic
-                  title="累计充值"
-                  :value="account.balance?.rechargeAmount ?? 0"
-                  :decimal-places="2"
-                  suffix="CNY"
-                />
-              </t-col>
-              <t-col :xs="12" :sm="8" :lg="4">
-                <t-statistic
-                  title="赠送金额"
-                  :value="account.balance?.giveAmount ?? 0"
-                  :decimal-places="2"
-                  suffix="CNY"
-                />
-              </t-col>
-              <t-col :xs="12" :sm="8" :lg="4">
-                <t-statistic
-                  title="信用支付"
-                  :value="creditStatusNumber(account.balance?.creditStatus ?? '')"
-                  :format="() => creditStatusLabel(account.balance?.creditStatus ?? '')"
-                />
-              </t-col>
             </t-row>
-
-            <t-divider v-if="variant !== 'plan'" align="left"
-              >资源包（{{ packageRowsByHint.get(account.keyHint)?.length ?? 0 }}）</t-divider
-            >
-            <t-table
-              v-if="variant !== 'plan'"
-              :data="packageRowsByHint.get(account.keyHint) ?? []"
-              :columns="packageColumns"
-              row-key="_key"
-              max-height="360"
-              size="small"
-            >
-              <template #name="{ row }">
-                <div>{{ row._name }}</div>
-                <div class="muted scene">{{ row._scene }}</div>
-              </template>
-              <template #type="{ row }">{{ packageTypeLabel(row.type) }}</template>
-              <template #total="{ row }">{{ formatTokens(row.tokensMagnitude) }}</template>
-              <template #remaining="{ row }">{{ formatTokens(row.availableBalance) }}</template>
-              <template #expire="{ row }">{{
-                row.packageExpirationTime ? row.packageExpirationTime.replace('T', ' ') : '—'
-              }}</template>
-            </t-table>
           </template>
         </div>
       </t-space>
@@ -264,10 +261,6 @@ const packageRowsByHint = computed(() => {
 <style scoped>
 .accounts {
   width: 100%;
-}
-
-.account-head {
-  margin-bottom: 12px;
 }
 
 .window-block {
@@ -314,6 +307,26 @@ const packageRowsByHint = computed(() => {
   align-items: center;
   gap: var(--td-size-2);
   flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
+}
+
+.account-name {
+  font-weight: 600;
+  font-size: var(--td-font-size-body-large);
+}
+
+.key-hint {
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-hint-secondary {
+  color: var(--td-text-color-placeholder);
+  font-size: 12px;
+}
+
+.detail-block {
   margin-bottom: var(--td-size-4);
 }
 </style>
