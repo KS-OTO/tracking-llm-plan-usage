@@ -167,16 +167,17 @@ const lastUpdatedText = computed(() => {
         <OverviewTab @jump="jumpToAnchor" />
       </div>
       <div v-show="activeTab === 'subscription'">
-        <t-row :gutter="[16, 16]" class="grid-row">
-          <t-col :xs="24" :lg="12" :id="'anchor-volc-plan'">
+        <!-- 区块网格：同一行卡片强制等高、等宽（断点与原语见 assets/layout.css） -->
+        <div class="grid-sections">
+          <div id="anchor-volc-plan">
             <VolcPlanSection
               :data="volcPlan.data"
               :loading="loading && volcPlan.data === null"
               :error="volcPlan.error"
               :not-configured="volcPlan.notConfigured"
             />
-          </t-col>
-          <t-col :xs="24" :lg="12" id="anchor-volc-usage">
+          </div>
+          <div id="anchor-volc-usage">
             <VolcUsageSection
               :data="volcInference.data"
               :loading="loading && volcInference.data === null"
@@ -185,8 +186,8 @@ const lastUpdatedText = computed(() => {
               :model="modelFilter"
               @update:model="onFilterInput"
             />
-          </t-col>
-          <t-col :xs="24" :lg="12" id="anchor-zhipu">
+          </div>
+          <div id="anchor-zhipu">
             <ZhipuSection
               variant="plan"
               :data="zhipu.data"
@@ -194,29 +195,29 @@ const lastUpdatedText = computed(() => {
               :error="zhipu.error"
               :not-configured="zhipu.notConfigured"
             />
-          </t-col>
-          <t-col :xs="24" :lg="12" id="anchor-tokenplan">
+          </div>
+          <div id="anchor-tokenplan">
             <TokenPlanSection
               :data="tokenPlan.data"
               :loading="loading && tokenPlan.data === null"
               :error="tokenPlan.error"
               :not-configured="tokenPlan.notConfigured"
             />
-          </t-col>
+          </div>
           <!-- 订阅套餐（Kimi / MiniMax / OpenCode Go）：同为按窗口计的订阅额度，归入「套餐订阅」 -->
-          <t-col :xs="24" id="anchor-plans">
+          <div id="anchor-plans">
             <PlansSection
               :data="plans.data"
               :loading="loading && plans.data === null"
               :error="plans.error"
               :not-configured="plans.notConfigured"
             />
-          </t-col>
-        </t-row>
+          </div>
+        </div>
       </div>
       <div v-show="activeTab === 'balance'">
-        <t-row :gutter="[16, 16]" class="grid-row">
-          <t-col :xs="24" :md="12" :lg="8" id="anchor-zhipu-balance">
+        <div class="grid-sections grid-sections--3">
+          <div id="anchor-zhipu-balance">
             <ZhipuSection
               variant="balance"
               :data="zhipu.data"
@@ -224,57 +225,59 @@ const lastUpdatedText = computed(() => {
               :error="zhipu.error"
               :not-configured="zhipu.notConfigured"
             />
-          </t-col>
-          <t-col :xs="24" :md="12" :lg="8" id="anchor-deepseek">
+          </div>
+          <div id="anchor-deepseek">
             <DeepSeekSection
               :data="deepseek.data"
               :loading="loading && deepseek.data === null"
               :error="deepseek.error"
               :not-configured="deepseek.notConfigured"
             />
-          </t-col>
-          <t-col :xs="24" :md="12" :lg="8" id="anchor-aliyun">
+          </div>
+          <div id="anchor-aliyun">
             <AliyunSection
               :data="aliyun.data"
               :loading="loading && aliyun.data === null"
               :error="aliyun.error"
               :not-configured="aliyun.notConfigured"
             />
-          </t-col>
-          <t-col :xs="24" :md="12" :lg="8" id="anchor-gitee">
+          </div>
+          <div id="anchor-gitee">
             <GiteeSection
               :data="gitee.data"
               :loading="loading && gitee.data === null"
               :error="gitee.error"
               :not-configured="gitee.notConfigured"
             />
-          </t-col>
-          <t-col :xs="24" :md="12" :lg="8" id="anchor-baidu">
+          </div>
+          <div id="anchor-baidu">
             <BaiduSection
               :data="baidu.data"
               :loading="loading && baidu.data === null"
               :error="baidu.error"
               :not-configured="baidu.notConfigured"
             />
-          </t-col>
-          <t-col :xs="24" :md="12" :lg="8" id="anchor-openrouter">
+          </div>
+          <div id="anchor-openrouter">
             <OpenRouterSection
               :data="openrouter.data"
               :loading="loading && openrouter.data === null"
               :error="openrouter.error"
               :not-configured="openrouter.notConfigured"
             />
-          </t-col>
-        </t-row>
+          </div>
+        </div>
       </div>
       <div v-show="activeTab === 'extras'">
-        <div id="anchor-extras">
-          <ExtraSection
-            :data="extras.data"
-            :loading="loading && extras.data === null"
-            :error="extras.error"
-            :not-configured="extras.notConfigured"
-          />
+        <div class="grid-sections">
+          <div id="anchor-extras">
+            <ExtraSection
+              :data="extras.data"
+              :loading="loading && extras.data === null"
+              :error="extras.error"
+              :not-configured="extras.notConfigured"
+            />
+          </div>
         </div>
       </div>
 
@@ -318,30 +321,31 @@ const lastUpdatedText = computed(() => {
 }
 
 .last-updated {
-  font-size: 12px;
+  font-size: var(--td-font-size-body-small);
   color: var(--td-text-color-placeholder);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+/* 主容器：撑满视口后再限制最大宽度并居中。
+ * 必须显式 width:100%——t-layout 是 flex column，交叉轴上的 auto 外边距会
+ * **压过** align-items:stretch，使本元素退化为「按内容收缩」(实测 1440 视口下仅 1046px)，
+ * 内层网格随之塌陷。显式宽度让 stretch 语义回到预期。 */
 .app-main {
+  width: 100%;
   max-width: 1600px;
   margin: 0 auto;
   padding: var(--td-size-6) var(--td-size-8) var(--td-size-13);
 }
 
-.grid-row {
-  margin-top: 4px;
-}
-
 .app-footer {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
+  gap: var(--td-size-2);
+  font-size: var(--td-font-size-body-small);
   color: var(--td-text-color-placeholder);
   text-align: center;
-  padding: 32px 0 8px;
+  padding: var(--td-size-10) 0 var(--td-size-4);
 }
 
 /* 锚点落点避开 sticky header（P0-3：scroll-anchoring 标准属性，非视觉样式） */

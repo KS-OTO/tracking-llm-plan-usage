@@ -29,6 +29,7 @@ const visible = ref(false)
   >
     详情
   </t-button>
+  <!-- 桌面宽度意图由 width 给出；窄屏兜底（max-width:100vw-2*16px）统一在 assets/layout.css -->
   <t-dialog
     v-if="visible"
     v-model:visible="visible"
@@ -37,7 +38,7 @@ const visible = ref(false)
     width="720px"
     attach="body"
   >
-    <div v-if="subtitle" class="detail-subtitle">Key {{ subtitle }}</div>
+    <div v-if="subtitle" class="muted detail-subtitle">Key {{ subtitle }}</div>
     <slot />
   </t-dialog>
 </template>
@@ -46,11 +47,5 @@ const visible = ref(false)
 .detail-trigger {
   margin-left: auto;
   flex-shrink: 0;
-}
-
-.detail-subtitle {
-  margin-bottom: var(--td-size-4);
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
 }
 </style>

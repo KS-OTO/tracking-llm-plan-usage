@@ -99,13 +99,13 @@ const accountCards = computed<AccountCard[]>(() =>
     </template>
 
     <template v-if="data">
-      <t-space direction="vertical" size="large" class="accounts">
+      <div class="stack">
         <div v-for="(card, i) in accountCards" :key="card.account.keyHint" class="account-group">
           <div class="account-head">
             <t-tag size="small" variant="light-outline" theme="primary">
               {{ accountName(card.account, i) }}
             </t-tag>
-            <span class="muted key-hint">{{ card.account.keyHint }}</span>
+            <span class="key-hint key-hint-secondary">{{ card.account.keyHint }}</span>
           </div>
 
           <t-alert
@@ -117,20 +117,12 @@ const accountCards = computed<AccountCard[]>(() =>
           />
 
           <template v-else-if="card.totals">
-            <t-row :gutter="[16, 16]">
-              <t-col :xs="12" :sm="6">
-                <t-statistic title="总 Token" :value="card.totals.total" :format="formatTokens" />
-              </t-col>
-              <t-col :xs="12" :sm="6">
-                <t-statistic title="输入" :value="card.totals.input" :format="formatTokens" />
-              </t-col>
-              <t-col :xs="12" :sm="6">
-                <t-statistic title="输出" :value="card.totals.output" :format="formatTokens" />
-              </t-col>
-              <t-col :xs="12" :sm="6">
-                <t-statistic title="请求数" :value="card.totals.requests" separator="," />
-              </t-col>
-            </t-row>
+            <div class="grid-metrics">
+              <t-statistic title="总 Token" :value="card.totals.total" :format="formatTokens" />
+              <t-statistic title="输入" :value="card.totals.input" :format="formatTokens" />
+              <t-statistic title="输出" :value="card.totals.output" :format="formatTokens" />
+              <t-statistic title="请求数" :value="card.totals.requests" separator="," />
+            </div>
 
             <t-divider />
             <t-table
@@ -148,30 +140,11 @@ const accountCards = computed<AccountCard[]>(() =>
             </t-table>
           </template>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-.key-hint {
-  font-size: 12px;
-  color: var(--td-text-color-placeholder);
-}
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
+/* 布局与卡片内公共块统一在 assets/layout.css，此处无区块特有样式 */
 </style>
