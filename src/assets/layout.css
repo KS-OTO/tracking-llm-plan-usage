@@ -1,0 +1,246 @@
+/**
+ * 布局与展示原语 —— 全站唯一来源
+ *
+ * 为什么不用 t-row / t-col 做页面布局：
+ * ------------------------------------------------------------------
+ * TDesign 的栅格是 **12 列**，不是 24 列。实测（node_modules/tdesign-vue-next/dist/tdesign.min.css）：
+ *     .t-col-xs-12 → flex:0 0 100%      （xs 满宽）
+ *     .t-col-lg-8  → flex:0 0 66.67%    （lg 是 8/12 = 2/3）
+ *     .t-col-lg-6  → flex:0 0 50%
+ *     .t-col-lg-4  → flex:0 0 33.33%
+ *     .t-col-xs-24 → **不存在这条规则**（24 超出 12 列，静默失效）
+ *
+ * 本仓库早期按 24 列书写，于是每一个响应式断点都错位一倍：
+ *     :xs="24" 本意「满宽」→ 无对应规则，靠「其他断点都没命中」侥幸满宽
+ *     :lg="12" 本意「半宽」→ 实际满宽
+ *     :lg="8"  本意「1/3」 → 实际 2/3
+ *     :lg="4"  本意「1/6」 → 实际 1/3
+ * 更糟的是每个组件各写各的断点组合（全仓库 11 种互不相同的尺度），
+ * 于是同一屏里既有满宽卡、又有 2/3 卡、还有 1/2 卡，且同排卡片宽度对不齐。
+ *
+ * 结论：**页面布局不再使用 t-row / t-col**，改用下面三个语义化 CSS Grid。
+ * 列数与最小宽度只在这里声明一次，卡片永远等宽，换行点全站一致，
+ * 以后任何人都不需要（也不能）在组件里重写断点。
+ *
+ * 断点阶梯（移动优先，仅两档，避免尺度漂移）：
+ *     < 768px        手机   1 列
+ *     768px – 1199px 平板   2 列
+ *     >= 1200px      桌面   --grid-cols 列（默认 2）
+ */
+
+/* ============================================================
+ * 1. 区块网格：一张区块卡 = 一个网格单元
+ *    用法：<div class="grid-sections"> <div id="anchor-x"> <XxxSection/> </div> ... </div>
+ *    同一行内的卡片强制等高、等宽。
+ * ============================================================ */
+.grid-sections {
+  display: grid;
+  gap: var(--td-size-6);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .grid-sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .grid-sections {
+    grid-template-columns: repeat(var(--grid-cols, 2), minmax(0, 1fr));
+  }
+}
+
+/** 桌面端排 3 列（用于内容较紧凑的 Tab，如「余额账户」）。 */
+.grid-sections--3 {
+  --grid-cols: 3;
+}
+
+/* 网格单元：撑满单元格，并让其唯一子节点（t-card）铺满整格 */
+.grid-sections > * {
+  display: flex;
+  min-width: 0;
+}
+
+.grid-sections > * > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ============================================================
+ * 2. 指标网格：卡片内部的读数瓦片（t-statistic 等）
+ *    用 auto-fit + minmax，瓦片永远等宽；窄屏自动回落成一列/两列，
+ *    宽屏按可用宽度排满，不需要任何断点声明。
+ * ============================================================ */
+.grid-metrics {
+  display: grid;
+  gap: var(--td-size-5) var(--td-size-6);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--metric-min, 150px)), 1fr));
+  align-items: start;
+}
+
+/** 指标较少、希望更紧凑的场合（如两项计数）。 */
+.grid-metrics--wide {
+  --metric-min: 220px;
+}
+
+/* ============================================================
+ * 3. 卡片网格：等宽卡片自动换行（多账号卡、导航卡……）
+ *    用 auto-fit + minmax，列数由容器宽度决定，卡片永远等宽。
+ * ============================================================ */
+.grid-cards {
+  display: grid;
+  gap: var(--td-size-5);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--card-min, 280px)), 1fr));
+  align-items: stretch;
+}
+
+/** 卡内还要再排读数、或读数较多时，给足最小宽度（如账号卡内的窗口块）。 */
+.grid-cards--wide {
+  --card-min: 360px;
+}
+
+/** 紧凑卡片（如总览的导航卡）。 */
+.grid-cards--tight {
+  --card-min: 200px;
+}
+
+/* ============================================================
+ * 4. 纵向堆叠（替代 t-space direction="vertical"，避免其默认 gap 不统一）
+ * ============================================================ */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--td-size-6);
+  width: 100%;
+}
+
+.stack--tight {
+  gap: var(--td-size-5);
+}
+
+/* ============================================================
+ * 5. 卡片内区块与文本：收敛原先散落在 10+ 个组件里的重复定义
+ * ============================================================ */
+
+/* 账号卡（卡内的次级容器） */
+.account-group {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--td-radius-medium);
+  padding: var(--td-size-5) var(--td-size-6);
+  height: 100%;
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--td-size-4);
+}
+
+.account-name {
+  font-weight: 600;
+  font-size: var(--td-font-size-body-large);
+  color: var(--td-text-color-primary);
+}
+
+.key-hint {
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 已配别名时，Key 掩码退居次要位置（仅作消歧） */
+.key-hint-secondary {
+  color: var(--td-text-color-placeholder);
+  font-size: var(--td-font-size-body-small);
+}
+
+/* 分组标题行：左标题 + 右计数 */
+.group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--td-size-2);
+}
+
+/* 额度窗口块（进度条所在的白底容器） */
+.window-block {
+  padding: var(--td-size-5) var(--td-size-6);
+  background: var(--td-bg-color-container);
+  border-radius: var(--td-radius-medium);
+}
+
+.window-block + .window-block {
+  margin-top: var(--td-size-4);
+}
+
+/* 窗口块内部的排版节奏：标题行 / 进度行 / 脚注行。
+ * 原先在 Zhipu / Plans / VolcPlan / TokenPlan 四个组件里各写了一遍同样的规则
+ * （而且用的是裸 `8px` / `4px`，与 token 阶梯差两个档位），这里收敛为唯一来源。 */
+.window-head {
+  margin-bottom: var(--td-size-4);
+}
+
+.window-meta {
+  margin-top: var(--td-size-4);
+}
+
+.window-foot {
+  margin-top: var(--td-size-2);
+}
+
+/* 次要文本第一档（最淡，用于纯背景性说明） */
+.muted {
+  color: var(--td-text-color-placeholder);
+  font-size: var(--td-font-size-body-small);
+}
+
+/* 次要文本第二档：比 .muted 亮一档（--td-text-color-secondary）。
+ * 用于仍然需要被看清的辅助信息，如告警项里的平台 / 窗口名。
+ * 原先以 .alert-meta 为名散落在总览组件内，现在与 .muted 同处一层，二者是明确的上下级关系。 */
+.text-secondary {
+  color: var(--td-text-color-secondary);
+  font-size: var(--td-font-size-body-small);
+}
+
+/* 限宽说明文字：长枚举串（如服务类型列表）限制最大宽度并允许换行，
+ * 避免它把同一行里的其他元素挤变形。 */
+.text-narrow {
+  max-width: 220px;
+  white-space: normal;
+}
+
+/* 弹窗内的副标题块（Key 掩码等） */
+.detail-subtitle {
+  margin-bottom: var(--td-size-4);
+}
+
+/* 数字等宽（表格/读数对齐用） */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.num-strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* 详情弹窗内的元信息块 */
+.detail-block {
+  margin-bottom: var(--td-size-5);
+}
+
+/* ============================================================
+ * 6. 唯一的组件级兜底：弹窗宽度
+ *
+ * 原则仍是「不覆盖 TDesign 组件样式」，但这里必须破例一次：
+ * t-dialog 只接受固定宽度（默认 480px，本项目详情弹窗传 720px），
+ * 且组件本身没有任何 max-width 兜底 —— 在 375px 视口下会硬溢出屏幕。
+ * 只补一条 max-width（优先级天然高于内联 width），桌面端宽度意图不变。
+ * ============================================================ */
+.t-dialog {
+  max-width: calc(100vw - 2 * var(--td-size-6));
+}

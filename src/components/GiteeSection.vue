@@ -79,7 +79,7 @@ function formatDate(ms: number): string {
     empty-text="未配置 GITEE_AI_API_KEY"
   >
     <template v-if="data">
-      <t-space direction="vertical" size="medium" class="accounts">
+      <div class="stack stack--tight">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
@@ -123,23 +123,19 @@ function formatDate(ms: number): string {
                   :max-line="5"
                 />
                 <template v-else-if="voucherOk(account.voucher)">
-                  <t-row :gutter="[16, 16]">
-                    <t-col :xs="24" :sm="12">
-                      <t-statistic
-                        title="现金代金券余额"
-                        :value="account.voucher.data.couponCashBalance"
-                        :decimal-places="2"
-                        suffix="CNY"
-                      />
-                    </t-col>
-                    <t-col :xs="24" :sm="12">
-                      <t-statistic
-                        title="算力代金券余额"
-                        :value="account.voucher.data.couponComputeBalance"
-                        :format="formatTokens"
-                      />
-                    </t-col>
-                  </t-row>
+                  <div class="grid-metrics detail-block">
+                    <t-statistic
+                      title="现金代金券余额"
+                      :value="account.voucher.data.couponCashBalance"
+                      :decimal-places="2"
+                      suffix="CNY"
+                    />
+                    <t-statistic
+                      title="算力代金券余额"
+                      :value="account.voucher.data.couponComputeBalance"
+                      :format="formatTokens"
+                    />
+                  </div>
 
                   <t-table
                     v-if="account.voucher.data.coupons.length > 0"
@@ -151,7 +147,7 @@ function formatDate(ms: number): string {
                   >
                     <template #catalog="{ row }">
                       <div>{{ row.catalog }}</div>
-                      <div class="muted scene">{{ row.serviceTypes.join(' / ') }}</div>
+                      <div class="muted text-narrow">{{ row.serviceTypes.join(' / ') }}</div>
                     </template>
                     <template #amount="{ row }">{{ formatMoney(row.amount, 'CNY') }}</template>
                     <template #balance="{ row }">{{ formatMoney(row.balance, 'CNY') }}</template>
@@ -175,79 +171,32 @@ function formatDate(ms: number): string {
             :message="account.error"
             :max-line="5"
           />
-          <t-row v-else :gutter="[16, 16]">
-            <t-col :xs="24" :sm="8">
-              <t-statistic
-                title="剩余余额"
-                :value="account.balance"
-                :decimal-places="2"
-                suffix="CNY"
-              />
-            </t-col>
-            <t-col :xs="24" :sm="8">
-              <t-statistic
-                title="已使用"
-                :value="account.usedAmount"
-                :decimal-places="2"
-                suffix="CNY"
-              />
-            </t-col>
-            <t-col :xs="24" :sm="8">
-              <t-statistic
-                title="总金额"
-                :value="account.totalAmount"
-                :decimal-places="2"
-                suffix="CNY"
-              />
-            </t-col>
-          </t-row>
+          <div v-else class="grid-metrics">
+            <t-statistic
+              title="剩余余额"
+              :value="account.balance"
+              :decimal-places="2"
+              suffix="CNY"
+            />
+            <t-statistic
+              title="已使用"
+              :value="account.usedAmount"
+              :decimal-places="2"
+              suffix="CNY"
+            />
+            <t-statistic
+              title="总金额"
+              :value="account.totalAmount"
+              :decimal-places="2"
+              suffix="CNY"
+            />
+          </div>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.scene {
-  max-width: 200px;
-  white-space: normal;
-}
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: var(--td-font-size-body-large);
-}
-
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.key-hint-secondary {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
+/* 布局与卡片内公共块统一在 assets/layout.css，此处无区块特有样式 */
 </style>

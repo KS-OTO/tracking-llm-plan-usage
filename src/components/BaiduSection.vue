@@ -72,7 +72,7 @@ function formatTime(iso: string): string {
     empty-text="未配置 BAIDU_ACCESS_KEY_ID / BAIDU_SECRET_KEY"
   >
     <template v-if="data">
-      <t-space direction="vertical" size="medium" class="accounts">
+      <div class="stack stack--tight">
         <div v-for="account in data.accounts" :key="account.keyHint" class="account-group">
           <div class="account-head">
             <span v-if="account.label" class="account-name">{{ account.label }}</span>
@@ -152,71 +152,20 @@ function formatTime(iso: string): string {
             :max-line="5"
           />
 
-          <t-row v-else :gutter="[16, 16]">
-            <t-col :xs="12" :sm="8">
-              <t-statistic
-                title="量包（近 7 天用量）"
-                :value="formatTokens(account.usage.totalTokens)"
-              />
-            </t-col>
-            <t-col :xs="12" :sm="8">
-              <t-statistic title="调用次数" :value="account.usage.totalCalls" separator="," />
-            </t-col>
-            <t-col :xs="12" :sm="8">
-              <t-statistic title="活跃服务" :value="account.usage.serviceCount" />
-            </t-col>
-          </t-row>
+          <div v-else class="grid-metrics">
+            <t-statistic
+              title="量包（近 7 天用量）"
+              :value="formatTokens(account.usage.totalTokens)"
+            />
+            <t-statistic title="调用次数" :value="account.usage.totalCalls" separator="," />
+            <t-statistic title="活跃服务" :value="account.usage.serviceCount" />
+          </div>
         </div>
-      </t-space>
+      </div>
     </template>
   </AccountSection>
 </template>
 
 <style scoped>
-.accounts {
-  width: 100%;
-}
-
-.account-group {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
-  padding: var(--td-size-5) var(--td-size-6);
-}
-
-.account-head {
-  display: flex;
-  align-items: center;
-  gap: var(--td-size-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
-}
-
-.muted {
-  color: var(--td-text-color-placeholder);
-  font-size: var(--td-font-size-body-small);
-}
-
-.key-hint {
-  font-size: var(--td-font-size-body-small);
-  color: var(--td-text-color-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.key-hint-secondary {
-  color: var(--td-text-color-placeholder);
-  font-size: 12px;
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: var(--td-font-size-body-large);
-}
-
-.detail-block {
-  margin-bottom: var(--td-size-4);
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-}
+/* 布局与卡片内公共块统一在 assets/layout.css，此处无区块特有样式 */
 </style>
