@@ -95,6 +95,17 @@ function amount(value: number | null | undefined, unit: NewApiRow['unit']): stri
   return unit === 'USD' ? `${text} USD` : text
 }
 
+/**
+ * 读数瓦片的货币单位。
+ *
+ * 用 `unit`（单位，渲染在数值后、14px）而不是 `suffix`（后缀，18px、左边距更大）——
+ * 货币是**单位**，`suffix` 留给「无限额度」这类说明性后缀。见 layout.css 的 .account-head 注释。
+ * 账单接口回落时币种未知（站点自行折算），此时不显示单位。
+ */
+function currencyUnit(row: NewApiRow): string | undefined {
+  return row.unit === 'USD' ? 'USD' : undefined
+}
+
 function integer(value: number | null | undefined): string {
   if (value === null || value === undefined) {
     return '—'
@@ -259,19 +270,20 @@ function modeLabel(row: NewApiRow): string {
           </div>
 
           <!-- 钱包：只减不重置的余额 -->
-          <div v-if="row.wallet" class="grid-metrics">
+          <div v-if="row.wallet" class="grid-metrics grid-metrics--pair">
             <t-statistic
               title="钱包余额"
               :value="row.wallet.unlimited ? 0 : (row.wallet.remain ?? 0)"
               :decimal-places="2"
-              :suffix="row.wallet.unlimited ? '无限额度' : row.unit === 'USD' ? 'USD' : ''"
+              :unit="row.wallet.unlimited ? undefined : currencyUnit(row)"
+              :suffix="row.wallet.unlimited ? '无限额度' : undefined"
               :color="!row.wallet.unlimited && (row.wallet.remain ?? 0) < 1 ? 'red' : undefined"
             />
             <t-statistic
               title="累计已用"
               :value="row.wallet.used"
               :decimal-places="2"
-              :suffix="row.unit === 'USD' ? 'USD' : ''"
+              :unit="currencyUnit(row)"
             />
             <t-statistic
               v-if="row.wallet.requestCount !== null"

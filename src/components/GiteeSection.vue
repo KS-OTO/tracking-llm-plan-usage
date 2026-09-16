@@ -128,7 +128,7 @@ function formatDate(ms: number): string {
                       title="现金代金券余额"
                       :value="account.voucher.data.couponCashBalance"
                       :decimal-places="2"
-                      suffix="CNY"
+                      unit="CNY"
                     />
                     <t-statistic
                       title="算力代金券余额"
@@ -171,24 +171,19 @@ function formatDate(ms: number): string {
             :message="account.error"
             :max-line="5"
           />
-          <div v-else class="grid-metrics">
-            <t-statistic
-              title="剩余余额"
-              :value="account.balance"
-              :decimal-places="2"
-              suffix="CNY"
-            />
+          <div v-else class="grid-metrics grid-metrics--pair">
+            <t-statistic title="剩余余额" :value="account.balance" :decimal-places="2" unit="CNY" />
             <t-statistic
               title="已使用"
               :value="account.usedAmount"
               :decimal-places="2"
-              suffix="CNY"
+              unit="CNY"
             />
             <t-statistic
               title="总金额"
               :value="account.totalAmount"
               :decimal-places="2"
-              suffix="CNY"
+              unit="CNY"
             />
           </div>
         </div>

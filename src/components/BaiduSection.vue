@@ -152,7 +152,7 @@ function formatTime(iso: string): string {
             :max-line="5"
           />
 
-          <div v-else class="grid-metrics">
+          <div v-else class="grid-metrics grid-metrics--pair">
             <t-statistic
               title="量包（近 7 天用量）"
               :value="formatTokens(account.usage.totalTokens)"
