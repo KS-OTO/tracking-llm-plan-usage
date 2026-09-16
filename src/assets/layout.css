@@ -402,14 +402,46 @@
   --app-menu-h: var(--td-comp-size-xxxl);
   /** 品牌字号；手机上降一号，给操作区腾出宽度。 */
   --app-title-size: var(--td-font-size-title-large);
+  /** 品牌 Logo 高度（--td-size-9 = 28px）：与 18px 品牌字号同一视觉量级，在 56px 导航里不压抑。 */
+  --app-logo-h: var(--td-size-9);
+  /** Logo 最大宽度：品牌位与 3 个 Tab、右侧操作区共处一行，用户填的可能是很宽的文字 Logo，必须设上限。
+   *  132px ≈ 品牌位可用宽度减去站点名后的余量（实测品牌位约 300px）。 */
+  --app-logo-max-w: 132px;
   /** 锚点落点需要的顶部避让量。 */
   --app-anchor-offset: calc(var(--app-menu-h) + var(--td-comp-margin-s));
+}
+
+/*
+ * 品牌位必须「可截断」而不是「把导航顶宽」。
+ *
+ * 站点名由 `SITE_NAME` 配置、长度不可控，而它与 3 个 Tab、右侧操作区同处一行
+ * （手机则是「品牌 + 操作区」一行）。不设收缩能力时，稍长的站点名就把
+ * 自动刷新 / 主题 / 刷新三个按钮挤出视口 —— 而 `.t-head-menu` 自带 `overflow:hidden`
+ * 且不允许横向滚动，用户既看不到也滚不到（实测：768 视口下一段长站点名把内容撑到
+ * 957px，操作区整块被裁掉）。
+ *
+ * `min-width: 0` 是 flex 项可被压缩的前提；`.app-title` 的 `overflow: hidden`
+ * 让长名字自己出省略号，而不是被父级硬裁掉半截。
+ * 选择器前缀到 `.app-menu.t-head-menu`：TDesign 的同类规则特异性是 0-3-0。
+ */
+.app-menu.t-head-menu .t-menu__logo:not(:empty) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 平板：收紧左右留白；时间文案先让出「更新于 / 下次刷新」前缀 */
 @media (max-width: 1199px) {
   :root {
     --app-gutter: var(--td-size-6);
+    /* 平板一行要放下品牌 + 3 个 Tab + 操作区（实测 827px，已超 768 视口 59px），
+     * Logo 收紧一档，把宽度让给 Tab 与操作区 */
+    --app-logo-max-w: 108px;
   }
 
   .last-updated__label {
@@ -452,6 +484,11 @@
     --app-gutter: var(--td-size-5);
     --app-menu-h: auto;
     --app-title-size: var(--td-font-size-body-large);
+    /* 手机上品牌行只剩「品牌 + 操作区」，可用宽 375-2×12=351px，
+     * 操作区约 178px、站点名（16px 字号）约 113px，Logo 上限只能给到约 40px。
+     * 高度同步降一档，避免 Logo 比品牌文字高出一截。 */
+    --app-logo-h: var(--td-size-7);
+    --app-logo-max-w: var(--td-size-12);
     /* 两行导航的实测高度（品牌行 + Tab 行），锚点据此避让 */
     --app-anchor-offset: calc(var(--td-comp-size-xxxl) * 2);
   }
@@ -480,18 +517,10 @@
   }
 
   /* 第一行：品牌（order 默认 0）+ 操作区推到右侧；第二行：Tab 独占整行 */
-  /* 允许品牌收缩：320px 这类极窄机型上，「品牌 127 + 操作区 178」仍会换行，
-   * 让品牌自己截断（min-width:0 是 flex 项可被压缩的前提）比让操作区掉行更好 */
+  /* 品牌的可压缩能力（min-width:0 / overflow:hidden）在文件上方统一定义，
+   * 这里只补与操作区之间的固定间距 */
   .app-menu.t-head-menu .t-menu__logo:not(:empty) {
     margin-right: var(--td-size-2);
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .app-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .app-menu.t-head-menu .t-menu__operations:not(:empty) {

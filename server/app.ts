@@ -156,21 +156,48 @@ function accountErrorHint(message: string, code?: string): string {
   return message
 }
 
-/** 并行执行多账号查询，每个账号独立容错，返回含 keyHint/label 的结果数组。 */
-async function runAccounts<T>(entries: AccountEntry<T>[]): Promise<AccountResult<T>[]> {
-  const results = await Promise.allSettled(entries.map((entry) => entry.run()))
-  return results.map((result, index) => {
-    const { keyHint, label } = entries[index]
-    if (result.status === 'fulfilled') {
-      // 未配置别名时不写入 label 字段：否则会用 undefined 覆盖供应商响应里原有的
-      // label（如 OpenRouter 的密钥名称），造成信息静默丢失
-      const identity = label === undefined ? { keyHint } : { keyHint, label }
-      return Object.assign({}, result.value, identity)
+/**
+ * 单个账号的执行结果：**成败都把自己的 entry 带上**。
+ *
+ * 这样就不必「按下标回查 entries」——那条路径依赖「results 与 entries 同源同长」这个
+ * 隐式不变量，在 `noUncheckedIndexedAccess` 下既通不过类型检查、也只能用断言压过去。
+ * 让结果自己带身份，不变量就不需要被假设。
+ */
+type AccountOutcome<T> =
+  | { entry: AccountEntry<T>; value: T }
+  | { entry: AccountEntry<T>; error: unknown }
+
+/** 执行单个账号查询，把异常收敛进返回值（因此调用方拿不到 rejected promise）。 */
+async function runAccount<T>(entry: AccountEntry<T>): Promise<AccountOutcome<T>> {
+  try {
+    return { entry, value: await entry.run() }
+  } catch (error) {
+    return { entry, error }
+  }
+}
+
+/**
+ * 并行执行多账号查询，每个账号独立容错，返回含 keyHint/label 的结果数组。
+ *
+ * 导出仅供单测调用：这是前端 `AccountEnvelope` 形态与「单账号失败不影响其余账号」容错
+ * 契约的唯一真相源，必须能脱离网络被驱动。
+ */
+export async function runAccounts<T>(entries: AccountEntry<T>[]): Promise<AccountResult<T>[]> {
+  // `runAccount` 永不 reject，因此 Promise.all 与 allSettled 等价：一个账号失败不会
+  // 影响其余账号，且 `Promise.all` 保序 —— 顺序与 allSettled 完全一致
+  const outcomes = await Promise.all(entries.map((entry) => runAccount(entry)))
+  return outcomes.map((outcome) => {
+    const { keyHint, label } = outcome.entry
+    if ('error' in outcome) {
+      const reason = outcome.error instanceof Error ? outcome.error.message : String(outcome.error)
+      const reasonError = outcome.error instanceof Error ? outcome.error : null
+      const code = reasonError && 'code' in reasonError ? String(reasonError.code) : undefined
+      return { keyHint, label, error: accountErrorHint(reason, code) }
     }
-    const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
-    const reasonError = result.reason instanceof Error ? result.reason : null
-    const code = reasonError && 'code' in reasonError ? String(reasonError.code) : undefined
-    return { keyHint, label, error: accountErrorHint(reason, code) }
+    // 未配置别名时不写入 label 字段：否则会用 undefined 覆盖供应商响应里原有的
+    // label（如 OpenRouter 的密钥名称），造成信息静默丢失
+    const identity = label === undefined ? { keyHint } : { keyHint, label }
+    return Object.assign({}, outcome.value, identity)
   })
 }
 
@@ -180,6 +207,65 @@ function providerStatus(keyHints: string[]): {
   keyHints: string[]
 } {
   return { configured: keyHints.length > 0, count: keyHints.length, keyHints }
+}
+
+/**
+ * 站点自定义（全部可选）：只影响前端外观与刷新节奏，不参与任何鉴权。
+ *
+ * 数值走 `/api/status` 由服务端**运行时**读取，而不是 `VITE_*` 构建期变量：
+ * 本项目的同一份构建产物要跑在 Bun / Cloudflare Workers / EdgeOne / Vercel 四宿主上，
+ * 而部署文档让用户在平台面板里配的就是运行时环境变量 —— 用构建期变量会变成
+ * 「改个站点名要重新构建并重传产物」。
+ *
+ * 与 `src/types.ts` 的 `SiteConfig` 是同构契约（server 侧不 import src，故两边各声明一份，
+ * 默认值必须保持一致）。
+ */
+export interface SiteConfig {
+  /** 站点标题：导航栏品牌位 + 浏览器标签页。 */
+  name: string
+  /** Logo 地址；未配置为 null（此时品牌位只显示文字）。 */
+  logoUrl: string | null
+  /** favicon 地址；未配置为 null（此时保留 index.html 里的 /favicon.ico）。 */
+  faviconUrl: string | null
+  /** 前端自动刷新间隔（秒）。 */
+  refreshIntervalSeconds: number
+}
+
+export const DEFAULT_SITE_NAME = 'LLM 用量监控'
+/** 3 分钟：与这些额度数据的实际变化节奏相称，比 60s 少 2/3 的无谓上游请求。 */
+export const DEFAULT_REFRESH_INTERVAL_SECONDS = 180
+/** 刷新间隔允许范围（秒）：过小会打爆上游配额，过大则「自动刷新」形同虚设。 */
+export const REFRESH_INTERVAL_RANGE = { min: 10, max: 3600 } as const
+
+/** 空串 / 纯空白视为「未配置」：平台面板里留空是常见写法，不该渲染成破图。 */
+function optionalUrl(value: string | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+/** 刷新间隔钳制：非数字 / ≤0 / 越界一律回落（越界则钳到边界，非法则用默认值）。 */
+function clampRefreshIntervalSeconds(value: string | undefined): number {
+  const parsed = Number(value?.trim())
+  if (value === undefined || value.trim() === '' || !Number.isFinite(parsed)) {
+    return DEFAULT_REFRESH_INTERVAL_SECONDS
+  }
+  if (parsed <= 0) {
+    return DEFAULT_REFRESH_INTERVAL_SECONDS
+  }
+  return Math.min(
+    REFRESH_INTERVAL_RANGE.max,
+    Math.max(REFRESH_INTERVAL_RANGE.min, Math.round(parsed)),
+  )
+}
+
+/** 站点自定义配置：任一变量缺失都回落到默认值，不抛错。 */
+export function readSiteConfig(env: EnvGetter): SiteConfig {
+  return {
+    name: env('SITE_NAME')?.trim() || DEFAULT_SITE_NAME,
+    logoUrl: optionalUrl(env('SITE_LOGO_URL')),
+    faviconUrl: optionalUrl(env('SITE_FAVICON_URL')),
+    refreshIntervalSeconds: clampRefreshIntervalSeconds(env('REFRESH_INTERVAL_SECONDS')),
+  }
 }
 
 // 多账号：每个平台支持 N 组凭据（基础变量为第 1 组，`_2`、`_3`… 为后续组）
@@ -201,6 +287,8 @@ export function createAppHandler(env: EnvGetter) {
   const NEWAPI_PAIRS = readKeyPairs('NEWAPI_BASE_URL', 'NEWAPI_TOKEN', env)
   // New-Api-User 请求头（可选）：管理员代查他人数据时按站点地址配对
   const NEWAPI_USER_ID_BY_URL = readPairedMap('NEWAPI_BASE_URL', 'NEWAPI_USER_ID', env)
+  // 站点自定义（站点名 / Logo / favicon / 刷新间隔）：纯前端外观，不参与鉴权
+  const SITE_CONFIG = readSiteConfig(env)
 
   const volcCredentialsList: VolcCredentials[] = readKeyPairs(
     'VOLC_ACCESS_KEY_ID',
@@ -302,6 +390,8 @@ export function createAppHandler(env: EnvGetter) {
         newapi: providerStatus(NEWAPI_PAIRS.map((pair) => maskKey(pair.key))),
       },
       incomplete: INCOMPLETE_VARS,
+      // 站点自定义随状态一并下发：前端首屏只发一次 /api/status 就能拿到品牌与刷新节奏
+      site: SITE_CONFIG,
       now: Date.now(),
     })
   }
