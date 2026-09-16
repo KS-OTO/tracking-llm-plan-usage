@@ -7,6 +7,7 @@ import type {
   DeepSeekBalanceResponse,
   GiteeBalanceResponse,
   InferenceUsageResponse,
+  NewApiResponse,
   PlansResponse,
   StatusResponse,
   TokenPlanResponse,
@@ -98,4 +99,5 @@ export const api = {
   baiduQianfan: () => get('/api/baidu/qianfan', z.custom<BaiduQianfanResponse>()),
   openrouterDetail: () => get('/api/openrouter/detail', z.custom<OpenRouterDetailResponse>()),
   plans: () => get('/api/plans', z.custom<PlansResponse>()),
+  newapi: () => get('/api/newapi', z.custom<NewApiResponse>()),
 }

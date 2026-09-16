@@ -1,6 +1,6 @@
 # LLM 用量监控（tracking-llm-plan-usage）
 
-开源网页工具：在一个页面集中查看 DeepSeek、火山方舟、智谱、阿里云、模力方舟、百度千帆、OpenRouter 及订阅套餐（Kimi / MiniMax / OpenCode Go）的余额与用量。
+开源网页工具：在一个页面集中查看 DeepSeek、火山方舟、智谱、阿里云、模力方舟、百度千帆、OpenRouter、New API（自托管网关）及订阅套餐（Kimi / MiniMax / OpenCode Go）的余额与用量。
 只需在环境变量中配置各家 API Key / Access Key，无需任何其他操作。
 
 技术栈：Bun + Vue 3 + Vite（Vite+ 工具链：Oxfmt / Oxlint / tsgolint 严格类型检查 / Vitest / Rolldown 构建），
@@ -15,6 +15,9 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
   布局只由 `src/assets/layout.css` 的语义化网格原语决定（组件不写断点）：**每一层卡片都铺满上一层给它的高度**，
   所以同一行的区块卡 → 卡内账号卡 → 账号卡内窗口块**三层都严格等高**；
   卡内挂了 ≥2 个 Key 的区块会自动**独占整行**，让多个 Key 并排而不是被挤成「一行一个 + 换行」。
+- **窄屏导航不溢出**：≤767px 时导航收成两行——品牌与操作区同行、三个 Tab 在第二行**等分整行**；
+  时间文案下移到内容区顶部（导航里只留「下次刷新」）。锚点避让量跟着导航实际高度走
+  （`--app-menu-h` / `--app-anchor-offset`），跳锚点不会把标题压在导航下面。
 - **平台卡排序**：**Key（账号）多的平台排前面**（3 Key > 2 Key > 1 Key），数量相同时按平台名首字母 A→Z。
   首字母对中文取拼音、对拉丁名取字母，混在同一个序列里（阿里→A、百度→B、DeepSeek→D、模力→M、
   OpenRouter→O、智谱→Z），而不是把英文平台一律丢到汉字后面。
@@ -45,6 +48,7 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
 | 百度智能云千帆             | 平台功能 OpenAPI（/v2/charge + /v2/service，BCE AK/SK 签名）                                                                                                                                    | 量包（总量/已用/到期/状态）+ TPM 配额 + 近 7 天调用概览（Token/次数/服务数）                                                                                                |
 | OpenRouter                 | `GET /api/v1/credits` + `GET /api/v1/key`                                                                                                                                                       | 剩余额度 / 限额剩余 / 今日用量（「余额账户」Tab）；充值总额、周月用量、密钥元数据在「详情」弹窗内                                                                           |
 | 扩展平台（余额，仅服务端） | StepFun / SiliconFlow / OpenRouter / Novita 余额（`/api/extras`）                                                                                                                               | **页面已无独立 Tab**：OpenRouter 由上一行单独出卡，其余三家仅保留服务端接口（需要时可直接对接 `/api/extras`）                                                               |
+| New API（自托管网关）      | 管理接口 `/api/user/self` + `/api/log/self/stat` + `/api/data/self`（系统访问令牌）；无管理权限时回落 OpenAI 兼容 `/v1/dashboard/billing/*`（普通 API Key）                                     | **订阅**（周期额度窗口：已用百分比、周期额度、下次重置时间）归「套餐订阅」；**钱包**（剩余 / 累计已用 / 请求数）归「余额账户」；两者并存时订阅为主、钱包作次要读数          |
 | 订阅套餐（可选）           | Kimi For Coding（`/coding/v1/usages`）/ MiniMax（`coding_plan/remains`）/ **OpenCode Go**（`/zen/go/v1/usage`），统一走 `/api/plans`                                                            | 按窗口计的**订阅额度**，与火山/智谱/百炼并列在「套餐订阅」Tab；**一平台一张卡，卡片标题即平台名**，卡显示窗口进度条，账号身份与窗口明细在「详情」弹窗内                     |
 
 密钥只存在于服务端环境变量，前端页面不接触任何 Key（仅展示掩码）。
@@ -194,6 +198,10 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 | `KIMI_API_KEY`            | 否   | Kimi For Coding Token Plan 额度，在 https://platform.moonshot.cn 获取                                      |
 | `MINIMAX_API_KEY`         | 否   | MiniMax Token Plan 额度，在 https://platform.minimaxi.com 获取                                             |
 | `OPENCODE_GO_API_KEY`     | 否   | OpenCode Go 订阅额度（5 小时/7 天/30 天窗口），在 https://opencode.ai 获取                                 |
+| `NEWAPI_BASE_URL`         | 否   | New API 站点地址（自托管，形如 `https://ai.example.com/`），多站点按 `_2` / `_3` 追加                      |
+| `NEWAPI_API_KEY`          | 否   | New API 令牌：**系统访问令牌**可读管理接口（字段完整）；普通 API Key 只能读账单接口（无用户名与模型明细）  |
+| `NEWAPI_USER_ID`          | 否   | 管理接口需要按用户查询时的用户 ID（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                 |
+| `NEWAPI_LABEL`            | 否   | 站点别名（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                                          |
 | `HOST`                    | 否   | 监听地址，默认 `127.0.0.1`                                                                                 |
 | `PORT`                    | 否   | 监听端口，默认 `8787`                                                                                      |
 
@@ -202,6 +210,11 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 各平台变量都配置齐全后才会启用对应页面。每个凭据变量都支持同序号的 `*_LABEL` / `*_LABEL_N` 别名（详见「账号别名」）。
 
 OpenCode Go 的用量接口在 200 响应中为每个窗口附带 `status`（`ok` / `rate-limited`）。当某窗口被上游限流时，接口报 `percent: 100` 且 `status: "rate-limited"`——两者语义不同，因此面板会把该状态单独标为「上游限流中」并附说明，而不是只显示 100%。
+
+New API 是**自托管网关**，同一套服务端可能开启两种计费模式：充值的「钱包余额」（只减不重置）与「订阅额度」（按周期窗口重置，常见 30 天）。
+服务端用管理接口返回的配额字段与订阅状态共同判定该账号属于哪一类，并据此把它归到正确的 Tab——所以「提交的 Key 到底属于哪种模式」不需要你手工声明。
+两种都开启时（`mode: 'both'`）以订阅为主读数、钱包作次要读数，弹窗里给出站点的扣费偏好（`subscription_first` / `wallet_first`）。
+站点地址由你填写，因此卡片上的「控制台 ↗」（`{baseUrl}/dashboard`）与「可用模型 ↗」（`{baseUrl}/pricing`）都按该地址拼接；多站点时不给出卡片级链接（一个链接指不了两个站点），改在各自弹窗内提供。
 
 > **取值规则因环境而异**：平台面板（Vercel / EdgeOne Makers / Cloudflare Workers）**原样保存**变量值、不做变量展开；
 > 本地 `.env` / `.dev.vars` 会展开 `$`。含 `$` 的值（如百炼 ticket）在本地必须转义——详见「Cookie 怎么填」。
@@ -349,6 +362,7 @@ server/           平台无关 API 核心 + Bun 入口
   aliyun-console.ts 百炼控制台网关（Token Plan 个人版用量：会话 Cookie / AK-SK 双通道 + ACS3 签名）
   tokenplan.ts    阿里云 Model Studio Token Plan 客户端（组织/座席/共享包）
   opencode.ts     OpenCode Go 订阅额度客户端（rolling/weekly/monthly + 窗口 status）
+  newapi.ts       New API（自托管网关）客户端：管理接口优先、账单接口回落，订阅/钱包模式判定
   balances.ts     StepFun / SiliconFlow / OpenRouter / Novita 余额客户端
   plans.ts        Kimi / MiniMax Token Plan 客户端
 src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
@@ -359,7 +373,9 @@ src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
   modelDocs.ts    平台名 → 官方「可用模型」文档地址（卡片标题旁的外链，按关键词匹配）
   components/     各平台区块组件（AccountSection 统一外壳 + DetailDialog 详情弹窗）
                   套餐订阅 Tab：PlansSection 一平台一卡（Kimi / MiniMax / OpenCode Go）
+                  余额账户 Tab：NewApiSection（New API 站点；订阅与钱包读数可并存，外链按站点拼接）
   assets/layout.css 全站唯一布局层（语义化网格原语 + 断点；组件不写断点、不重复定义）
+                  导航：≤767px 收成两行（品牌+操作 / 三个 Tab 等分），--app-menu-h 与锚点避让量同步
                   「逐层铺满」契约：区块卡 → 账号卡 → 窗口块，每层都吃掉上一层剩余高度
                   弹窗几何：placement="center" 决定屏幕居中（TDesign 默认 top = 视口 20vh 顶距），
                   宽度/高度兜底与正文内部滚动在同文件第 5 节
@@ -382,5 +398,9 @@ docs/             调研文档（阿里云 Token Plan / CC-Switch 用量查询�
 - 百炼控制台 Token Plan 个人版页面（Cookie 通道的请求来源）：https://bailian.console.aliyun.com/cn-beijing/subscription/token-plan/personal
 - 百炼 CLI 用量与配额文档：https://docs.bailian.console.aliyun.com/zh/model-studio/cli/usage-quota
 - 百炼 Token Plan 系列 OpenAPI（当前网关未开放，实测 404）：https://docs.bailian.console.aliyun.com/zh/model-studio/get-subscription-stats
+- New API 管理接口鉴权：https://docs.newapi.ai/zh/docs/api/management/auth
+- New API 用量统计（按模型）：https://docs.newapi.ai/zh/docs/api/management/statistics/data-self-get
+- New API 日志统计：https://docs.newapi.ai/zh/docs/api/management/logs/log-self-stat-get
+- New API 源码（订阅 / 钱包字段定义来源）：https://github.com/QuantumNous/new-api
 - OpenCode Go 用量参考实现（cc-switch PR #6547）：https://github.com/farion1231/cc-switch/pull/6547
 - OpenCode Go 用量端点与字段语义（`GET /zen/go/v1/usage`，窗口 `status`/`percent`/`resetsAt`）：https://github.com/looplj/axonhub/pull/2204

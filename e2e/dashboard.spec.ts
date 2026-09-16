@@ -72,8 +72,10 @@ test.describe('dashboard smoke', () => {
     const stamp = page.locator('.last-updated')
     await expect(stamp).toContainText('更新于', { timeout: 30_000 })
     await expect(stamp).toContainText('下次刷新')
-    // 自动刷新默认开启：应给出具体时刻，而不是「已暂停」
-    await expect(stamp).toHaveText(/下次刷新 \d{1,2}:\d{2}:\d{2}/)
+    // 自动刷新默认开启：应给出具体时刻，而不是「已暂停」。
+    // 断言落在 .num 上：文案被拆成多个 span 后，标签与时间之间的空白由 CSS gap 提供，
+    // 不再存在于 textContent 里（写在整段文案上的空格断言会随结构微调而腐坏）
+    await expect(page.locator('.last-updated .num').last()).toHaveText(/^\d{1,2}:\d{2}:\d{2}$/)
   })
 
   test('platform cards offer a new-tab 可用模型 docs link', async ({ page }) => {
@@ -188,7 +190,91 @@ test.describe('dashboard smoke', () => {
     await expect(page.getByText('LLM 用量监控', { exact: true }).first()).toBeVisible()
     const mobile = await cellWidths()
     expect(new Set(mobile).size).toBe(1)
-    expect(mobile[0]).toBe(375 - 2 * 24)
+    // 断言「撑满主容器内容宽」而不是写死 375-2*24：窄屏左右留白由 layout.css
+    // 的 --app-gutter 控制（手机 12px / 平板 16px / 桌面 24px），写死会随断点改动而腐坏
+    const contentWidth = await page.evaluate(() => {
+      const main = document.querySelector('.app-main')
+      if (main === null) {
+        throw new Error('.app-main not found')
+      }
+      const style = getComputedStyle(main)
+      return Math.round(
+        main.clientWidth -
+          Number.parseFloat(style.paddingLeft) -
+          Number.parseFloat(style.paddingRight),
+      )
+    })
+    expect(mobile[0]).toBe(contentWidth)
+  })
+
+  test('navbar stays inside the viewport on phone and tablet', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('.t-head-menu')
+
+    /**
+     * 逐视口量测导航几何。
+     * 不能写成「for 循环里 await」：`setViewportSize` 必须串行，而循环内 await 会被
+     * `no-await-in-loop` 拦下。这里把三档视口的量测**显式展开**（三次顺序调用），
+     * 之后的断言循环里不再有 await。
+     */
+    const measure = async (width: number) => {
+      await page.setViewportSize({ width, height: 900 })
+      return await page.evaluate((viewportWidth) => {
+        // evaluate 的回调必须自包含（会被序列化进浏览器），因此不抽辅助函数，
+        // 改成「一次性收集目标元素 → 按下标分配」，顺带避开 map 里展开对象
+        const tabs = [...document.querySelectorAll('.t-menu__item')]
+        const boxed = [
+          ...tabs,
+          ...document.querySelectorAll('.t-menu__operations'),
+          ...document.querySelectorAll('.app-menu button'),
+        ].map((el) => {
+          const r = el.getBoundingClientRect()
+          return {
+            text: (el.textContent || '').trim(),
+            right: Math.round(r.right),
+            width: Math.round(r.width),
+          }
+        })
+        return {
+          overflow: document.documentElement.scrollWidth - viewportWidth,
+          tabs: boxed.slice(0, tabs.length),
+          ops: boxed[tabs.length] ?? null,
+          refresh: boxed[tabs.length + 1] ?? null,
+        }
+      }, width)
+    }
+
+    const measured = [
+      { vw: 320, data: await measure(320) },
+      { vw: 375, data: await measure(375) },
+      { vw: 768, data: await measure(768) },
+    ]
+
+    for (const { vw, data } of measured) {
+      // 整体不横向溢出（旧实现在 375 下菜单实宽 792px、操作区整块被裁到屏幕外）
+      expect(data.overflow, `${vw}px 横向溢出`).toBeLessThanOrEqual(0)
+
+      // 三个 Tab 一个都不能少、不能被裁到屏幕外
+      expect(data.tabs.map((tab) => tab.text)).toEqual(['总览', '套餐订阅', '余额账户'])
+      for (const tab of data.tabs) {
+        expect(tab.width, `${vw}px ${tab.text} 宽度`).toBeGreaterThan(0)
+        expect(tab.right, `${vw}px ${tab.text} 右边界`).toBeLessThanOrEqual(vw + 1)
+      }
+
+      // 操作区（时间文案 / 主题 / 刷新）必须在视口内
+      expect(data.ops, `${vw}px 操作区`).not.toBeNull()
+      expect(data.ops?.right ?? Infinity, `${vw}px 操作区右边界`).toBeLessThanOrEqual(vw + 1)
+      expect(data.ops?.width ?? 0, `${vw}px 操作区宽度`).toBeGreaterThan(0)
+      expect(data.refresh, `${vw}px 刷新按钮`).not.toBeNull()
+      expect(data.refresh?.right ?? Infinity, `${vw}px 刷新按钮右边界`).toBeLessThanOrEqual(vw + 1)
+    }
+  })
+
+  test('newapi endpoint reports NOT_CONFIGURED without erroring out', async ({ request }) => {
+    const res = await request.get('/api/newapi')
+    expect(res.status()).toBe(503)
+    const body = z.object({ error: z.object({ code: z.string() }) }).parse(await res.json())
+    expect(body.error.code).toBe('NOT_CONFIGURED')
   })
 
   test('back-to-top appears after scrolling and returns to top', async ({ page }) => {

@@ -16,6 +16,7 @@ import type {
   DeepSeekBalanceResponse,
   GiteeBalanceResponse,
   InferenceUsageResponse,
+  NewApiResponse,
   PlansResponse,
   StatusResponse,
   TokenPlanResponse,
@@ -80,6 +81,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     notConfigured: false,
   })
   const plans = ref<Slice<PlansResponse>>({ data: null, error: null, notConfigured: false })
+  const newapi = ref<Slice<NewApiResponse>>({ data: null, error: null, notConfigured: false })
 
   const loading = ref(false)
   const lastUpdated = ref<Date | null>(null)
@@ -114,6 +116,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       api.baiduQianfan(),
       api.openrouterDetail(),
       api.plans(),
+      api.newapi(),
     ])
     inFlight = false
     loading.value = false
@@ -133,6 +136,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     applyResult(results[8], baidu)
     applyResult(results[9], openrouter)
     applyResult(results[10], plans)
+    applyResult(results[11], newapi)
 
     // 至少一个请求成功才更新时间戳：全部失败时保留旧时间，避免“刚刷新但数据是旧的”误导
     if (results.some((result) => result.status === 'fulfilled')) {
@@ -231,6 +235,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     baidu,
     openrouter,
     plans,
+    newapi,
     loading,
     lastUpdated,
     nextRefreshAt,

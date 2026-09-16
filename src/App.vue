@@ -8,6 +8,7 @@ import AliyunSection from './components/AliyunSection.vue'
 import BaiduSection from './components/BaiduSection.vue'
 import DeepSeekSection from './components/DeepSeekSection.vue'
 import GiteeSection from './components/GiteeSection.vue'
+import NewApiSection from './components/NewApiSection.vue'
 import OverviewTab from './components/OverviewTab.vue'
 import OpenRouterSection from './components/OpenRouterSection.vue'
 import PlansSection from './components/PlansSection.vue'
@@ -16,6 +17,8 @@ import VolcPlanSection from './components/VolcPlanSection.vue'
 import ZhipuSection from './components/ZhipuSection.vue'
 import { useDashboardStore } from './stores/dashboard'
 import { useThemeStore } from './stores/theme'
+import type { NewApiResponse } from './types'
+import { isFailedAccount } from './types'
 import { providerSlug, shouldSpanFullRow, sortPlatformSections } from './utils'
 
 const dashboard = useDashboardStore()
@@ -31,6 +34,7 @@ const {
   baidu,
   openrouter,
   plans,
+  newapi,
   loading,
   lastUpdated,
   nextRefreshAt,
@@ -91,6 +95,7 @@ const failedProviders = computed(() => {
   check('百度千帆', baidu.value)
   check('OpenRouter', openrouter.value)
   check('订阅套餐（Kimi/MiniMax/OpenCode Go）', plans.value)
+  check('New API', newapi.value)
   return entries
 })
 
@@ -114,10 +119,33 @@ const accountCounts = computed(() => ({
   gitee: accountCount(gitee.value),
   baidu: accountCount(baidu.value),
   openrouter: accountCount(openrouter.value),
+  newapi: accountCount(newapi.value),
 }))
 
 /** 订阅套餐按平台展开：一个平台一个网格单元，卡片标题即平台名。 */
 const plansGroups = computed(() => plans.value.data?.plans ?? [])
+
+/**
+ * New API 按计费模式拆到两个 Tab。
+ *
+ * 同一个自托管站点可能同时存在「订阅额度（每周期重置）」与「钱包余额（只减不重置）」，
+ * 服务端已经判定好 `mode`：有生效订阅的归「套餐订阅」（周期额度与 Coding Plan 同类），
+ * 纯钱包的归「余额账户」。查询失败的账号没有 mode 可言，落到余额账户兜底展示错误。
+ */
+function newapiByMode(keepSubscription: boolean): NewApiResponse | null {
+  const source = newapi.value.data
+  if (!source) {
+    return null
+  }
+  const accounts = source.accounts.filter((account) => {
+    const hasSubscription = !isFailedAccount(account) && account.subscription !== null
+    return keepSubscription ? hasSubscription : !hasSubscription
+  })
+  return accounts.length > 0 ? { accounts } : null
+}
+
+const newapiSubscription = computed(() => newapiByMode(true))
+const newapiWallet = computed(() => newapiByMode(false))
 
 /**
  * 平台卡描述符：「名字 / Key 数 / 锚点 / 组件 / props」收成一条数据，才能**排序后再渲染**。
@@ -216,6 +244,26 @@ const subscriptionSections = computed(() =>
         { group },
       ),
     ),
+    // New API 订阅额度：周期制，与 Coding Plan / Token Plan 同属「套餐订阅」
+    ...(newapiSubscription.value
+      ? [
+          platformSection(
+            NewApiSection,
+            {
+              key: 'newapi-subscription',
+              name: 'New API 订阅额度',
+              count: newapiSubscription.value.accounts.length,
+              anchor: 'newapi-subscription',
+            },
+            {
+              data: newapiSubscription.value,
+              loading: loading.value && newapi.value.data === null,
+              error: newapi.value.error,
+              notConfigured: newapi.value.notConfigured,
+            },
+          ),
+        ]
+      : []),
     // 未配置任何订阅套餐密钥时给一张兜底卡（保留 #anchor-plans，总览导航卡仍可跳）
     ...(plansGroups.value.length === 0
       ? [
@@ -326,6 +374,26 @@ const balanceSections = computed(() =>
         notConfigured: openrouter.value.notConfigured,
       },
     ),
+    // New API 钱包余额（无订阅的站点，或查询失败的账号）
+    ...(newapiWallet.value
+      ? [
+          platformSection(
+            NewApiSection,
+            {
+              key: 'newapi',
+              name: 'New API 钱包余额',
+              count: newapiWallet.value.accounts.length,
+              anchor: 'newapi',
+            },
+            {
+              data: newapiWallet.value,
+              loading: loading.value && newapi.value.data === null,
+              error: newapi.value.error,
+              notConfigured: newapi.value.notConfigured,
+            },
+          ),
+        ]
+      : []),
   ]),
 )
 
@@ -362,8 +430,19 @@ const nextRefreshText = computed(() => {
         <t-menu-item value="balance">余额账户</t-menu-item>
         <template #operations>
           <t-space size="medium" align="center">
+            <!-- 两段独立包裹，窄屏由 CSS 分别取舍（见 layout.css 第 5 节）：
+                 平板去掉「更新于 / 下次刷新」前缀只留时间；手机进一步去掉「更新于」，
+                 保留用户更关心的「下次刷新」。 -->
             <span class="last-updated" aria-live="polite">
-              更新于 {{ lastUpdatedText || '—' }} · 下次刷新 {{ nextRefreshText || '已暂停' }}
+              <span class="last-updated__updated">
+                <span class="last-updated__label">更新于</span>
+                <span class="num">{{ lastUpdatedText || '—' }}</span>
+              </span>
+              <span class="last-updated__sep">·</span>
+              <span class="last-updated__next">
+                <span class="last-updated__label">下次刷新</span>
+                <span class="num">{{ nextRefreshText || '已暂停' }}</span>
+              </span>
             </span>
             <t-tooltip content="每 60 秒自动刷新，页面隐藏时暂停">
               <span class="switch-wrap">
@@ -390,7 +469,7 @@ const nextRefreshText = computed(() => {
             </t-tooltip>
             <t-button theme="primary" :loading="loading" @click="refresh">
               <template #icon><RefreshIcon /></template>
-              刷新
+              <span class="app-refresh-text">刷新</span>
             </t-button>
           </t-space>
         </template>
@@ -398,6 +477,11 @@ const nextRefreshText = computed(() => {
     </t-header>
 
     <main class="app-main">
+      <!-- 手机上导航只放得下「品牌 + 操作」，时间文案下移到内容区顶部
+           （同一份数据渲染两次：header 那份在窄屏被 CSS 隐藏，此份加了 aria-hidden） -->
+      <p class="app-status-mobile" aria-hidden="true">
+        更新于 {{ lastUpdatedText || '—' }} · 下次刷新 {{ nextRefreshText || '已暂停' }}
+      </p>
       <!-- 全局失败聚合：N 个平台失败 + 一键重试（P0-5） -->
       <t-alert v-if="failedProviders.length > 0" theme="error" class="global-failure-alert">
         <template #message>
@@ -470,14 +554,17 @@ const nextRefreshText = computed(() => {
   flex-shrink: 0;
 }
 
+/* 尺寸全部走变量：断点在 layout.css 第 6 节统一覆盖。
+ * 写死在这里会被 scoped 的高特异性锁住，媒体查询改不动。 */
 .app-menu {
-  height: var(--td-comp-size-xxxl);
-  min-height: var(--td-comp-size-xxxl);
-  padding: 0 var(--td-size-8);
+  height: var(--app-menu-h);
+  min-height: var(--app-menu-h);
+  padding: 0 var(--app-gutter);
 }
 
+/* 字号同样走变量：手机断点要降一号，写死会被 scoped 特异性锁住 */
 .app-title {
-  font-size: var(--td-font-size-title-large);
+  font-size: var(--app-title-size);
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -486,7 +573,12 @@ const nextRefreshText = computed(() => {
   display: inline-flex;
 }
 
+/* inline-flex + gap：时间文案拆成多个 span 后，模板里的换行空白会被编译器折叠掉
+ * （.text() 会变成「更新于15:20:36·下次刷新15:21:36」），间距改由 gap 保证 */
 .last-updated {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--td-size-2);
   font-size: var(--td-font-size-body-small);
   color: var(--td-text-color-placeholder);
   font-variant-numeric: tabular-nums;
@@ -501,7 +593,7 @@ const nextRefreshText = computed(() => {
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
-  padding: var(--td-size-6) var(--td-size-8) var(--td-size-13);
+  padding: var(--td-size-6) var(--app-gutter) var(--td-size-13);
 }
 
 .app-footer {
@@ -514,9 +606,10 @@ const nextRefreshText = computed(() => {
   padding: var(--td-size-10) 0 var(--td-size-4);
 }
 
-/* 锚点落点避开 sticky header（P0-3：scroll-anchoring 标准属性，非视觉样式） */
+/* 锚点落点避开 sticky header（P0-3：scroll-anchoring 标准属性，非视觉样式）。
+ * 手机导航换行后更高，偏移量由 layout.css 按断点给出。 */
 [id^='anchor-'] {
-  scroll-margin-top: calc(var(--td-comp-size-xxxl) + var(--td-comp-margin-s));
+  scroll-margin-top: var(--app-anchor-offset);
 }
 
 .anchor-flash :deep(.t-card) {
