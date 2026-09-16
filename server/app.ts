@@ -197,8 +197,8 @@ export function createAppHandler(env: EnvGetter) {
   const KIMI_KEYS = readKeys('KIMI_API_KEY', env)
   const MINIMAX_KEYS = readKeys('MINIMAX_API_KEY', env)
   const OPENCODE_GO_KEYS = readKeys('OPENCODE_GO_API_KEY', env)
-  // New API 是自托管服务：端点由各部署自己决定，因此凭据成对（站点地址 + API Key）
-  const NEWAPI_PAIRS = readKeyPairs('NEWAPI_BASE_URL', 'NEWAPI_API_KEY', env)
+  // New API 是自托管服务：端点由各部署自己决定，因此凭据成对（站点地址 + 系统访问令牌）
+  const NEWAPI_PAIRS = readKeyPairs('NEWAPI_BASE_URL', 'NEWAPI_TOKEN', env)
   // New-Api-User 请求头（可选）：管理员代查他人数据时按站点地址配对
   const NEWAPI_USER_ID_BY_URL = readPairedMap('NEWAPI_BASE_URL', 'NEWAPI_USER_ID', env)
 
@@ -443,14 +443,15 @@ export function createAppHandler(env: EnvGetter) {
     return json({ accounts })
   }
 
-  /** New API（自托管订阅网关）：站点地址 + API Key 成对配置，逐站点独立容错。 */
+  /**
+   * New API（自托管订阅网关）：站点地址 + **系统访问令牌**成对配置，逐站点独立容错。
+   *
+   * 令牌在站点「个人设置 → 安全设置 → 系统访问令牌」生成；误填 `sk-` 密钥时会自动
+   * 退化到账单接口（见 server/newapi.ts 的说明）。
+   */
   async function handleNewApi(): Promise<Response> {
     if (NEWAPI_PAIRS.length === 0) {
-      return errorResponse(
-        503,
-        'NOT_CONFIGURED',
-        '未配置 NEWAPI_BASE_URL / NEWAPI_API_KEY 环境变量',
-      )
+      return errorResponse(503, 'NOT_CONFIGURED', '未配置 NEWAPI_BASE_URL / NEWAPI_TOKEN 环境变量')
     }
     const accounts = await runAccounts(
       NEWAPI_PAIRS.map((pair): AccountEntry<NewApiAccountData> => {
@@ -462,7 +463,7 @@ export function createAppHandler(env: EnvGetter) {
           run: () =>
             fetchNewApi({
               baseUrl,
-              apiKey: pair.secret,
+              token: pair.secret,
               ...(userId ? { userId } : {}),
             }),
         }

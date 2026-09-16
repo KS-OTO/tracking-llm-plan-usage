@@ -465,6 +465,18 @@ export interface NewApiWallet {
 }
 
 /**
+ * 额度展示类型（官方 `general_setting.go` 的枚举）。站点默认 USD。
+ * TOKENS 表示站点把额度按点数展示，此时读数是 quota 原值、没有货币符号。
+ */
+export type QuotaDisplayType = 'USD' | 'CNY' | 'TOKENS' | 'CUSTOM'
+
+/** 额度口径：类型 + 可直接渲染在数值后的单位串（$ / ¥ / 自定义符号 / 点）。 */
+export interface NewApiQuotaUnit {
+  type: QuotaDisplayType
+  unit: string
+}
+
+/**
  * New API 账号额度。
  *
  * 自托管平台，端点由部署方决定，因此账号身份以 `baseUrl` 为主、`keyHint` 为辅。
@@ -473,10 +485,12 @@ export interface NewApiWallet {
  * - subscription / both → 有生效订阅，按**周期额度**计费，归「套餐订阅」
  * - wallet → 只有钱包余额（或账单接口回落，无法分辨），归「余额账户」
  *
- * `source` 标明数据来源：管理接口（`api`，需要系统访问令牌，字段完整）或
- * OpenAI 兼容账单接口（`billing`，普通 API Key 可用，无用户名与模型明细）。
- * `unit` 与 source 绑定：管理接口按官方额度单位折算成 USD；账单接口由站点自行折算，
- * 币种无法反推，前端不应带货币符号。
+ * `source` 标明数据来源：管理接口（`api`，需要**系统访问令牌**，字段完整）或
+ * OpenAI 兼容账单接口（`billing`，普通 `sk-` 密钥可用，无用户名与模型明细）。
+ *
+ * `currency` 由服务端读站点的 `/api/status` 得出（USD / CNY / CUSTOM / TOKENS），
+ * 数值已按站点设置折算，前端直接用 `unit` 渲染即可；账单接口回落时为 `null`，
+ * 表示币种无法反推，此时不要显示任何货币符号。
  */
 export interface NewApiAccountData {
   baseUrl: string
@@ -485,7 +499,7 @@ export interface NewApiAccountData {
   /** 站点「可用模型」页（{baseUrl}/pricing）。 */
   modelsUrl: string
   source: 'api' | 'billing'
-  unit: 'USD' | 'site'
+  currency: NewApiQuotaUnit | null
   username: string | null
   group: string | null
   mode: 'subscription' | 'wallet' | 'both'

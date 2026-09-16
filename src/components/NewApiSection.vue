@@ -8,11 +8,18 @@
  * - **钱包**（wallet）：充值余额 —— 剩余 / 累计已用 / 请求数（只减不重置，归「余额账户」Tab）
  *
  * 两者可能同时存在（mode = 'both'），此时订阅为主、钱包余额作次要读数。
- * 单位随数据来源变化：管理接口折算为 USD，账单接口由站点自行折算、币种未知。
+ * 额度单位由服务端读站点 `/api/status` 的 `quota_display_type` 得出（USD / CNY / CUSTOM / TOKENS），
+ * 数值也已按站点设置折算；账单接口回落时 `currency` 为 null，币种无法反推，不显示单位。
  */
 import { computed } from 'vue'
 
-import type { NewApiModelUsage, NewApiResponse, NewApiSubscription, NewApiWallet } from '../types'
+import type {
+  NewApiModelUsage,
+  NewApiQuotaUnit,
+  NewApiResponse,
+  NewApiSubscription,
+  NewApiWallet,
+} from '../types'
 import { accountTitle, isFailedAccount } from '../types'
 
 import AccountSection from './AccountSection.vue'
@@ -38,7 +45,7 @@ interface NewApiRow {
   consoleUrl: string
   modelsUrl: string
   source: 'api' | 'billing'
-  unit: 'USD' | 'site'
+  currency: NewApiQuotaUnit | null
   username: string | null
   group: string | null
   mode: 'subscription' | 'wallet' | 'both'
@@ -62,7 +69,7 @@ const rows = computed<NewApiRow[]>(() =>
           consoleUrl: '',
           modelsUrl: '',
           source: 'billing' as const,
-          unit: 'site' as const,
+          currency: null,
           username: null,
           group: null,
           mode: 'wallet' as const,
@@ -84,7 +91,8 @@ const singleSite = computed(() => {
   return ok.length === 1 ? ok[0] : null
 })
 
-function amount(value: number | null | undefined, unit: NewApiRow['unit']): string {
+/** 金额文本：单位后缀直接取站点口径（$ / ¥ / 自定义符号 / 点），未知时不带单位。 */
+function amount(value: number | null | undefined, currency: NewApiQuotaUnit | null): string {
   if (value === null || value === undefined) {
     return '无限'
   }
@@ -92,18 +100,31 @@ function amount(value: number | null | undefined, unit: NewApiRow['unit']): stri
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  return unit === 'USD' ? `${text} USD` : text
+  return currency?.unit ? `${text} ${currency.unit}` : text
 }
 
 /**
- * 读数瓦片的货币单位。
+ * 读数瓦片的单位串。
  *
  * 用 `unit`（单位，渲染在数值后、14px）而不是 `suffix`（后缀，18px、左边距更大）——
- * 货币是**单位**，`suffix` 留给「无限额度」这类说明性后缀。见 layout.css 的 .account-head 注释。
- * 账单接口回落时币种未知（站点自行折算），此时不显示单位。
+ * 货币是**单位**，`suffix` 留给「无限额度」这类说明性后缀。见 assets/layout.css 的 .account-head 注释。
  */
 function currencyUnit(row: NewApiRow): string | undefined {
-  return row.unit === 'USD' ? 'USD' : undefined
+  return row.currency?.unit || undefined
+}
+
+/** 详情弹窗里的「额度单位」说明：类型 + 符号（账单接口回落时币种未知）。 */
+function currencyLabel(row: NewApiRow): string {
+  if (!row.currency) {
+    return '未知（账单接口返回，币种由站点折算，无法反推）'
+  }
+  const names: Record<NewApiQuotaUnit['type'], string> = {
+    USD: '美元',
+    CNY: '人民币',
+    CUSTOM: '站点自定义货币',
+    TOKENS: '点数（按 quota 原值展示）',
+  }
+  return `${names[row.currency.type]}（${row.currency.unit}）`
 }
 
 function integer(value: number | null | undefined): string {
@@ -149,7 +170,7 @@ function modeLabel(row: NewApiRow): string {
     :error="error"
     :not-configured="notConfigured"
     :empty="rows.length === 0"
-    empty-text="未配置 NEWAPI_BASE_URL / NEWAPI_API_KEY"
+    empty-text="未配置 NEWAPI_BASE_URL / NEWAPI_TOKEN"
     :models-url="singleSite?.modelsUrl"
   >
     <template #actions>
@@ -195,7 +216,7 @@ function modeLabel(row: NewApiRow): string {
                 {{ row.source === 'api' ? '管理接口（系统访问令牌）' : '账单接口（API Key）' }}
               </t-descriptions-item>
               <t-descriptions-item label="额度单位">
-                {{ row.unit === 'USD' ? 'USD' : '站点自有单位' }}
+                {{ currencyLabel(row) }}
               </t-descriptions-item>
               <t-descriptions-item label="统计窗口">
                 {{ dateTime(row.windowStart) }} → {{ dateTime(row.windowEnd) }}
@@ -230,7 +251,7 @@ function modeLabel(row: NewApiRow): string {
                 <div v-for="model in row.models" :key="model.model" class="window-block">
                   <div class="group-head">
                     <span class="text-secondary">{{ model.model }}</span>
-                    <span class="num-strong">{{ amount(model.quota, row.unit) }}</span>
+                    <span class="num-strong">{{ amount(model.quota, row.currency) }}</span>
                   </div>
                   <div class="muted window-foot">
                     {{ integer(model.requests) }} 次请求 · {{ integer(model.tokens) }} tokens
@@ -260,8 +281,8 @@ function modeLabel(row: NewApiRow): string {
               </div>
               <t-progress :percentage="row.subscription.percent" />
               <div class="muted window-meta">
-                已用 {{ amount(row.subscription.used, row.unit) }} /
-                {{ amount(row.subscription.total, row.unit) }}
+                已用 {{ amount(row.subscription.used, row.currency) }} /
+                {{ amount(row.subscription.total, row.currency) }}
               </div>
               <div class="muted window-foot">
                 周期 {{ cycleDays(row) }} · 下次重置 {{ dateTime(row.subscription.nextResetAt) }}
@@ -293,8 +314,8 @@ function modeLabel(row: NewApiRow): string {
             />
           </div>
 
-          <p v-if="row.unit === 'site'" class="muted window-foot">
-            额度单位由站点设置决定（接口未返回币种），仅作相对参考
+          <p v-if="row.currency === null" class="muted window-foot">
+            站点未提供额度口径（走的是账单接口），读数不带货币符号，仅作相对参考
           </p>
         </template>
       </div>
