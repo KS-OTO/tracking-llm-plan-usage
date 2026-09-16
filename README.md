@@ -199,7 +199,7 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 | `MINIMAX_API_KEY`         | 否   | MiniMax Token Plan 额度，在 https://platform.minimaxi.com 获取                                             |
 | `OPENCODE_GO_API_KEY`     | 否   | OpenCode Go 订阅额度（5 小时/7 天/30 天窗口），在 https://opencode.ai 获取                                 |
 | `NEWAPI_BASE_URL`         | 否   | New API 站点地址（自托管，形如 `https://ai.example.com/`），多站点按 `_2` / `_3` 追加                      |
-| `NEWAPI_API_KEY`          | 否   | New API 令牌：**系统访问令牌**可读管理接口（字段完整）；普通 API Key 只能读账单接口（无用户名与模型明细）  |
+| `NEWAPI_TOKEN`            | 否   | New API **系统访问令牌**（管理接口鉴权，见下方「令牌怎么取」），多站点按 `_2` / `_3` 追加                  |
 | `NEWAPI_USER_ID`          | 否   | 管理接口需要按用户查询时的用户 ID（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                 |
 | `NEWAPI_LABEL`            | 否   | 站点别名（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                                          |
 | `HOST`                    | 否   | 监听地址，默认 `127.0.0.1`                                                                                 |
@@ -218,6 +218,35 @@ New API 是**自托管网关**，同一套服务端可能开启两种计费模�
 
 > **取值规则因环境而异**：平台面板（Vercel / EdgeOne Makers / Cloudflare Workers）**原样保存**变量值、不做变量展开；
 > 本地 `.env` / `.dev.vars` 会展开 `$`。含 `$` 的值（如百炼 ticket）在本地必须转义——详见「Cookie 怎么填」。
+
+### New API 令牌怎么取（`NEWAPI_TOKEN`）
+
+变量叫 `TOKEN` 而不是 `KEY`，是因为这个框里要填的是**系统访问令牌**，不是控制台里 `sk-` 开头的
+**模型调用密钥**。两者都能通过站点鉴权，但权限不同，填错的表现是「填了却永远读不到数据」：
+
+- **系统访问令牌（推荐）**：登录你的 New API 站点 →「个人设置 → 安全设置 → 系统访问令牌」→ 生成，
+  把整串令牌粘进 `NEWAPI_TOKEN`。它能读管理接口，卡片字段最完整。
+  官方文档：https://docs.newapi.ai/zh/docs/api/management/auth
+- **模型调用密钥（`sk-…`，可用但不推荐）**：程序检测到管理接口 401 后会自动降级到 OpenAI 兼容的
+  账单接口（`/v1/dashboard/billing/*`），读数仍然正确，但拿不到用户名与按模型明细。
+
+### New API 的货币单位怎么读（不再写死 USD）
+
+不同站点的 `quota` 计费口径不一样（美元额度 / 人民币额度 / 自定义代币），所以读数不能一律按 `$` 显示。
+程序会先读站点的**公开接口** `GET {baseUrl}/api/status`（无需鉴权），拿到单位类型与换算参数后按
+站点官方口径折算——换算规则照抄官方 `setting/operation_setting/general_setting.go` 与 `logger.LogQuota`：
+
+| `quota_display_type` | 显示符号                 | 换算                                                     |
+| -------------------- | ------------------------ | -------------------------------------------------------- |
+| `USD`（站点默认）    | `$`                      | `quota / quota_per_unit`                                 |
+| `CNY`                | `¥`                      | `quota / quota_per_unit × usd_exchange_rate`             |
+| `CUSTOM`             | `custom_currency_symbol` | `quota / quota_per_unit × custom_currency_exchange_rate` |
+| `TOKENS`             | `点`                     | 原始 `quota`（不折算）                                   |
+
+换算因子 ≤ 0 时按 `1` 处理，符号为空时按 `¤` 处理。`/api/status` 拿不到（站点关闭该接口或字段缺失）时
+按官方默认值 **USD** 兜底——官方默认展示类型本身就是 USD。
+
+> 想探测货币单位要看 `/api/status`；官方文档里的 `GET /api/pricing` 只有模型价格表，**不含币种信息**。
 
 ### 阿里云百炼 Token Plan 的权限说明
 

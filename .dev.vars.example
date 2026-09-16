@@ -29,9 +29,13 @@ MINIMAX_API_KEY=
 OPENCODE_GO_API_KEY=
 # 例：OPENCODE_GO_LABEL=前端团队专用订阅
 
-# New API（自托管网关，站点地址 + 令牌成对配置；管理接口优先、账单接口回落）
+# New API（自托管网关，站点地址 + **系统访问令牌**成对配置；管理接口优先、账单接口回落）
+# NEWAPI_TOKEN 填「个人设置 → 安全设置 → 系统访问令牌」生成的令牌，
+# **不是** `sk-` 开头的模型调用密钥（误填会静默退化为账单接口，字段变少）。
+# 文档：https://docs.newapi.ai/zh/docs/api/management/auth
 NEWAPI_BASE_URL=https://ai.example.com/
-NEWAPI_API_KEY=
+NEWAPI_TOKEN=
+# NEWAPI_USER_ID=
 # NEWAPI_LABEL=主力站
 
 BAIDU_ACCESS_KEY_ID=ALTAKxxxx
