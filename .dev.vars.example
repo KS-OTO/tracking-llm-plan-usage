@@ -29,5 +29,10 @@ MINIMAX_API_KEY=
 OPENCODE_GO_API_KEY=
 # 例：OPENCODE_GO_LABEL=前端团队专用订阅
 
+# New API（自托管网关，站点地址 + 令牌成对配置；管理接口优先、账单接口回落）
+NEWAPI_BASE_URL=https://ai.example.com/
+NEWAPI_API_KEY=
+# NEWAPI_LABEL=主力站
+
 BAIDU_ACCESS_KEY_ID=ALTAKxxxx
 BAIDU_SECRET_KEY=xxxx

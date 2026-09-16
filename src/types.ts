@@ -17,6 +17,8 @@ export interface StatusResponse {
     extras: ProviderStatus
     /** 套餐类扩展平台（Kimi / MiniMax / OpenCode Go），与「套餐订阅」Tab 对应。 */
     plans: ProviderStatus
+    /** New API（自托管订阅网关，站点地址 + API Key 成对配置）。 */
+    newapi: ProviderStatus
   }
   /** 半配置的成对凭据变量名（只配了 Key 没配 SecretKey）。 */
   incomplete?: string[]
@@ -421,4 +423,83 @@ export interface OpenRouterDetailData {
 
 export interface OpenRouterDetailResponse {
   accounts: AccountEnvelope<OpenRouterDetailData>[]
+}
+
+/** New API 按模型的区间用量（30 天聚合，已在服务端折算为额度单位）。 */
+export interface NewApiModelUsage {
+  model: string
+  quota: number
+  requests: number
+  tokens: number
+}
+
+/** 订阅额度窗口（周期制）：每个周期重置，与「钱包余额只减不重置」是两回事。 */
+export interface NewApiSubscription {
+  status: string
+  planId: number | null
+  total: number | null
+  used: number
+  remain: number | null
+  /** 已用百分比（0–100）。 */
+  percent: number
+  /** 周期起点（毫秒）。 */
+  lastResetAt: number | null
+  /** 周期重置时间（毫秒），即「下次刷新额度」的时刻。 */
+  nextResetAt: number | null
+  /** 订阅本身的有效期（毫秒），不是周期。 */
+  endAt: number | null
+  /** 订阅额度用尽后是否允许回落到钱包余额。 */
+  allowWalletOverflow: boolean
+}
+
+/** 钱包（充值余额）：只减不重置。 */
+export interface NewApiWallet {
+  remain: number | null
+  used: number
+  total: number | null
+  unlimited: boolean
+  requestCount: number | null
+  /** 原始 quota 值，用于核对站点自己的显示口径。 */
+  quotaRemain: number | null
+  quotaUsed: number | null
+}
+
+/**
+ * New API 账号额度。
+ *
+ * 自托管平台，端点由部署方决定，因此账号身份以 `baseUrl` 为主、`keyHint` 为辅。
+ *
+ * `mode` 决定这张卡归属哪个 Tab：
+ * - subscription / both → 有生效订阅，按**周期额度**计费，归「套餐订阅」
+ * - wallet → 只有钱包余额（或账单接口回落，无法分辨），归「余额账户」
+ *
+ * `source` 标明数据来源：管理接口（`api`，需要系统访问令牌，字段完整）或
+ * OpenAI 兼容账单接口（`billing`，普通 API Key 可用，无用户名与模型明细）。
+ * `unit` 与 source 绑定：管理接口按官方额度单位折算成 USD；账单接口由站点自行折算，
+ * 币种无法反推，前端不应带货币符号。
+ */
+export interface NewApiAccountData {
+  baseUrl: string
+  /** 站点控制台地址（{baseUrl}/dashboard）。 */
+  consoleUrl: string
+  /** 站点「可用模型」页（{baseUrl}/pricing）。 */
+  modelsUrl: string
+  source: 'api' | 'billing'
+  unit: 'USD' | 'site'
+  username: string | null
+  group: string | null
+  mode: 'subscription' | 'wallet' | 'both'
+  /** 扣费偏好：subscription_first / wallet_first。 */
+  billingPreference: string | null
+  subscription: NewApiSubscription | null
+  wallet: NewApiWallet | null
+  /** 当前窗口（订阅周期，或钱包模式的近 30 天）内按模型的用量。 */
+  models: NewApiModelUsage[]
+  windowStart: number | null
+  windowEnd: number | null
+  stats: { quota: number; rpm: number; tpm: number } | null
+}
+
+export interface NewApiResponse {
+  accounts: AccountEnvelope<NewApiAccountData>[]
 }
