@@ -4,7 +4,7 @@
  * 与其他平台最大的不同有两点：
  *
  * 1. **端点不是固定的**。New API 是自托管服务，每个部署有自己的域名，
- *    因此凭据天然成对——`NEWAPI_BASE_URL` + `NEWAPI_API_KEY`，缺一不可。
+ *    因此凭据天然成对——`NEWAPI_BASE_URL` + `NEWAPI_TOKEN`，缺一不可。
  *
  * 2. **同一个账号可能是两种计费模式之一**（站点可同时存在，按 billing_preference 取优先）：
  *    - **订阅模式**：`/api/subscription/self` 给出订阅额度窗口（`amount_total` /
@@ -15,20 +15,42 @@
  *    两者字段结构相近但语义不同：订阅额度每个周期重置，钱包余额只减不重置。
  *    混用会把「累计用了 5 万」当成「这个周期用了 5 万」，所以服务端必须分辨并标注 `mode`。
  *
- * 数据来源通道（自动选择，结果里的 `source` 标明）：
- *   1. 管理接口（需要**系统访问令牌**，在「个人设置 → 安全设置」生成）
- *   2. OpenAI 兼容账单接口（普通 `sk-` API Key 即可）：
- *      `/v1/dashboard/billing/subscription` 与 `/v1/dashboard/billing/usage`。
- *      实测同一站点 `/v1/models` 返回 200 而 `/api/user/self` 返回 401，
- *      只支持管理接口会变成「填了 Key 却永远看不到数据」，故鉴权失败时自动降级。
+ * ## 凭据：`NEWAPI_TOKEN` 是**系统访问令牌**，不是 `sk-` 开头的模型调用密钥
  *
- * 额度单位：new-api 内部以 quota 计，`QuotaPerUnit = 500 * 1000`，即 USD = quota / 500000。
- * 账单接口的数值由站点按自己的展示类型（USD / CNY / tokens）折算后返回，
- * 服务端无法反推币种，因此该模式下 unit 标记为 `site`，前端不带货币符号。
+ * 管理接口用 `Authorization: Bearer {token}` 鉴权，令牌在站点的
+ * 「个人设置 → 安全设置 → 系统访问令牌」中生成（官方文档：docs.newapi.ai/zh/docs/api/management/auth）。
+ * 变量名刻意叫 `TOKEN` 而不是 `KEY`：叫 KEY 时用户会去控制台复制 `sk-` 密钥，
+ * 而那个密钥读不了管理接口，表现为「填了却永远没有数据」。
+ *
+ * 数据来源通道（自动选择，结果里的 `source` 标明）：
+ *   1. 管理接口（系统访问令牌，字段完整）
+ *   2. OpenAI 兼容账单接口（普通 `sk-` 密钥）：`/v1/dashboard/billing/subscription` 与
+ *      `/v1/dashboard/billing/usage`。**这是兜底，不是推荐用法** —— 用户若误填 `sk-` 密钥，
+ *      与其整个卡片报错，不如退化到账单接口（代价是没有用户名、没有按模型明细）。
+ *      实测同一站点 `/v1/models` 返回 200 而 `/api/user/self` 返回 401。
+ *
+ * ## 额度单位：从站点读，而不是写死 USD
+ *
+ * quota 是站点内部单位，`QuotaPerUnit` 默认 500000。换算与符号**照抄官方**
+ * `setting/operation_setting/general_setting.go` 与 `logger.LogQuota`：
+ *
+ *     USD    : quota / quota_per_unit                  → "$"
+ *     CNY    : quota / quota_per_unit × usd_exchange_rate → "¥"
+ *     CUSTOM : quota / quota_per_unit × custom_currency_exchange_rate → custom_currency_symbol（默认 "¤"）
+ *     TOKENS : quota 原值（不折算）                      → "点"
+ *     rate ≤ 0 时按 1 处理；符号为空时按 "¤" 处理
+ *
+ * 这四个字段都来自**公开接口** `GET /api/status`（`quota_display_type` /
+ * `usd_exchange_rate` / `custom_currency_symbol` / `custom_currency_exchange_rate` /
+ * `quota_per_unit`），无需鉴权即可读。取不到时按官方默认值 USD 兜底 ——
+ * 站点默认展示类型本身就是 USD。
+ *
+ * 注意：官方文档里的 `GET /api/pricing` 只有模型价格表，**不含币种信息**，
+ * 想探测货币单位要看 `/api/status`。
  *
  * 接口结构参考官方源码 QuantumNous/new-api：controller/user.go（GetSelf）、
  * controller/subscription.go（GetSubscriptionSelf）、controller/usedata.go、
- * controller/log.go、model/subscription.go（UserSubscription）。
+ * controller/log.go、controller/misc.go（GetStatus）、model/subscription.go（UserSubscription）。
  */
 import { z } from 'zod'
 
@@ -43,8 +65,128 @@ export class NewApiError extends Error {
   }
 }
 
-/** 1 USD = 500000 quota（new-api common.QuotaPerUnit）。 */
+/** 1 USD = 500000 quota（new-api common.QuotaPerUnit 的默认值）。 */
 export const QUOTA_PER_UNIT = 500_000
+
+/**
+ * 额度展示类型（官方 `setting/operation_setting/general_setting.go` 的枚举）。
+ * 站点默认是 USD。
+ */
+export const QUOTA_DISPLAY_TYPES = ['USD', 'CNY', 'TOKENS', 'CUSTOM'] as const
+export type QuotaDisplayType = (typeof QUOTA_DISPLAY_TYPES)[number]
+
+/** CUSTOM 类型未配置符号时官方使用的占位符。 */
+export const DEFAULT_CUSTOM_CURRENCY_SYMBOL = '¤'
+
+/**
+ * 站点的额度展示口径（换算因子 + 单位符号）。
+ *
+ * `rate` / `quotaPerUnit` 只在服务端折算时用；前端只需要 type 与 unit，
+ * 因此响应里换成了 `NewApiQuotaUnit`（见 toQuotaUnit）。
+ */
+export interface NewApiSiteCurrency {
+  type: QuotaDisplayType
+  /** 直接渲染在数值后的单位串：$ / ¥ / 自定义符号 / 点。 */
+  unit: string
+  /** 1 USD = rate 展示货币（USD 与 TOKENS 恒为 1）。 */
+  rate: number
+  /** 站点设置的 1 USD 对应多少 quota（官方 QuotaPerUnit）。 */
+  quotaPerUnit: number
+}
+
+/** 拿不到 `/api/status` 时的兜底：官方默认展示类型就是 USD，汇率 1。 */
+export const DEFAULT_SITE_CURRENCY: NewApiSiteCurrency = {
+  type: 'USD',
+  unit: '$',
+  rate: 1,
+  quotaPerUnit: QUOTA_PER_UNIT,
+}
+
+/** 响应里暴露给前端的额度口径：类型 + 可直接渲染的单位串。 */
+export interface NewApiQuotaUnit {
+  type: QuotaDisplayType
+  unit: string
+}
+
+export function toQuotaUnit(currency: NewApiSiteCurrency): NewApiQuotaUnit {
+  return { type: currency.type, unit: currency.unit }
+}
+
+/** 窄化 unknown → 普通对象；非对象（含数组、null）返回 undefined，不抛错。 */
+const DataRecord = z.record(z.string(), z.unknown())
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  const parsed = DataRecord.safeParse(value)
+  return parsed.success ? parsed.data : undefined
+}
+
+/** 对象或字符串取字段，容忍 `{success, data:{…}}` 与裸对象两种包法。 */
+function siteStatusFields(body: unknown): Record<string, unknown> {
+  const root = asRecord(body)
+  if (root === undefined) {
+    return {}
+  }
+  return asRecord(root.data) ?? root
+}
+
+function numberOf(value: unknown): number | undefined {
+  const numeric = typeof value === 'string' ? Number(value) : value
+  return typeof numeric === 'number' && Number.isFinite(numeric) ? numeric : undefined
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+/** 站点声明的展示类型 → 枚举值；未知 / 缺失一律按官方默认值 USD。 */
+function toDisplayType(declared: string | undefined): QuotaDisplayType {
+  return QUOTA_DISPLAY_TYPES.find((candidate) => candidate === declared) ?? 'USD'
+}
+
+/**
+ * 解析 `GET /api/status`（公开接口）里的额度展示口径。
+ *
+ * 任何字段缺失 / 非法都按官方默认值补齐，**不抛错** —— 货币只是读数上的一个单位，
+ * 不能因为老版本站点少个字段就让整张卡报错。
+ */
+export function parseSiteStatus(body: unknown): NewApiSiteCurrency {
+  const fields = siteStatusFields(body)
+  const type = toDisplayType(nonEmptyString(fields.quota_display_type)?.toUpperCase())
+
+  const quotaPerUnit = numberOf(fields.quota_per_unit) ?? QUOTA_PER_UNIT
+  const usdRate = numberOf(fields.usd_exchange_rate) ?? 1
+  const customRate = numberOf(fields.custom_currency_exchange_rate) ?? 1
+
+  if (type === 'CNY') {
+    return { type, unit: '¥', rate: usdRate > 0 ? usdRate : 1, quotaPerUnit }
+  }
+  if (type === 'CUSTOM') {
+    return {
+      type,
+      unit: nonEmptyString(fields.custom_currency_symbol) ?? DEFAULT_CUSTOM_CURRENCY_SYMBOL,
+      rate: customRate > 0 ? customRate : 1,
+      quotaPerUnit,
+    }
+  }
+  if (type === 'TOKENS') {
+    return { type, unit: '点', rate: 1, quotaPerUnit }
+  }
+  return { type, unit: '$', rate: 1, quotaPerUnit }
+}
+
+/**
+ * quota（站点内部单位）→ 可直接展示的数值。
+ *
+ * TOKENS 展示类型下官方直接输出 quota 原值（`logger.LogQuota` 的 `%d 点额度`），
+ * 不做任何折算；其余类型按 quota / quotaPerUnit × rate。
+ */
+export function quotaToDisplay(quota: number, currency: NewApiSiteCurrency): number {
+  if (currency.type === 'TOKENS') {
+    return quota
+  }
+  const perUnit = currency.quotaPerUnit > 0 ? currency.quotaPerUnit : QUOTA_PER_UNIT
+  return (quota / perUnit) * currency.rate
+}
 
 /** 账单接口在「无限额度」时返回的哨兵值（源码中写死的 100000000）。 */
 export const UNLIMITED_AMOUNT = 100_000_000
@@ -109,8 +251,13 @@ export interface NewApiAccountData {
   modelsUrl: string
   /** 数据来源：管理接口 / OpenAI 兼容账单接口。 */
   source: 'api' | 'billing'
-  /** 额度单位：USD（按 QuotaPerUnit 折算）/ site（站点自有单位，币种未知）。 */
-  unit: 'USD' | 'site'
+  /**
+   * 额度展示口径（已按站点设置折算，读数直接可用）。
+   *
+   * 管理接口读得到站点设置，因此币种是准的；账单接口的数值由站点自行折算、
+   * 无法反推币种，那里为 `null`，前端不显示单位。
+   */
+  currency: NewApiQuotaUnit | null
   username: string | null
   group: string | null
   /**
@@ -133,7 +280,8 @@ export interface NewApiAccountData {
 
 export interface NewApiCredentials {
   baseUrl: string
-  apiKey: string
+  /** 系统访问令牌（「个人设置 → 安全设置 → 系统访问令牌」生成），不是 `sk-` 密钥。 */
+  token: string
   /** New-Api-User 请求头：管理员代查他人数据时需要，个人自查可省略。 */
   userId?: string
 }
@@ -184,7 +332,7 @@ async function newApiGet(
   }
 
   const headers: Record<string, string> = {
-    authorization: `Bearer ${creds.apiKey}`,
+    authorization: `Bearer ${creds.token}`,
     accept: 'application/json',
   }
   if (creds.userId) {
@@ -302,7 +450,10 @@ export interface NewApiSubscriptionResult {
  * 只认 `status === 'active'` 的订阅：expired / cancelled 的额度窗口已经失效，
  * 拿它的 amount_used 会让人误以为「这个周期还能用」。
  */
-export function parseSubscriptionSelf(body: unknown): NewApiSubscriptionResult {
+export function parseSubscriptionSelf(
+  body: unknown,
+  currency: NewApiSiteCurrency = DEFAULT_SITE_CURRENCY,
+): NewApiSubscriptionResult {
   const parsed = SubscriptionBody.safeParse(body)
   const preference =
     parsed.success && parsed.data.data
@@ -317,8 +468,8 @@ export function parseSubscriptionSelf(body: unknown): NewApiSubscriptionResult {
     if (!sub || sub.status !== 'active') {
       continue
     }
-    const total = sub.amount_total / QUOTA_PER_UNIT
-    const used = sub.amount_used / QUOTA_PER_UNIT
+    const total = quotaToDisplay(sub.amount_total, currency)
+    const used = quotaToDisplay(sub.amount_used, currency)
     return {
       preference,
       active: {
@@ -349,13 +500,16 @@ const LogStatBody = z.object({
 })
 
 /** 区间用量统计；结构不符时返回 null（不视为故障，卡片隐藏该读数即可）。 */
-export function parseLogStat(body: unknown): NewApiStats | null {
+export function parseLogStat(
+  body: unknown,
+  currency: NewApiSiteCurrency = DEFAULT_SITE_CURRENCY,
+): NewApiStats | null {
   const parsed = LogStatBody.safeParse(body)
   if (!parsed.success || !parsed.data.data) {
     return null
   }
   const data = parsed.data.data
-  return { quota: data.quota / QUOTA_PER_UNIT, rpm: data.rpm, tpm: data.tpm }
+  return { quota: quotaToDisplay(data.quota, currency), rpm: data.rpm, tpm: data.tpm }
 }
 
 const QuotaDatesBody = z.object({
@@ -378,7 +532,10 @@ const QuotaDatesBody = z.object({
  * 的行结构几乎一致，共用这一个解析器；结果按额度降序、截断到 MODEL_LIMIT 条 ——
  * 卡片只放概览，完整明细属于详情弹窗。
  */
-export function parseQuotaDates(body: unknown): NewApiModelUsage[] {
+export function parseQuotaDates(
+  body: unknown,
+  currency: NewApiSiteCurrency = DEFAULT_SITE_CURRENCY,
+): NewApiModelUsage[] {
   const parsed = QuotaDatesBody.safeParse(body)
   if (!parsed.success) {
     return []
@@ -405,7 +562,7 @@ export function parseQuotaDates(body: unknown): NewApiModelUsage[] {
     .slice(0, MODEL_LIMIT)
     .map((item) => ({
       model: item.model,
-      quota: item.quota / QUOTA_PER_UNIT,
+      quota: quotaToDisplay(item.quota, currency),
       requests: item.requests,
       tokens: item.tokens,
     }))
@@ -461,7 +618,12 @@ export function shouldFallbackToBilling(error: unknown): boolean {
   return error instanceof NewApiError && (error.status === 401 || error.status === 403)
 }
 
-/** 账单接口模式：字段少，但普通 API Key 也能用；无法分辨订阅 / 钱包，按钱包处理。 */
+/**
+ * 账单接口模式：字段少，但普通 `sk-` 密钥也能用；无法分辨订阅 / 钱包，按钱包处理。
+ *
+ * `currency` 留空：这条通道的数值由站点自行折算，是 USD 还是站点展示币种无法从响应里
+ * 反推，宁可不写单位，也不要给一个可能是错的货币符号。
+ */
 async function fetchBillingMode(creds: NewApiCredentials): Promise<NewApiAccountData> {
   const baseUrl = normalizeBaseUrl(creds.baseUrl)
   const [subscription, used] = await Promise.all([
@@ -474,7 +636,7 @@ async function fetchBillingMode(creds: NewApiCredentials): Promise<NewApiAccount
     consoleUrl: siteUrl(baseUrl, CONSOLE_PATH),
     modelsUrl: siteUrl(baseUrl, MODELS_PATH),
     source: 'billing',
-    unit: 'site',
+    currency: null,
     username: null,
     group: null,
     mode: 'wallet',
@@ -496,12 +658,28 @@ async function fetchBillingMode(creds: NewApiCredentials): Promise<NewApiAccount
   }
 }
 
+/**
+ * 站点额度展示口径：公开接口 `/api/status`，失败时按官方默认值（USD）兜底。
+ *
+ * 与主查询并行发出；站点版本过老没有这个接口时只是少了个单位符号，不影响读数。
+ */
+async function fetchSiteCurrency(creds: NewApiCredentials): Promise<NewApiSiteCurrency> {
+  return await newApiGet(creds, 'api/status').then(parseSiteStatus, () => DEFAULT_SITE_CURRENCY)
+}
+
 export async function fetchNewApi(creds: NewApiCredentials): Promise<NewApiAccountData> {
   const baseUrl = normalizeBaseUrl(creds.baseUrl)
 
   let self: NewApiSelf
+  let currency: NewApiSiteCurrency
   try {
-    self = parseSelf(await newApiGet(creds, 'api/user/self'))
+    // `/api/status` 是公开接口，与主查询并行发出（它失败只影响单位符号）
+    const [selfData, siteCurrency] = await Promise.all([
+      newApiGet(creds, 'api/user/self').then(parseSelf),
+      fetchSiteCurrency(creds),
+    ])
+    self = selfData
+    currency = siteCurrency
   } catch (error) {
     if (shouldFallbackToBilling(error)) {
       return await fetchBillingMode(creds)
@@ -511,12 +689,12 @@ export async function fetchNewApi(creds: NewApiCredentials): Promise<NewApiAccou
 
   // 订阅信息独立容错：站点没开订阅功能（或接口被关）时退化为纯钱包模式
   const subscriptionResult = await newApiGet(creds, 'api/subscription/self').then(
-    parseSubscriptionSelf,
+    (body) => parseSubscriptionSelf(body, currency),
     () => ({ preference: null, active: null }),
   )
 
-  const walletRemain = self.quota / QUOTA_PER_UNIT
-  const walletUsed = self.usedQuota / QUOTA_PER_UNIT
+  const walletRemain = quotaToDisplay(self.quota, currency)
+  const walletUsed = quotaToDisplay(self.usedQuota, currency)
   const hasWallet = self.quota > 0 || self.usedQuota > 0
   const active = subscriptionResult.active
 
@@ -535,10 +713,13 @@ export async function fetchNewApi(creds: NewApiCredentials): Promise<NewApiAccou
   const range = { start_timestamp: startSeconds, end_timestamp: nowSeconds }
 
   const [stats, models] = await Promise.all([
-    newApiGet(creds, 'api/log/self/stat', range).then(parseLogStat, () => null),
+    newApiGet(creds, 'api/log/self/stat', range).then(
+      (body) => parseLogStat(body, currency),
+      () => null,
+    ),
     // 订阅优先：周期内的消耗走 flow 接口，钱包才走 data/self
     newApiGet(creds, active ? 'api/data/flow/self' : 'api/data/self', range).then(
-      parseQuotaDates,
+      (body) => parseQuotaDates(body, currency),
       () => [],
     ),
   ])
@@ -548,7 +729,7 @@ export async function fetchNewApi(creds: NewApiCredentials): Promise<NewApiAccou
     consoleUrl: siteUrl(baseUrl, CONSOLE_PATH),
     modelsUrl: siteUrl(baseUrl, MODELS_PATH),
     source: 'api',
-    unit: 'USD',
+    currency: toQuotaUnit(currency),
     username: self.displayName || self.username,
     group: self.group,
     mode,

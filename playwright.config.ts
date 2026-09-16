@@ -33,7 +33,7 @@ const SERVER_ENV_VARS = [
   'BAIDU_ACCESS_KEY_ID',
   'BAIDU_SECRET_KEY',
   'NEWAPI_BASE_URL',
-  'NEWAPI_API_KEY',
+  'NEWAPI_TOKEN',
   // 可选旁路凭据（会话 Cookie / 请求头），单独配置即可生效
   'GITEE_AI_SESSION_COOKIE',
   'ALIYUN_TOKENPLAN_COOKIE',
