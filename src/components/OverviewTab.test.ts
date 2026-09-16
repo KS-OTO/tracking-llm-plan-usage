@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vite-plus/test'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import OverviewTab from '../components/OverviewTab.vue'
+import OverviewTab from './OverviewTab.vue'
 import { useDashboardStore } from '../stores/dashboard'
 
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign } from '../test-utils/mount'
 
 /** 构造首载失败场景（data=null + error）：失败平台必须出「查询失败」卡而非消失。 */
 function mountWithStore() {
