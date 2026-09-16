@@ -13,6 +13,12 @@ const fixture: DeepSeekBalanceResponse = {
       balances: [{ currency: 'CNY', total: 110.0, granted: 10.0, toppedUp: 100.0 }],
     },
     {
+      keyHint: 'sk-1****dead',
+      label: '停用号',
+      isAvailable: false,
+      balances: [{ currency: 'CNY', total: 0, granted: 0, toppedUp: 0 }],
+    },
+    {
       keyHint: 'sk-9****aaaa',
       error: 'NetworkError: 请求失败',
     },
@@ -28,7 +34,29 @@ describe('DeepSeekSection', () => {
     expect(account.find('.account-name').text()).toBe('主力号')
     expect(account.find('.key-hint').text()).toBe('sk-0****cdef')
     expect(account.find('.key-hint').classes()).toContain('key-hint-secondary')
-    expect(wrapper.text()).toContain('可用')
+  })
+
+  /**
+   * 卡头标签的统一规则：只在**异常态**出现。
+   * 曾经的写法是正常态挂「可用」、异常态挂「不可用」——7 张平台卡里只有这一张有标签，
+   * 看起来像别的卡漏了状态；而其余平台根本没有账号级可用性字段，补齐只会是伪造信号。
+   */
+  it('tags only the account that is explicitly unavailable', () => {
+    const wrapper = mountWithTDesign(DeepSeekSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    const tags = wrapper
+      .findAll('.account-head .t-tag')
+      .map((tag) => tag.text().trim())
+      .filter(Boolean)
+    expect(tags).toEqual(['不可用'])
+  })
+
+  it('uses the card metrics grid that fixes two readings per row', () => {
+    const wrapper = mountWithTDesign(DeepSeekSection, {
+      props: { data: fixture, loading: false, error: null },
+    })
+    expect(wrapper.find('.account-group > .grid-metrics').classes()).toContain('grid-metrics--pair')
   })
 
   it('keeps only the total balance on the card', () => {
@@ -62,8 +90,8 @@ describe('DeepSeekSection', () => {
     const alerts = wrapper.findAllComponents({ name: 'TAlert' })
     expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('sk-9****aaaa')])
     expect(wrapper.text()).toContain('NetworkError')
-    // 只有成功账号有「详情」入口
-    expect(wrapper.findAll('.detail-trigger').length).toBe(1)
+    // 只有成功账号有「详情」入口（2 个成功账号 → 2 个入口）
+    expect(wrapper.findAll('.detail-trigger').length).toBe(2)
   })
 
   it('renders neutral empty state (no red alert) when notConfigured', () => {

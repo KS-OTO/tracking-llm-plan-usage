@@ -229,19 +229,18 @@ const packageRowsByHint = computed(() => {
               description="未查询到 Coding Plan 额度（可能未订阅）"
             />
 
-            <t-divider v-if="variant !== 'plan'" align="left">余额</t-divider>
-            <div v-if="variant !== 'plan'" class="grid-metrics">
+            <div v-if="variant !== 'plan'" class="grid-metrics grid-metrics--pair">
               <t-statistic
                 title="可用余额"
                 :value="account.balance?.availableBalance ?? 0"
                 :decimal-places="2"
-                suffix="CNY"
+                unit="CNY"
               />
               <t-statistic
                 title="账户余额"
                 :value="account.balance?.balance ?? 0"
                 :decimal-places="2"
-                suffix="CNY"
+                unit="CNY"
               />
             </div>
           </template>
