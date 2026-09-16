@@ -32,7 +32,7 @@ const account: NewApiAccountData = {
   consoleUrl: 'https://ai.example.com/dashboard',
   modelsUrl: 'https://ai.example.com/pricing',
   source: 'api',
-  unit: 'USD',
+  currency: { type: 'USD', unit: '$' },
   username: '许凌志',
   group: 'default',
   mode: 'both',
@@ -123,7 +123,7 @@ describe('NewApiSection', () => {
     const wrapper = mountWithTDesign(NewApiSection, {
       props: { data: null, loading: false, error: null, notConfigured: true },
     })
-    expect(wrapper.text()).toContain('未配置 NEWAPI_BASE_URL / NEWAPI_API_KEY')
+    expect(wrapper.text()).toContain('未配置 NEWAPI_BASE_URL / NEWAPI_TOKEN')
     expect(wrapper.findComponent({ name: 'TAlert' }).exists()).toBe(false)
   })
 

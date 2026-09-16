@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 
 import {
+  DEFAULT_CUSTOM_CURRENCY_SYMBOL,
+  DEFAULT_SITE_CURRENCY,
   NewApiError,
   QUOTA_PER_UNIT,
   UNLIMITED_AMOUNT,
@@ -11,9 +13,12 @@ import {
   parseLogStat,
   parseQuotaDates,
   parseSelf,
+  parseSiteStatus,
   parseSubscriptionSelf,
+  quotaToDisplay,
   shouldFallbackToBilling,
   siteUrl,
+  toQuotaUnit,
 } from './newapi'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -253,7 +258,7 @@ describe('fetchNewApi', () => {
       calls,
     )
 
-    const result = await fetchNewApi({ baseUrl: 'ai.example.com', apiKey: 'sk-test' })
+    const result = await fetchNewApi({ baseUrl: 'ai.example.com', token: 'sk-test' })
 
     expect(result.mode).toBe('subscription')
     expect(result.subscription?.total).toBe(1500)
@@ -287,7 +292,7 @@ describe('fetchNewApi', () => {
       calls,
     )
 
-    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', apiKey: 'sk-test' })
+    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' })
 
     expect(result.mode).toBe('both')
     expect(result.billingPreference).toBe('subscription_first')
@@ -322,7 +327,7 @@ describe('fetchNewApi', () => {
       calls,
     )
 
-    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', apiKey: 'sk-test' })
+    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' })
 
     expect(result.mode).toBe('wallet')
     expect(result.subscription).toBeNull()
@@ -348,7 +353,7 @@ describe('fetchNewApi', () => {
       calls,
     )
 
-    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', apiKey: 'sk-test' })
+    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' })
     expect(result.mode).toBe('wallet')
     expect(result.wallet?.remain).toBe(1)
   })
@@ -368,10 +373,10 @@ describe('fetchNewApi', () => {
       calls,
     )
 
-    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', apiKey: 'sk-test' })
+    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' })
 
     expect(result.source).toBe('billing')
-    expect(result.unit).toBe('site')
+    expect(result.currency).toBeNull()
     expect(result.mode).toBe('wallet')
     expect(result.wallet).toMatchObject({ total: 50, used: 12.345 })
     expect(result.wallet?.remain).toBeCloseTo(37.655, 6)
@@ -381,7 +386,157 @@ describe('fetchNewApi', () => {
   it('网络异常直接抛出，不静默降级', async () => {
     vi.stubGlobal('fetch', () => Promise.reject(new Error('ECONNREFUSED')))
     await expect(
-      fetchNewApi({ baseUrl: 'https://ai.example.com/', apiKey: 'sk-test' }),
+      fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' }),
     ).rejects.toThrow(NewApiError)
+  })
+
+  it('按站点 /api/status 的展示类型折算读数与单位（CNY 站点）', async () => {
+    const calls: string[] = []
+    stubFetch(
+      {
+        '/api/status': () =>
+          jsonResponse({
+            data: { quota_display_type: 'CNY', quota_per_unit: 500_000, usd_exchange_rate: 7.3 },
+          }),
+        '/api/user/self': () =>
+          jsonResponse({
+            success: true,
+            data: { quota: 500_000, used_quota: 0, request_count: 1 },
+          }),
+        '/api/subscription/self': () => jsonResponse({ data: { subscriptions: [] } }),
+        '/api/log/self/stat': () => jsonResponse({ data: { quota: 500_000, rpm: 0, tpm: 0 } }),
+        '/api/data/self': () =>
+          jsonResponse({ data: [{ model_name: 'gpt-c', quota: 1_000_000, count: 1 }] }),
+      },
+      calls,
+    )
+
+    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'token-test' })
+
+    expect(result.currency).toEqual({ type: 'CNY', unit: '¥' })
+    // 500000 quota = 1 USD = 7.3 CNY
+    expect(result.wallet?.remain).toBeCloseTo(7.3, 10)
+    expect(result.stats?.quota).toBeCloseTo(7.3, 10)
+    expect(result.models[0]?.quota).toBeCloseTo(14.6, 10)
+    expect(result.subscription).toBeNull()
+  })
+
+  it('/api/status 不可用（老站点）时按 USD 兜底，读数照常给出', async () => {
+    const calls: string[] = []
+    stubFetch(
+      {
+        // 桩里未登记 /api/status → 落到 404 分支
+        '/api/user/self': () =>
+          jsonResponse({
+            success: true,
+            data: { quota: QUOTA_PER_UNIT, used_quota: 0, request_count: 1 },
+          }),
+        '/api/subscription/self': () => jsonResponse({ data: { subscriptions: [] } }),
+        '/api/log/self/stat': () => jsonResponse({ data: { quota: 0, rpm: 0, tpm: 0 } }),
+        '/api/data/self': () => jsonResponse({ data: [] }),
+      },
+      calls,
+    )
+
+    const result = await fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'token-test' })
+
+    expect(result.currency).toEqual({ type: 'USD', unit: '$' })
+    expect(result.wallet?.remain).toBe(1)
+  })
+})
+
+describe('parseSiteStatus', () => {
+  it('USD：符号 $，汇率 1', () => {
+    expect(
+      parseSiteStatus({
+        data: { quota_display_type: 'USD', quota_per_unit: 500_000, usd_exchange_rate: 7.3 },
+      }),
+    ).toEqual({ type: 'USD', unit: '$', rate: 1, quotaPerUnit: 500_000 })
+  })
+
+  it('CNY：符号 ¥，按 usd_exchange_rate 折算', () => {
+    expect(
+      parseSiteStatus({ data: { quota_display_type: 'CNY', usd_exchange_rate: 7.3 } }),
+    ).toMatchObject({ type: 'CNY', unit: '¥', rate: 7.3 })
+  })
+
+  it('CUSTOM：用站点自定义符号与汇率', () => {
+    expect(
+      parseSiteStatus({
+        data: {
+          quota_display_type: 'CUSTOM',
+          custom_currency_symbol: '€',
+          custom_currency_exchange_rate: 0.92,
+        },
+      }),
+    ).toMatchObject({ type: 'CUSTOM', unit: '€', rate: 0.92 })
+  })
+
+  it('CUSTOM 缺符号时回落官方占位符，汇率非正按 1 处理', () => {
+    const parsed = parseSiteStatus({
+      data: { quota_display_type: 'CUSTOM', custom_currency_exchange_rate: 0 },
+    })
+    expect(parsed.unit).toBe(DEFAULT_CUSTOM_CURRENCY_SYMBOL)
+    expect(parsed.rate).toBe(1)
+  })
+
+  it('TOKENS：不折算，单位是「点」', () => {
+    expect(parseSiteStatus({ data: { quota_display_type: 'TOKENS' } })).toMatchObject({
+      type: 'TOKENS',
+      unit: '点',
+      rate: 1,
+    })
+  })
+
+  it('小写 / 未知 / 缺失的值一律按官方默认 USD 兜底（老站点少字段不能拖垮卡片）', () => {
+    for (const body of [
+      { data: { quota_display_type: 'usd' } },
+      { data: { quota_display_type: 'JPY' } },
+      { data: {} },
+      {},
+      null,
+      'not json',
+    ]) {
+      expect(parseSiteStatus(body)).toEqual(DEFAULT_SITE_CURRENCY)
+    }
+  })
+
+  it('兼容裸对象与 {success,data} 两种包法', () => {
+    expect(parseSiteStatus({ quota_display_type: 'CNY', usd_exchange_rate: 7 })).toMatchObject({
+      type: 'CNY',
+      rate: 7,
+    })
+  })
+
+  it('quota_per_unit 沿用站点设置（不是写死 500000）', () => {
+    expect(parseSiteStatus({ data: { quota_per_unit: 1_000_000 } }).quotaPerUnit).toBe(1_000_000)
+  })
+})
+
+describe('quotaToDisplay', () => {
+  it('USD：quota / quota_per_unit', () => {
+    expect(quotaToDisplay(500_000, DEFAULT_SITE_CURRENCY)).toBe(1)
+  })
+
+  it('CNY：再乘 usd_exchange_rate', () => {
+    const cny = parseSiteStatus({ data: { quota_display_type: 'CNY', usd_exchange_rate: 7.3 } })
+    expect(quotaToDisplay(500_000, cny)).toBeCloseTo(7.3, 10)
+  })
+
+  it('TOKENS：直接返回 quota 原值（官方 logger.LogQuota 口径）', () => {
+    const tokens = parseSiteStatus({ data: { quota_display_type: 'TOKENS' } })
+    expect(quotaToDisplay(500_000, tokens)).toBe(500_000)
+  })
+
+  it('站点 quota_per_unit 非正时回落默认值', () => {
+    const broken = { ...DEFAULT_SITE_CURRENCY, quotaPerUnit: 0 }
+    expect(quotaToDisplay(500_000, broken)).toBe(1)
+  })
+
+  it('toQuotaUnit 只把类型与单位交给前端', () => {
+    expect(toQuotaUnit(parseSiteStatus({ data: { quota_display_type: 'CNY' } }))).toEqual({
+      type: 'CNY',
+      unit: '¥',
+    })
   })
 })
