@@ -27,8 +27,10 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
   链接按**卡片标题（平台名）**在 `src/modelDocs.ts` 统一查表：同一平台在不同 Tab 标题不同
   （如「智谱 GLM Coding Plan」与「智谱 GLM 余额」）也只需一条关键词映射，新增平台卡补一行即自动生效。
   总览「平台导航」卡上同样有该链接；点链接只开文档，不会顺带触发卡片本身的锚点跳转。
-- **刷新节奏可预期**：顶部同时显示「更新于 HH:MM:SS」与「下次刷新 HH:MM:SS」（默认每 60 秒）；
+- **刷新节奏可预期**：顶部同时显示「更新于 HH:MM:SS」与「下次刷新 HH:MM:SS」（默认每 180 秒，
+  可用 `REFRESH_INTERVAL_SECONDS` 调整）；
   关掉自动刷新或页面切到后台时后者显示「已暂停」——不给一个根本不会到来的时间。
+- **站点可自建品牌**：站点名 / Logo / favicon 都能用环境变量替换，见「站点自定义」。
 - **暗色模式**：一键切换并持久化（localStorage），默认跟随系统 `prefers-color-scheme`。
 - **可访问性**：语义化地标（header/main/footer）、键盘可达、aria 标注、对比度对齐 TDesign 官方 token。
 - **骨架屏 / 错误告警 / 空状态**：统一由 TDesign Skeleton / Alert / Empty 承载。
@@ -180,30 +182,34 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 
 ## 环境变量
 
-| 变量                      | 必填 | 说明                                                                                                       |
-| ------------------------- | ---- | ---------------------------------------------------------------------------------------------------------- |
-| `DEEPSEEK_API_KEY`        | 否   | DeepSeek API Key（余额查询），在 https://platform.deepseek.com/api_keys 获取                               |
-| `VOLC_ACCESS_KEY_ID`      | 否   | 火山方舟 Access Key ID（管控面 API 签名）                                                                  |
-| `VOLC_SECRET_KEY`         | 否   | 火山方舟 Secret Access Key                                                                                 |
-| `ZHIPU_API_KEY`           | 否   | 智谱开放平台 API Key（资源包/余额），在 https://open.bigmodel.cn/usercenter/apikeys 获取                   |
-| `ALIYUN_ACCESS_KEY_ID`    | 否   | 阿里云 AccessKey ID（BSS 资源包 + Token Plan 组织/座席），在 https://ram.console.aliyun.com/manage/ak 创建 |
-| `ALIYUN_SECRET_KEY`       | 否   | 阿里云 AccessKey Secret                                                                                    |
-| `ALIYUN_TOKENPLAN_COOKIE` | 否   | 百炼控制台 Cookie 中 `login_aliyunid_ticket` 的**值**（Token Plan 个人版用量，无需授权；详见下文取值注意） |
-| `GITEE_AI_API_KEY`        | 否   | 模力方舟（Gitee AI）访问令牌（资源包余额），在 https://ai.gitee.com 生成                                   |
-| `GITEE_AI_SESSION_COOKIE` | 否   | 模力方舟 Web 会话 Cookie（代金券查询；整段含空格，平台面板需填编码值，见「Cookie 怎么填」）                |
-| `STEPFUN_API_KEY`         | 否   | StepFun 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://platform.stepfun.com 获取                 |
-| `SILICONFLOW_API_KEY`     | 否   | SiliconFlow 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://cloud.siliconflow.cn 获取             |
-| `OPENROUTER_API_KEY`      | 否   | OpenRouter 剩余额度与限额，在 https://openrouter.ai/keys 获取                                              |
-| `NOVITA_API_KEY`          | 否   | Novita AI 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://novita.ai 获取                          |
-| `KIMI_API_KEY`            | 否   | Kimi For Coding Token Plan 额度，在 https://platform.moonshot.cn 获取                                      |
-| `MINIMAX_API_KEY`         | 否   | MiniMax Token Plan 额度，在 https://platform.minimaxi.com 获取                                             |
-| `OPENCODE_GO_API_KEY`     | 否   | OpenCode Go 订阅额度（5 小时/7 天/30 天窗口），在 https://opencode.ai 获取                                 |
-| `NEWAPI_BASE_URL`         | 否   | New API 站点地址（自托管，形如 `https://ai.example.com/`），多站点按 `_2` / `_3` 追加                      |
-| `NEWAPI_TOKEN`            | 否   | New API **系统访问令牌**（管理接口鉴权，见下方「令牌怎么取」），多站点按 `_2` / `_3` 追加                  |
-| `NEWAPI_USER_ID`          | 否   | 管理接口需要按用户查询时的用户 ID（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                 |
-| `NEWAPI_LABEL`            | 否   | 站点别名（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                                          |
-| `HOST`                    | 否   | 监听地址，默认 `127.0.0.1`                                                                                 |
-| `PORT`                    | 否   | 监听端口，默认 `8787`                                                                                      |
+| 变量                       | 必填 | 说明                                                                                                       |
+| -------------------------- | ---- | ---------------------------------------------------------------------------------------------------------- |
+| `DEEPSEEK_API_KEY`         | 否   | DeepSeek API Key（余额查询），在 https://platform.deepseek.com/api_keys 获取                               |
+| `VOLC_ACCESS_KEY_ID`       | 否   | 火山方舟 Access Key ID（管控面 API 签名）                                                                  |
+| `VOLC_SECRET_KEY`          | 否   | 火山方舟 Secret Access Key                                                                                 |
+| `ZHIPU_API_KEY`            | 否   | 智谱开放平台 API Key（资源包/余额），在 https://open.bigmodel.cn/usercenter/apikeys 获取                   |
+| `ALIYUN_ACCESS_KEY_ID`     | 否   | 阿里云 AccessKey ID（BSS 资源包 + Token Plan 组织/座席），在 https://ram.console.aliyun.com/manage/ak 创建 |
+| `ALIYUN_SECRET_KEY`        | 否   | 阿里云 AccessKey Secret                                                                                    |
+| `ALIYUN_TOKENPLAN_COOKIE`  | 否   | 百炼控制台 Cookie 中 `login_aliyunid_ticket` 的**值**（Token Plan 个人版用量，无需授权；详见下文取值注意） |
+| `GITEE_AI_API_KEY`         | 否   | 模力方舟（Gitee AI）访问令牌（资源包余额），在 https://ai.gitee.com 生成                                   |
+| `GITEE_AI_SESSION_COOKIE`  | 否   | 模力方舟 Web 会话 Cookie（代金券查询；整段含空格，平台面板需填编码值，见「Cookie 怎么填」）                |
+| `STEPFUN_API_KEY`          | 否   | StepFun 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://platform.stepfun.com 获取                 |
+| `SILICONFLOW_API_KEY`      | 否   | SiliconFlow 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://cloud.siliconflow.cn 获取             |
+| `OPENROUTER_API_KEY`       | 否   | OpenRouter 剩余额度与限额，在 https://openrouter.ai/keys 获取                                              |
+| `NOVITA_API_KEY`           | 否   | Novita AI 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://novita.ai 获取                          |
+| `KIMI_API_KEY`             | 否   | Kimi For Coding Token Plan 额度，在 https://platform.moonshot.cn 获取                                      |
+| `MINIMAX_API_KEY`          | 否   | MiniMax Token Plan 额度，在 https://platform.minimaxi.com 获取                                             |
+| `OPENCODE_GO_API_KEY`      | 否   | OpenCode Go 订阅额度（5 小时/7 天/30 天窗口），在 https://opencode.ai 获取                                 |
+| `NEWAPI_BASE_URL`          | 否   | New API 站点地址（自托管，形如 `https://ai.example.com/`），多站点按 `_2` / `_3` 追加                      |
+| `NEWAPI_TOKEN`             | 否   | New API **系统访问令牌**（管理接口鉴权，见下方「令牌怎么取」），多站点按 `_2` / `_3` 追加                  |
+| `NEWAPI_USER_ID`           | 否   | 管理接口需要按用户查询时的用户 ID（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                 |
+| `NEWAPI_LABEL`             | 否   | 站点别名（与 `NEWAPI_BASE_URL` 同序号配对，选填）                                                          |
+| `SITE_NAME`                | 否   | 站点名称（导航栏品牌位 + 浏览器标签页标题），默认「LLM 用量监控」，见下文「站点自定义」                    |
+| `SITE_LOGO_URL`            | 否   | 导航栏 Logo 图片地址（须 https；浏览器直连，不受 CORS 限制），未配置则只显示文字标题                       |
+| `SITE_FAVICON_URL`         | 否   | 标签页图标地址（须 https），未配置则保留自带的 `/favicon.ico`                                              |
+| `REFRESH_INTERVAL_SECONDS` | 否   | 前端自动刷新间隔（秒），默认 `180`，允许 10–3600                                                           |
+| `HOST`                     | 否   | 监听地址，默认 `127.0.0.1`                                                                                 |
+| `PORT`                     | 否   | 监听端口，默认 `8787`                                                                                      |
 
 火山方舟 Access Key 在 https://console.volcengine.com/iam/keymanage 创建；出于安全考虑建议使用 IAM 子用户并仅授予方舟相关权限。
 阿里云 AccessKey 建议使用 RAM 子用户：Token Plan 组织/座席区块需要 `AliyunTokenPlanReadOnlyAccess` 策略；资源包区块需要费用中心（bss:QueryResourcePackageInstances）只读权限，可按需分别授权。个人版用量用会话 Cookie 即可，无需任何授权。
@@ -218,6 +224,36 @@ New API 是**自托管网关**，同一套服务端可能开启两种计费模�
 
 > **取值规则因环境而异**：平台面板（Vercel / EdgeOne Makers / Cloudflare Workers）**原样保存**变量值、不做变量展开；
 > 本地 `.env` / `.dev.vars` 会展开 `$`。含 `$` 的值（如百炼 ticket）在本地必须转义——详见「Cookie 怎么填」。
+
+### 站点自定义：站点名 / Logo / favicon / 刷新间隔
+
+四项都用环境变量配置。为什么不做成前端构建期变量（`VITE_*`）：同一份构建产物要跑在
+Bun / Cloudflare Workers / EdgeOne / Vercel 四种宿主上，而部署流程让用户在**平台面板**里配的
+就是运行时变量——用构建期变量会把「换个站点名」变成「重新构建并重传产物」。
+服务端在启动时读取这些变量并随 `/api/status` 下发，因此**改完重启服务即生效，无需重新构建前端**。
+
+| 变量                       | 默认值                | 作用                                 |
+| -------------------------- | --------------------- | ------------------------------------ |
+| `SITE_NAME`                | `LLM 用量监控`        | 导航栏品牌位 + 浏览器标签页标题      |
+| `SITE_LOGO_URL`            | 无（只显示文字）      | 导航栏品牌位左侧的 Logo              |
+| `SITE_FAVICON_URL`         | 自带的 `/favicon.ico` | 浏览器标签页图标                     |
+| `REFRESH_INTERVAL_SECONDS` | `180`                 | 前端自动刷新间隔（秒），允许 10–3600 |
+
+关于图片地址的三点注意：
+
+- **不受 CORS 限制**：Logo 与 favicon 由浏览器通过 `<img>` / `new Image()` 直接加载，
+  服务端既不代理也不读像素——需要 `crossorigin` 的是 canvas 读回，不是显示。跨域图床可以直接用。
+- **必须 https**：http 资源在 https 页面上会被按混合内容拦掉，表现为「配了却一直看不到」。
+  用内网图床时尤其容易踩。
+- **加载失败会自动降级**：Logo 失败退回纯文字品牌位，favicon 失败保留自带图标，都不留破图。
+  地址写错不会把页面搞坏，只是看不到自定义效果。
+
+站点名过长时品牌位会用省略号截断，不会把导航顶出视口；Logo 尺寸按断点收缩
+（桌面 28px / 平板 108px 宽上限 / 手机 20px、40px 宽上限），见 `src/assets/layout.css` 第 6 节。
+
+刷新间隔做了 10–3600 秒钳制：填 `0` 或非数字回落成默认 180 秒
+（`setInterval(fn, 0)` 会退化成尽可能快的忙循环，等于把「自动刷新」变成打爆上游请求），
+超出范围钳到最近的边界。页面隐藏时自动暂停不受该变量影响。
 
 ### New API 令牌怎么取（`NEWAPI_TOKEN`）
 
