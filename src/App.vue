@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, type Component } from 'vue'
+import { computed, nextTick, ref, watch, type Component } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RefreshIcon, MoonIcon, SunnyIcon } from 'tdesign-icons-vue-next'
 
@@ -40,6 +40,8 @@ const {
   nextRefreshAt,
   autoRefresh,
   modelFilter,
+  site,
+  refreshIntervalSeconds,
 } = storeToRefs(dashboard)
 const { refresh, onFilterInput } = dashboard
 
@@ -416,6 +418,65 @@ const nextRefreshText = computed(() => {
   }
   return nextRefreshAt.value.toLocaleTimeString('zh-CN', { hour12: false })
 })
+
+// ---------------------------------------------------------------------------
+// 站点自定义（站点名 / Logo / favicon）：由 /api/status 的 site 字段驱动
+// ---------------------------------------------------------------------------
+
+/** 自定义 Logo 加载失败后不再重试，退回纯文字品牌位（避免反复请求破图）。 */
+const logoBroken = ref(false)
+
+watch(
+  () => site.value.logoUrl,
+  () => {
+    logoBroken.value = false
+  },
+)
+
+/** 站点名 → 浏览器标签页标题（index.html 里的 <title> 只是首屏默认值）。 */
+watch(
+  () => site.value.name,
+  (name) => {
+    document.title = name
+  },
+  { immediate: true },
+)
+
+/** 写入 <link rel="icon">：不存在则补一个（有些平台会剥掉标签），存在则改 href。 */
+function setFaviconHref(url: string): void {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  if (link) {
+    link.href = url
+    return
+  }
+  const created = document.createElement('link')
+  created.rel = 'icon'
+  created.href = url
+  document.head.append(created)
+}
+
+/**
+ * 站点 favicon → 动态替换标签页图标。
+ *
+ * 先 `new Image()` 预探测再改 href：探测失败就保留 index.html 里原有的 /favicon.ico，
+ * 不会把标签页图标换成破图。`Image` 加载**不受 CORS 限制**（只有 canvas 读回像素才受限），
+ * 所以跨域图标可以直接用；但必须是 https —— http 图标在 https 页面上会被按混合内容拦掉。
+ */
+watch(
+  () => site.value.faviconUrl,
+  (url) => {
+    if (!url) {
+      return
+    }
+    // 用 addEventListener 而不是 onload 赋值：`onload =` 会覆盖已有监听器，
+    // 且 { once: true } 更贴合「只探测一次」的意图。
+    // 故意**不**注册 error 监听——探测失败就该什么都不做，保留默认图标。
+    const probe = new Image()
+    probe.addEventListener('load', () => setFaviconHref(url), { once: true })
+    probe.src = url
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -423,7 +484,17 @@ const nextRefreshText = computed(() => {
     <t-header class="app-header">
       <t-head-menu v-model="activeTab" theme="light" class="app-menu" @change="onMenuChange">
         <template #logo>
-          <span class="app-title">LLM 用量监控</span>
+          <span class="app-brand">
+            <!-- alt 留空：紧邻的文字标题已经承担了名称语义，再读一遍 Logo 只会重复 -->
+            <img
+              v-if="site.logoUrl && !logoBroken"
+              class="app-logo"
+              :src="site.logoUrl"
+              alt=""
+              @error="logoBroken = true"
+            />
+            <span class="app-title">{{ site.name }}</span>
+          </span>
         </template>
         <t-menu-item value="overview">总览</t-menu-item>
         <t-menu-item value="subscription">套餐订阅</t-menu-item>
@@ -444,7 +515,7 @@ const nextRefreshText = computed(() => {
                 <span class="num">{{ nextRefreshText || '已暂停' }}</span>
               </span>
             </span>
-            <t-tooltip content="每 60 秒自动刷新，页面隐藏时暂停">
+            <t-tooltip :content="`每 ${refreshIntervalSeconds} 秒自动刷新，页面隐藏时暂停`">
               <span class="switch-wrap">
                 <t-switch
                   v-model="autoRefresh"
@@ -562,11 +633,35 @@ const nextRefreshText = computed(() => {
   padding: 0 var(--app-gutter);
 }
 
-/* 字号同样走变量：手机断点要降一号，写死会被 scoped 特异性锁住 */
+/* 品牌位：Logo + 站点名。min-width:0 让过长的站点名能被省略号截断，
+ * 否则 flex 子项的「最小内容宽度」会把导航顶出视口（手机上尤其明显）。 */
+.app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--td-size-3);
+  min-width: 0;
+}
+
+/* Logo 高度与最大宽度都走变量：断点在 layout.css 第 6 节统一覆盖。
+ * width:auto 由高度推出宽度、object-fit:contain 保证任意长宽比的图都不变形；
+ * 上限靠 max-width 兜住——用户填的可能是很宽的文字 Logo。 */
+.app-logo {
+  display: block;
+  height: var(--app-logo-h);
+  width: auto;
+  max-width: var(--app-logo-max-w);
+  object-fit: contain;
+}
+
+/* 字号同样走变量：手机断点要降一号，写死会被 scoped 特异性锁住。
+ * 站点名可自定义，因此必须能截断——绝不靠「名字不会太长」这个假设撑布局。 */
 .app-title {
   font-size: var(--app-title-size);
   font-weight: 600;
   color: var(--td-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .switch-wrap {

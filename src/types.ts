@@ -4,6 +4,36 @@ export interface ProviderStatus {
   keyHints: string[]
 }
 
+/**
+ * 站点自定义（服务端由 `SITE_NAME` / `SITE_LOGO_URL` / `SITE_FAVICON_URL` /
+ * `REFRESH_INTERVAL_SECONDS` 运行时读取，随 `/api/status` 下发）。
+ *
+ * 与 `server/app.ts` 的 `SiteConfig` 是同构契约：server 侧不 import src，
+ * 因此两边各声明一份，默认值必须保持一致。
+ */
+export interface SiteConfig {
+  /** 站点标题：导航栏品牌位 + 浏览器标签页。 */
+  name: string
+  /** Logo 地址；未配置为 null（此时品牌位只显示文字）。 */
+  logoUrl: string | null
+  /** favicon 地址；未配置为 null（此时保留 index.html 里的 /favicon.ico）。 */
+  faviconUrl: string | null
+  /** 自动刷新间隔（秒）。 */
+  refreshIntervalSeconds: number
+}
+
+export const DEFAULT_SITE_NAME = 'LLM 用量监控'
+/** 与 server/app.ts 的 DEFAULT_REFRESH_INTERVAL_SECONDS 保持一致。 */
+export const DEFAULT_REFRESH_INTERVAL_SECONDS = 180
+
+/** 服务端未返回 `site` 时的兜底（老服务端 / 非本项目后端）。 */
+export const FALLBACK_SITE_CONFIG: SiteConfig = {
+  name: DEFAULT_SITE_NAME,
+  logoUrl: null,
+  faviconUrl: null,
+  refreshIntervalSeconds: DEFAULT_REFRESH_INTERVAL_SECONDS,
+}
+
 export interface StatusResponse {
   providers: {
     deepseek: ProviderStatus
@@ -17,11 +47,13 @@ export interface StatusResponse {
     extras: ProviderStatus
     /** 套餐类扩展平台（Kimi / MiniMax / OpenCode Go），与「套餐订阅」Tab 对应。 */
     plans: ProviderStatus
-    /** New API（自托管订阅网关，站点地址 + API Key 成对配置）。 */
+    /** New API（自托管订阅网关，站点地址 + 系统访问令牌成对配置）。 */
     newapi: ProviderStatus
   }
   /** 半配置的成对凭据变量名（只配了 Key 没配 SecretKey）。 */
   incomplete?: string[]
+  /** 站点自定义：品牌名 / Logo / favicon / 刷新间隔。 */
+  site?: SiteConfig
   now: number
 }
 

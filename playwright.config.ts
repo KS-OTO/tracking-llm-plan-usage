@@ -34,6 +34,11 @@ const SERVER_ENV_VARS = [
   'BAIDU_SECRET_KEY',
   'NEWAPI_BASE_URL',
   'NEWAPI_TOKEN',
+  // 站点自定义：不改鉴权，但会改品牌文案与刷新节奏，留着同样会污染断言
+  'SITE_NAME',
+  'SITE_LOGO_URL',
+  'SITE_FAVICON_URL',
+  'REFRESH_INTERVAL_SECONDS',
   // 可选旁路凭据（会话 Cookie / 请求头），单独配置即可生效
   'GITEE_AI_SESSION_COOKIE',
   'ALIYUN_TOKENPLAN_COOKIE',
