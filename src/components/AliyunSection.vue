@@ -129,7 +129,7 @@ function availableCount(account: NonNullable<AliyunPackagesResponse['accounts']>
             :message="account.error"
             :max-line="5"
           />
-          <div v-else class="grid-metrics">
+          <div v-else class="grid-metrics grid-metrics--pair">
             <t-statistic title="资源包实例" :value="account.totalCount ?? 0" />
             <t-statistic title="可用实例" :value="availableCount(account)" />
           </div>
