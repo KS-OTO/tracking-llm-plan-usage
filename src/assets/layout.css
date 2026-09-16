@@ -337,7 +337,159 @@
 }
 
 /* ============================================================
- * 5. 弹窗几何：相对**屏幕**居中 + 高度封顶
+ * 5. 响应式：顶部导航与主容器
+ *
+ * 断点沿用第 1 节的两档阶梯（768 / 1200），全站只有这两档，避免尺度漂移。
+ *
+ * 为什么尺寸写在**这里**而不是 App.vue：组件里是 scoped 样式，选择器带
+ * data-v 属性（.app-menu[data-v-x]，特异性 0-2-0）高于全局类（0-1-0），
+ * 写在 App.vue 里的尺寸在断点内**改不动**。因此 App.vue 只声明「用哪个变量」，
+ * 变量值（含断点覆盖）由本节统一给出。
+ *
+ * 要解决的问题（实测 375 / 768 / 1440 三种视口）：
+ *   375：菜单实际宽 792px，超出视口 417px；操作区从 x=424 起，整块在屏幕外；
+ *        「余额账户」也被裁。`.t-head-menu{overflow:hidden}` 且不允许横向滚动，
+ *        于是用户既看不到也滚不到——手机上等于没有自动刷新、主题、刷新三个入口。
+ *   768：菜单宽 827px，超出 59px，右侧刷新按钮被切掉一角。
+ *   1440：正常。
+ * 对策：手机把导航拆成两行（第一行 品牌 + 操作区，第二行 三个 Tab 等分），
+ *      平板只收紧留白并隐藏时间文案的前缀。
+ * ============================================================ */
+:root {
+  /** 页面左右留白（导航与主容器共用）。 */
+  --app-gutter: var(--td-size-8);
+  /** 导航高度；手机上为 auto（换行后高度由内容决定）。 */
+  --app-menu-h: var(--td-comp-size-xxxl);
+  /** 品牌字号；手机上降一号，给操作区腾出宽度。 */
+  --app-title-size: var(--td-font-size-title-large);
+  /** 锚点落点需要的顶部避让量。 */
+  --app-anchor-offset: calc(var(--app-menu-h) + var(--td-comp-margin-s));
+}
+
+/* 平板：收紧左右留白；时间文案先让出「更新于 / 下次刷新」前缀 */
+@media (max-width: 1199px) {
+  :root {
+    --app-gutter: var(--td-size-6);
+  }
+
+  .last-updated__label {
+    display: none;
+  }
+}
+
+/**
+ * 手机：导航第一行只留「品牌 + 操作按钮」。
+ *
+ * 时间文案（约 96px）在 375 视口下会把操作区顶到第二行 —— 量测：
+ * 品牌 127 + 操作区 274 = 401，而可用宽度只有 351。与其把文案截短到
+ * 「只剩一个时间、还得赌 320px 的机型」，不如整块下移到内容区顶部
+ * （App.vue 的 .app-status-mobile），信息一个不少，导航恢复两行。
+ */
+/** 内容区顶部的时间文案：默认隐藏，只在窄屏出现（宽屏由导航内的同一信息承担）。
+ *  注意顺序：基础规则必须写在媒体查询**之前**，同特异性下后者胜。 */
+.app-status-mobile {
+  display: none;
+  margin: 0 0 var(--td-size-4);
+  font-size: var(--td-font-size-body-small);
+  color: var(--td-text-color-placeholder);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .last-updated {
+    display: none;
+  }
+
+  .app-status-mobile {
+    display: block;
+  }
+}
+
+/* 手机：导航两行 */
+@media (max-width: 767px) {
+  :root {
+    --app-gutter: var(--td-size-5);
+    --app-menu-h: auto;
+    --app-title-size: var(--td-font-size-body-large);
+    /* 两行导航的实测高度（品牌行 + Tab 行），锚点据此避让 */
+    --app-anchor-offset: calc(var(--td-comp-size-xxxl) * 2);
+  }
+
+  /* t-layout__header 的高度是写死的 `var(--td-comp-size-xxxl)`（56px）：
+   * 导航换成两行后不解除，第二行 Tab 会被压在 56px 内、盖住页面内容 */
+  .app-layout .app-header {
+    height: auto;
+  }
+
+  /*
+   * 选择器一律以 `.app-menu.t-head-menu` 开头：TDesign 的规则形如
+   * `.t-head-menu .t-menu__operations:not(:empty)`（特异性 0-3-0），
+   * 只写 `.t-head-menu .t-menu__operations`（0-2-0）会被压过去 —— 实测
+   * 第一版正是这样失效的：操作区掉到第二行、高度仍被钉在 56px。
+   */
+  .app-menu.t-head-menu {
+    /* overflow:hidden 是 .t-head-menu 自带的：不解除，换行后的第二行会被整行裁掉 */
+    overflow: visible;
+  }
+
+  .app-menu.t-head-menu .t-head-menu__inner {
+    flex-wrap: wrap;
+    height: auto;
+    padding: var(--td-size-2) 0;
+  }
+
+  /* 第一行：品牌（order 默认 0）+ 操作区推到右侧；第二行：Tab 独占整行 */
+  /* 允许品牌收缩：320px 这类极窄机型上，「品牌 127 + 操作区 178」仍会换行，
+   * 让品牌自己截断（min-width:0 是 flex 项可被压缩的前提）比让操作区掉行更好 */
+  .app-menu.t-head-menu .t-menu__logo:not(:empty) {
+    margin-right: var(--td-size-2);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .app-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-menu.t-head-menu .t-menu__operations:not(:empty) {
+    order: 2;
+    height: auto;
+    line-height: normal;
+    margin-left: auto;
+    margin-right: 0;
+  }
+
+  .app-menu.t-head-menu .t-menu {
+    order: 3;
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
+
+  /* 三个 Tab 等分整行：既不挤在左侧，也不会有一个被裁在屏幕外 */
+  .app-menu.t-head-menu .t-menu__item {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* 品牌降一号：375 视口下「logo 140 + 操作区 239」已经超出可用宽度 351，
+   * 不缩就会把操作区挤到第二行（它就不再与品牌同排，视觉上像是掉了队） */
+  .app-title {
+    font-size: var(--td-font-size-body-large);
+  }
+}
+
+/* 刷新按钮退化为图标按钮，省下的宽度留给时间文案 */
+@media (max-width: 767px) {
+  .app-refresh-text {
+    display: none;
+  }
+}
+
+/* ============================================================
+ * 6. 弹窗几何：相对**屏幕**居中 + 高度封顶
  *    （原则仍是「不覆盖 TDesign 组件样式」，下面两条是组件确实没有的能力）
  * ============================================================ */
 
