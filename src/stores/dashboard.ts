@@ -5,10 +5,11 @@
  * - 模型过滤带防抖，避免每次击键全量拉取
  * - 自动刷新感知页面可见性，隐藏时暂停
  */
-import { onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { api, ApiError } from '../api'
+import { FALLBACK_SITE_CONFIG } from '../types'
 import type {
   AliyunPackagesResponse,
   BaiduQianfanResponse,
@@ -18,6 +19,7 @@ import type {
   InferenceUsageResponse,
   NewApiResponse,
   PlansResponse,
+  SiteConfig,
   StatusResponse,
   TokenPlanResponse,
   VolcPlanResponse,
@@ -31,9 +33,20 @@ export interface Slice<T> {
   notConfigured: boolean
 }
 
-const REFRESH_INTERVAL_MS = 60_000
 const FILTER_DEBOUNCE_MS = 400
 const VOLC_DETAILS_DAYS = 7
+
+/**
+ * 秒 → 毫秒，并兜住 0 / 负数 / NaN。
+ *
+ * `setInterval(fn, 0)` 会退化成尽可能快地重复触发，等于把「自动刷新」变成打爆上游的
+ * 忙循环，因此非法值必须回落到默认间隔。服务端已做范围钳制，这里是最后一道防线。
+ */
+function toIntervalMs(seconds: number): number {
+  const safe =
+    Number.isFinite(seconds) && seconds > 0 ? seconds : FALLBACK_SITE_CONFIG.refreshIntervalSeconds
+  return safe * 1000
+}
 
 function applyResult<T>(result: PromiseSettledResult<T>, target: Ref<Slice<T>>): void {
   if (result.status === 'fulfilled') {
@@ -90,10 +103,50 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const autoRefresh = ref(true)
   const modelFilter = ref('')
 
+  /**
+   * 站点自定义：缺字段一律用兜底值补齐。
+   *
+   * 用**逐字段合并**而不是整体替换：日志/老版本服务端可能只下发 `{name}`，
+   * 整体替换会让 `logoUrl` 变成 undefined 而不是契约里的 null。
+   * `/api/status` 整个缺席（或换用非本项目后端）时等同于全用兜底值，
+   * 避免首屏品牌位空白、刷新间隔未定义。
+   */
+  const site = computed<SiteConfig>(() => ({ ...FALLBACK_SITE_CONFIG, ...status.value.data?.site }))
+
+  /** 当前生效的刷新间隔（毫秒）；由站点配置驱动，`/api/status` 返回后重排定时器。 */
+  const refreshIntervalMs = ref(toIntervalMs(FALLBACK_SITE_CONFIG.refreshIntervalSeconds))
+
+  /** 供 UI 提示「每 N 秒自动刷新」。 */
+  const refreshIntervalSeconds = computed(() => Math.round(refreshIntervalMs.value / 1000))
+
   let inFlight = false
   let pending = false
   let filterTimer: ReturnType<typeof setTimeout> | undefined
   let refreshTimer: ReturnType<typeof setInterval> | undefined
+
+  /**
+   * 单独拉 `/api/status` 并**立即**落地，不等其余 11 路 provider 查询。
+   *
+   * 站点名 / Logo / favicon / 刷新间隔都在这个切片里，而 provider 查询会真的打到各家
+   * 上游接口——最慢的一家足以把品牌文案拖到几秒之后（实测 3.7s，页面一直显示默认站点名）。
+   * 品牌属于「页面外观」，不该被数据查询的尾延迟绑架。
+   *
+   * 返回值表示这次 status 查询本身是否成功：`refresh` 的「至少一个请求成功才更新时间戳」
+   * 判定需要它，因此这里把异常收敛成 boolean（而不是让 promise reject，那样
+   * allSettled 里就分辨不出「status 失败」了）。
+   */
+  async function loadStatus(): Promise<boolean> {
+    try {
+      applyResult({ status: 'fulfilled', value: await api.status() }, status)
+      syncRefreshInterval()
+      return true
+    } catch (reason) {
+      applyResult({ status: 'rejected', reason }, status)
+      // 拿不到 status 时刷新间隔保持当前值（site 会自动回落到兜底配置）
+      syncRefreshInterval()
+      return false
+    }
+  }
 
   async function refresh(): Promise<void> {
     if (inFlight) {
@@ -104,8 +157,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
     inFlight = true
     loading.value = true
     const model = modelFilter.value.trim() || undefined
+    // 先起 status：它决定品牌与刷新节奏，要尽早落地（见 loadStatus 注释）
+    const statusPromise = loadStatus()
     const results = await Promise.allSettled([
-      api.status(),
+      statusPromise,
       api.deepseekBalance(),
       api.volcPlan(VOLC_DETAILS_DAYS),
       api.volcInference(VOLC_DETAILS_DAYS, model),
@@ -125,7 +180,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
       void refresh()
     }
 
-    applyResult(results[0], status)
+    // results[0]（status）已由 loadStatus 自行 apply，这里只处理其余切片
     applyResult(results[1], deepseek)
     applyResult(results[2], volcPlan)
     applyResult(results[3], volcInference)
@@ -138,8 +193,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
     applyResult(results[10], plans)
     applyResult(results[11], newapi)
 
-    // 至少一个请求成功才更新时间戳：全部失败时保留旧时间，避免“刚刷新但数据是旧的”误导
-    if (results.some((result) => result.status === 'fulfilled')) {
+    // 至少一个请求成功才更新时间戳：全部失败时保留旧时间，避免“刚刷新但数据是旧的”误导。
+    // status 的成败藏在 loadStatus 的返回值里（它的 promise 恒为 fulfilled），故单独判并跳过下标 0。
+    const statusResult = results[0]
+    const statusOk = statusResult.status === 'fulfilled' && statusResult.value
+    if (statusOk || results.slice(1).some((result) => result.status === 'fulfilled')) {
       lastUpdated.value = new Date()
     }
   }
@@ -175,13 +233,30 @@ export const useDashboardStore = defineStore('dashboard', () => {
       return
     }
     void refresh()
-    nextRefreshAt.value = new Date(Date.now() + REFRESH_INTERVAL_MS)
+    nextRefreshAt.value = new Date(Date.now() + refreshIntervalMs.value)
   }
 
   function startTimer(): void {
     clearInterval(refreshTimer)
-    refreshTimer = setInterval(tick, REFRESH_INTERVAL_MS)
-    nextRefreshAt.value = new Date(Date.now() + REFRESH_INTERVAL_MS)
+    refreshTimer = setInterval(tick, refreshIntervalMs.value)
+    nextRefreshAt.value = new Date(Date.now() + refreshIntervalMs.value)
+  }
+
+  /**
+   * 站点配置里的刷新间隔变了就重排定时器。
+   *
+   * 必须在**取到 /api/status 之后**调用：首挂载时定时器已按兜底间隔启动，
+   * 若站点把间隔配成了别的值却不重排，用户要等满一个兜底周期才会看到新节奏。
+   */
+  function syncRefreshInterval(): void {
+    const next = toIntervalMs(site.value.refreshIntervalSeconds)
+    if (next === refreshIntervalMs.value) {
+      return
+    }
+    refreshIntervalMs.value = next
+    if (autoRefresh.value && !document.hidden) {
+      startTimer()
+    }
   }
 
   function stopTimer(): void {
@@ -241,6 +316,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     nextRefreshAt,
     autoRefresh,
     modelFilter,
+    site,
+    refreshIntervalMs,
+    refreshIntervalSeconds,
     refresh,
     refreshInference,
     onFilterInput,
