@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from './mount'
+import { mountWithTDesign } from '../test-utils/mount'
 
-import NewApiSection from '../components/NewApiSection.vue'
+import NewApiSection from './NewApiSection.vue'
 import type { AccountEnvelope, NewApiAccountData, NewApiResponse } from '../types'
 
 const subscription: NewApiAccountData['subscription'] = {

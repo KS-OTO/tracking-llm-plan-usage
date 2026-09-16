@@ -120,7 +120,7 @@ export default defineConfig({
         },
       },
       {
-        files: ['src/**/__tests__/*'],
+        files: ['src/**/*.test.ts', 'server/**/*.test.ts'],
         rules: {
           'vitest/expect-expect': 'error',
           'vitest/no-commented-out-tests': 'error',

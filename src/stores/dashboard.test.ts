@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 
-import { useDashboardStore } from '../stores/dashboard'
+import { useDashboardStore } from './dashboard'
 
 /**
  * 打开自动刷新。

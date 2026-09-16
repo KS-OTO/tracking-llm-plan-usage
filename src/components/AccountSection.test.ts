@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
 
-import AccountSection from '../components/AccountSection.vue'
-import { mountWithTDesign } from './mount'
+import AccountSection from './AccountSection.vue'
+import { mountWithTDesign } from '../test-utils/mount'
 
 /** 卡片标题区的外链（标题插槽内），不是卡内的账号链接。 */
 function modelsLink(wrapper: ReturnType<typeof mountWithTDesign>) {

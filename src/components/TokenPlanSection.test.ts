@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign, openDetail } from './mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
-import TokenPlanSection from '../components/TokenPlanSection.vue'
+import TokenPlanSection from './TokenPlanSection.vue'
 import type {
   TokenPlanData,
   TokenPlanPersonalPlan,

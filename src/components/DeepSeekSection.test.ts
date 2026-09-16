@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign, openDetail } from './mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
-import DeepSeekSection from '../components/DeepSeekSection.vue'
+import DeepSeekSection from './DeepSeekSection.vue'
 import type { DeepSeekBalanceResponse } from '../types'
 
 const fixture: DeepSeekBalanceResponse = {
