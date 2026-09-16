@@ -9,7 +9,7 @@ import {
   progressStatus,
   ratioOf,
   sortPlatformSections,
-} from '../utils'
+} from './utils'
 
 describe('maskKey', () => {
   it('keeps only the first and last 4 characters', () => {

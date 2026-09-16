@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test'
 import { nextTick } from 'vue'
 
-import DetailDialog from '../components/DetailDialog.vue'
-import { mountWithTDesign } from './mount'
+import DetailDialog from './DetailDialog.vue'
+import { mountWithTDesign } from '../test-utils/mount'
 
 /**
  * 弹窗几何的回归断言。

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign, openDetail } from './mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
-import ZhipuSection from '../components/ZhipuSection.vue'
+import ZhipuSection from './ZhipuSection.vue'
 import type { ZhipuPackagesResponse } from '../types'
 
 const fixture: ZhipuPackagesResponse = {

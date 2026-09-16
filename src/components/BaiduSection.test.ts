@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign, openDetail } from './mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
-import BaiduSection from '../components/BaiduSection.vue'
+import BaiduSection from './BaiduSection.vue'
 import type { BaiduQianfanResponse } from '../types'
 
 /** 响应样本结构取自官方文档（Amo2ixqu7 / Qmo1geq40 / 4mm33t0kj）。 */

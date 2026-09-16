@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 
-import { modelDocsUrl } from '../modelDocs'
+import { modelDocsUrl } from './modelDocs'
 
 const VOLC = 'https://console.volcengine.com/ark/region:cn-beijing/docs/82379/2516283?lang=zh'
 const ZHIPU =

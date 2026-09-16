@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign, openDetail } from './mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
-import AliyunSection from '../components/AliyunSection.vue'
+import AliyunSection from './AliyunSection.vue'
 import type { AliyunPackagesResponse } from '../types'
 
 const fixture: AliyunPackagesResponse = {
