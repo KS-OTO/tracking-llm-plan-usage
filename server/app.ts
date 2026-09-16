@@ -23,6 +23,7 @@ import { fetchQianfanData, type BaiduCredentials } from './baidu.ts'
 import { fetchGiteePackageBalance, fetchGiteeVoucher } from './gitee.ts'
 import { fetchOpenCodeGoUsage } from './opencode.ts'
 import { fetchKimiPlan, fetchMiniMaxPlan, type TokenPlanInfo } from './plans.ts'
+import { fetchNewApi, type NewApiAccountData } from './newapi.ts'
 import {
   readIncompletePairs,
   readKeyPairs,
@@ -196,6 +197,10 @@ export function createAppHandler(env: EnvGetter) {
   const KIMI_KEYS = readKeys('KIMI_API_KEY', env)
   const MINIMAX_KEYS = readKeys('MINIMAX_API_KEY', env)
   const OPENCODE_GO_KEYS = readKeys('OPENCODE_GO_API_KEY', env)
+  // New API 是自托管服务：端点由各部署自己决定，因此凭据成对（站点地址 + API Key）
+  const NEWAPI_PAIRS = readKeyPairs('NEWAPI_BASE_URL', 'NEWAPI_API_KEY', env)
+  // New-Api-User 请求头（可选）：管理员代查他人数据时按站点地址配对
+  const NEWAPI_USER_ID_BY_URL = readPairedMap('NEWAPI_BASE_URL', 'NEWAPI_USER_ID', env)
 
   const volcCredentialsList: VolcCredentials[] = readKeyPairs(
     'VOLC_ACCESS_KEY_ID',
@@ -254,6 +259,8 @@ export function createAppHandler(env: EnvGetter) {
   labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
   labelMap('opencode', 'OPENCODE_GO_API_KEY', 'OPENCODE_GO_LABEL')
   labelMap('baidu', 'BAIDU_ACCESS_KEY_ID', 'BAIDU_LABEL')
+  // New API 用站点地址做别名索引（同一站点可能配多个 Key）
+  labelMap('newapi', 'NEWAPI_BASE_URL', 'NEWAPI_LABEL')
   // Cookie 专属的 Token Plan 账号没有 AK/SK 可配对，因此单列一组别名前缀
   // （已有 AK/SK 的账号仍优先用 ALIYUN_LABEL）
   labelMap('tokenplan-cookie', 'ALIYUN_TOKENPLAN_COOKIE', 'ALIYUN_TOKENPLAN_LABEL')
@@ -292,6 +299,7 @@ export function createAppHandler(env: EnvGetter) {
         tokenplan: providerStatus(aliyunTokenPlanSources.map((source) => source.keyHint)),
         extras: providerStatus(extrasKeyHints),
         plans: providerStatus(plansKeyHints),
+        newapi: providerStatus(NEWAPI_PAIRS.map((pair) => maskKey(pair.key))),
       },
       incomplete: INCOMPLETE_VARS,
       now: Date.now(),
@@ -431,6 +439,34 @@ export function createAppHandler(env: EnvGetter) {
         label: labelOf('deepseek', apiKey),
         run: () => fetchDeepSeekBalance(apiKey),
       })),
+    )
+    return json({ accounts })
+  }
+
+  /** New API（自托管订阅网关）：站点地址 + API Key 成对配置，逐站点独立容错。 */
+  async function handleNewApi(): Promise<Response> {
+    if (NEWAPI_PAIRS.length === 0) {
+      return errorResponse(
+        503,
+        'NOT_CONFIGURED',
+        '未配置 NEWAPI_BASE_URL / NEWAPI_API_KEY 环境变量',
+      )
+    }
+    const accounts = await runAccounts(
+      NEWAPI_PAIRS.map((pair): AccountEntry<NewApiAccountData> => {
+        const baseUrl = pair.key
+        const userId = NEWAPI_USER_ID_BY_URL.get(baseUrl)
+        return {
+          keyHint: maskKey(pair.secret),
+          label: labelOf('newapi', baseUrl),
+          run: () =>
+            fetchNewApi({
+              baseUrl,
+              apiKey: pair.secret,
+              ...(userId ? { userId } : {}),
+            }),
+        }
+      }),
     )
     return json({ accounts })
   }
@@ -660,6 +696,9 @@ export function createAppHandler(env: EnvGetter) {
       }
       if (url.pathname === '/api/plans') {
         return await handlePlans()
+      }
+      if (url.pathname === '/api/newapi') {
+        return await handleNewApi()
       }
       if (url.pathname.startsWith('/api/')) {
         return errorResponse(404, 'NOT_FOUND', `未知接口: ${url.pathname}`)
