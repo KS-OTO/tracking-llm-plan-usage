@@ -3,6 +3,10 @@
  * DeepSeek 余额。
  *
  * 卡片只留总余额读数；充值 / 赠金拆分收进「详情」弹窗。
+ *
+ * 卡头标签遵循统一规则（见 assets/layout.css 的 .account-head）：只在**异常态**出现 ——
+ * 本平台是全站唯一能给出账号级可用性的接口（`isAvailable`），可用时不再挂牌，
+ * 否则 7 张平台卡里只有这一张带标签，反而像别的卡漏了状态。
  */
 import type { DeepSeekBalanceResponse } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
@@ -38,12 +42,12 @@ defineProps<{
               {{ account.keyHint }}
             </span>
             <t-tag
-              v-if="!isFailedAccount(account)"
+              v-if="!isFailedAccount(account) && !account.isAvailable"
               size="small"
               variant="light-outline"
-              :theme="account.isAvailable ? 'success' : 'warning'"
+              theme="warning"
             >
-              {{ account.isAvailable ? '可用' : '不可用' }}
+              不可用
             </t-tag>
             <DetailDialog
               v-if="!isFailedAccount(account)"
@@ -92,14 +96,14 @@ defineProps<{
             :message="account.error"
             :max-line="5"
           />
-          <div v-else class="grid-metrics">
+          <div v-else class="grid-metrics grid-metrics--pair">
             <t-statistic
               v-for="entry in account.balances"
               :key="entry.currency"
               :title="`${entry.currency} 总余额`"
               :value="entry.total"
               :decimal-places="2"
-              :suffix="entry.currency"
+              :unit="entry.currency"
             />
           </div>
         </div>

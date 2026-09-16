@@ -107,12 +107,12 @@ function expiryLabel(iso: string | null): string {
             :max-line="5"
           />
 
-          <div v-else class="grid-metrics">
+          <div v-else class="grid-metrics grid-metrics--pair">
             <t-statistic
               title="剩余额度"
               :value="account.balance"
               :decimal-places="2"
-              suffix="USD"
+              unit="USD"
               :color="
                 account.limitRemaining !== null && account.limitRemaining <= 1 ? 'red' : undefined
               "
@@ -122,13 +122,13 @@ function expiryLabel(iso: string | null): string {
               title="限额剩余"
               :value="account.limitRemaining ?? 0"
               :decimal-places="2"
-              suffix="USD"
+              unit="USD"
             />
             <t-statistic
               title="今日用量"
               :value="account.usageDaily"
               :decimal-places="2"
-              suffix="USD"
+              unit="USD"
             />
           </div>
         </div>
