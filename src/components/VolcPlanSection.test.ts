@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test'
 import { nextTick } from 'vue'
-import { mountWithTDesign, openDetail } from './mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
-import VolcPlanSection from '../components/VolcPlanSection.vue'
+import VolcPlanSection from './VolcPlanSection.vue'
 import type { InferenceUsageResponse, VolcPlanResponse } from '../types'
 
 const fixture: VolcPlanResponse = {

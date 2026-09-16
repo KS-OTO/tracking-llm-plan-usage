@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign, openDetail } from './mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
-import PlansSection from '../components/PlansSection.vue'
+import PlansSection from './PlansSection.vue'
 import type { ExtrasPlanGroup } from '../types'
 
 const openCode: ExtrasPlanGroup = {
