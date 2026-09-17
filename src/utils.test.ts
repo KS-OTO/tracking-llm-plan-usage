@@ -1,13 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 
 import {
-  formatMoney,
   formatReset,
-  formatTokens,
   maskKey,
   pickLogoUrl,
   platformInitial,
-  progressPercentage,
   progressStatus,
   ratioOf,
   sortPlatformSections,
@@ -24,19 +21,6 @@ describe('maskKey', () => {
   })
 })
 
-describe('formatTokens', () => {
-  it('formats small counts plainly', () => {
-    expect(formatTokens(0)).toBe('0')
-    expect(formatTokens(999)).toBe('999')
-  })
-
-  it('compresses thousands, millions and billions', () => {
-    expect(formatTokens(12_500)).toBe('12.5K')
-    expect(formatTokens(1_200_000)).toBe('1.20M')
-    expect(formatTokens(3_400_000_000)).toBe('3.40B')
-  })
-})
-
 describe('ratioOf', () => {
   it('computes percentage capped at 100', () => {
     expect(ratioOf(25, 100)).toBe(25)
@@ -45,12 +29,6 @@ describe('ratioOf', () => {
 
   it('returns 0 for zero quota', () => {
     expect(ratioOf(10, 0)).toBe(0)
-  })
-})
-
-describe('formatMoney', () => {
-  it('formats with two decimals and currency', () => {
-    expect(formatMoney(12.345, 'CNY')).toBe('12.35 CNY')
   })
 })
 
@@ -100,21 +78,6 @@ describe('progressStatus', () => {
   it('maps critical usage to error (desktop Progress has no danger)', () => {
     expect(progressStatus(90)).toBe('error')
     expect(progressStatus(100)).toBe('error')
-  })
-})
-
-describe('progressPercentage', () => {
-  it('rounds the raw ratio so <t-progress> does not print raw decimals', () => {
-    // New API 的订阅窗口算出来是 34.0101024，直接喂给 <t-progress> 会渲染成
-    // "34.0101024%" —— 这是实测报上来的症状
-    expect(progressPercentage(34.0101024)).toBe(34)
-    expect(progressPercentage(0.4)).toBe(0)
-    expect(progressPercentage(99.5)).toBe(100)
-  })
-
-  it('clamps into 0-100 in both directions', () => {
-    expect(progressPercentage(140)).toBe(100)
-    expect(progressPercentage(-3)).toBe(0)
   })
 })
 

@@ -21,7 +21,14 @@ import type {
   NewApiWallet,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { progressPercentage } from '../utils'
+import {
+  formatCount,
+  formatMoney,
+  formatNumber,
+  progressPercentage,
+  truncateMoney,
+} from '../format'
+import { formatDateTime } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -97,11 +104,7 @@ function amount(value: number | null | undefined, currency: NewApiQuotaUnit | nu
   if (value === null || value === undefined) {
     return '无限'
   }
-  const text = value.toLocaleString('zh-CN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  return currency?.unit ? `${text} ${currency.unit}` : text
+  return formatMoney(value, currency?.unit)
 }
 
 /**
@@ -129,17 +132,11 @@ function currencyLabel(row: NewApiRow): string {
 }
 
 function integer(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return '—'
-  }
-  return Math.round(value).toLocaleString('zh-CN')
+  return formatCount(value)
 }
 
 function dateTime(value: number | null): string {
-  if (!value) {
-    return '—'
-  }
-  return new Date(value).toLocaleString('zh-CN', { hour12: false })
+  return value ? formatDateTime(value) : '—'
 }
 
 /** 周期长度：订阅周期多为 7 / 30 天，站点可自定义。 */
@@ -149,7 +146,7 @@ function cycleDays(row: NewApiRow): string {
     return '—'
   }
   const days = (sub.nextResetAt - sub.lastResetAt) / 86_400_000
-  return days >= 1 ? `${Math.round(days)} 天` : `${Math.round(days * 24)} 小时`
+  return days >= 1 ? `${formatCount(days)} 天` : `${formatCount(days * 24)} 小时`
 }
 
 function modeLabel(row: NewApiRow): string {
@@ -278,7 +275,7 @@ function modeLabel(row: NewApiRow): string {
             <div class="window-block">
               <div class="group-head">
                 <span>本周期已用</span>
-                <span class="num-strong">{{ row.subscription.percent.toFixed(1) }}%</span>
+                <span class="num-strong">{{ formatNumber(row.subscription.percent) }}%</span>
               </div>
               <t-progress :percentage="progressPercentage(row.subscription.percent)" />
               <div class="muted window-meta">
@@ -295,7 +292,7 @@ function modeLabel(row: NewApiRow): string {
           <div v-if="row.wallet" class="grid-metrics grid-metrics--pair">
             <t-statistic
               title="钱包余额"
-              :value="row.wallet.unlimited ? 0 : (row.wallet.remain ?? 0)"
+              :value="row.wallet.unlimited ? 0 : truncateMoney(row.wallet.remain ?? 0)"
               :decimal-places="2"
               :unit="row.wallet.unlimited ? undefined : currencyUnit(row)"
               :suffix="row.wallet.unlimited ? '无限额度' : undefined"
@@ -303,7 +300,7 @@ function modeLabel(row: NewApiRow): string {
             />
             <t-statistic
               title="累计已用"
-              :value="row.wallet.used"
+              :value="truncateMoney(row.wallet.used)"
               :decimal-places="2"
               :unit="currencyUnit(row)"
             />

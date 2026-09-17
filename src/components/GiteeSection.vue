@@ -11,7 +11,7 @@ import type {
   GiteeVoucherSlice,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatMoney, formatTokens } from '../utils'
+import { formatMoney, formatTokens, truncateMoney } from '../format'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -126,7 +126,7 @@ function formatDate(ms: number): string {
                   <div class="grid-metrics detail-block">
                     <t-statistic
                       title="现金代金券余额"
-                      :value="account.voucher.data.couponCashBalance"
+                      :value="truncateMoney(account.voucher.data.couponCashBalance)"
                       :decimal-places="2"
                       unit="CNY"
                     />
@@ -172,18 +172,23 @@ function formatDate(ms: number): string {
             :max-line="5"
           />
           <div v-else class="grid-metrics grid-metrics--pair">
-            <t-statistic title="剩余余额" :value="account.balance" :decimal-places="2" unit="CNY" />
+            <t-statistic
+              title="剩余余额"
+              :value="truncateMoney(account.balance)"
+              :decimal-places="2"
+              unit="¥"
+            />
             <t-statistic
               title="已使用"
-              :value="account.usedAmount"
+              :value="truncateMoney(account.usedAmount)"
               :decimal-places="2"
-              unit="CNY"
+              unit="¥"
             />
             <t-statistic
               title="总金额"
-              :value="account.totalAmount"
+              :value="truncateMoney(account.totalAmount)"
               :decimal-places="2"
-              unit="CNY"
+              unit="¥"
             />
           </div>
         </div>

@@ -10,7 +10,7 @@
  */
 import type { DeepSeekBalanceResponse } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatMoney } from '../utils'
+import { currencySymbol, formatMoney, truncateMoney } from '../format'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -101,9 +101,9 @@ defineProps<{
               v-for="entry in account.balances"
               :key="entry.currency"
               :title="`${entry.currency} 总余额`"
-              :value="entry.total"
+              :value="truncateMoney(entry.total)"
               :decimal-places="2"
-              :unit="entry.currency"
+              :unit="currencySymbol(entry.currency)"
             />
           </div>
         </div>
