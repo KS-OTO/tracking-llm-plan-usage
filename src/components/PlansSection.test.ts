@@ -91,7 +91,11 @@ describe('PlansSection', () => {
     expect(detail).toContain('OpenCode Go')
     expect(detail).toContain('opencode.ai/zen/go/v1/usage')
     expect(detail).toContain('重置时间')
-    expect(detail).toContain('3 个额度窗口')
+    // 三个窗口在弹窗里同时以用量条（额度窗口）与明细表（窗口明细）出现：
+    // 前者回答「用了多少」，后者被抄去做对账（含上游状态与具体重置时刻）
+    expect(detail).toContain('窗口明细（3）')
+    expect(detail).toContain('每周窗口')
+    expect(detail).toContain('30 天窗口')
   })
 
   it('flags a rate-limited window instead of silently showing 100% as usage', () => {

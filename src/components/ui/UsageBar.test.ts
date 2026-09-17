@@ -96,9 +96,8 @@ describe('UsageBar', () => {
     expect(money.find('.window-meta').text().match(/¥/g)).toHaveLength(2)
   })
 
-  it('平台专属说明追加到脚注行末尾', () => {
-    const bar = mountWithTDesign(UsageBar, { props: { quota, note: '周期 30 天' } })
-    expect(bar.find('.window-foot').text()).toContain('周期 30 天')
+  it('平台专属说明随窗口从模型里来，追加到脚注行末尾', () => {
+    expect(mountBar({ note: '周期 30 天' }).find('.window-foot').text()).toContain('周期 30 天')
   })
 
   it('上游限流状态同时给标题标签与脚注说明', () => {

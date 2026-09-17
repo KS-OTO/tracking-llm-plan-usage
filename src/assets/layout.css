@@ -418,6 +418,26 @@
   margin-bottom: var(--td-size-5);
 }
 
+/* 详情弹窗 ④ 附加区的外链行（AccountDetailPanel 用）。
+ * 原先这段样式叫 `.site-links`、写在 NewApiSection 的 scoped 样式里 ——
+ * 但「弹窗底部的外链行」是模型的一个区，不是 New API 的特性。 */
+.detail-links {
+  display: flex;
+  gap: var(--td-size-6);
+  margin: 0;
+  font-size: var(--td-font-size-body-small);
+}
+
+.detail-links a {
+  color: var(--td-brand-color);
+  text-decoration: none;
+}
+
+.detail-links a:hover,
+.detail-links a:focus-visible {
+  text-decoration: underline;
+}
+
 /* ============================================================
  * 5. 响应式：顶部导航与主容器
  *
