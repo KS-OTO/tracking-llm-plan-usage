@@ -277,6 +277,29 @@ function readSiteName(value: string | undefined): string {
   return value === undefined ? DEFAULT_SITE_NAME : value.trim()
 }
 
+/**
+ * 把要写进日志的值里的控制字符转义掉。
+ *
+ * 日志注入：`url.pathname` 由请求方控制，可以带 `\n` / `\r` —— 直接打印会让对方
+ * **伪造出一行看起来像系统写的日志**（例如自己插一条 `[app] GET /api/xxx failed:`）。
+ * 服务端日志常被当成排查证据看，行边界被污染就不是小事。
+ *
+ * 只转义 C0 控制字符（U+0000–U+001F）与 DEL（U+007F），
+ * 中文 / 空格 / 普通标点都原样保留（可读性优先）。
+ *
+ * 为什么写成逐码点判断而不是 `/[\u0000-\u001F\u007F]/g`：正则里出现控制字符会被
+ * `no-control-regex` 拦下（连 `\u0000` 转义形式也算），而那条规则顾虑的正是
+ * 「控制字符在源码里看不见、易被误改」—— 写成显式码点比较正好回应了这个顾虑。
+ */
+export function logSafe(value: string): string {
+  let out = ''
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0
+    out += code <= 0x1f || code === 0x7f ? `\\u${code.toString(16).padStart(4, '0')}` : ch
+  }
+  return out
+}
+
 /** 站点自定义配置：任一变量缺失都回落到默认值，不抛错。 */
 export function readSiteConfig(env: EnvGetter): SiteConfig {
   return {
@@ -820,7 +843,7 @@ export function createAppHandler(env: EnvGetter) {
       }
       return null
     } catch (error) {
-      console.error('[app] %s %s failed:', request.method, url.pathname, error)
+      console.error('[app] %s %s failed:', request.method, logSafe(url.pathname), error)
       return errorResponse(
         500,
         'INTERNAL_ERROR',

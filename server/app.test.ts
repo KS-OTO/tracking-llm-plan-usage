@@ -5,6 +5,7 @@ import {
   createAppHandler,
   DEFAULT_REFRESH_INTERVAL_SECONDS,
   DEFAULT_SITE_NAME,
+  logSafe,
   readSiteConfig,
   REFRESH_INTERVAL_RANGE,
   runAccounts,
@@ -251,5 +252,23 @@ describe('INCOMPLETE_VARS', () => {
         NEWAPI_TOKEN: 'system-access-token',
       }),
     ).toStrictEqual([])
+  })
+})
+
+describe('logSafe', () => {
+  it('原样保留普通文本（含中文与空格）', () => {
+    expect(logSafe('/api/status 正常')).toBe('/api/status 正常')
+  })
+
+  it('把换行与回车转义掉（否则请求方可以在日志里伪造出新的一行）', () => {
+    expect(logSafe('/api/x\n[app] GET /api/y failed:')).toBe(
+      '/api/x\\u000a[app] GET /api/y failed:',
+    )
+    expect(logSafe('/api/x\r\n')).toBe('/api/x\\u000d\\u000a')
+  })
+
+  it('转义制表符与 DEL', () => {
+    expect(logSafe('a\tb')).toBe('a\\u0009b')
+    expect(logSafe('a\u007fb')).toBe('a\\u007fb')
   })
 })

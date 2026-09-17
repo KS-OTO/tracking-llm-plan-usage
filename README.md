@@ -182,6 +182,18 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 
 ## 环境变量
 
+全部变量（含账号别名 `*_LABEL`）都登记在 `server/env-vars.ts` 的 `SERVER_ENV_VARS` 里 ——
+那是唯一的事实来源，新增平台时改它，`.env.example` 与 `.dev.vars.example` 会被
+`server/env-vars.test.ts` 校对（漏登记会直接测试失败，不会出现「文档写着有、配了却不生效」）。
+
+三份配置文件的分工，同一段说明只在一处维护：
+
+| 文件                | 用途                                                             |
+| ------------------- | ---------------------------------------------------------------- |
+| `.env.example`      | **主模板**：变量最全、说明最详细，也是平台面板填变量时的参考     |
+| `.dev.vars.example` | Cloudflare Workers 版：**同集合同顺序**，只讲 Workers 专属差异   |
+| `.env`              | 本机真实值（gitignored、不入库），分组顺序与 `.env.example` 一致 |
+
 | 变量                       | 必填 | 说明                                                                                                       |
 | -------------------------- | ---- | ---------------------------------------------------------------------------------------------------------- |
 | `DEEPSEEK_API_KEY`         | 否   | DeepSeek API Key（余额查询），在 https://platform.deepseek.com/api_keys 获取                               |
@@ -193,6 +205,8 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 | `ALIYUN_TOKENPLAN_COOKIE`  | 否   | 百炼控制台 Cookie 中 `login_aliyunid_ticket` 的**值**（Token Plan 个人版用量，无需授权；详见下文取值注意） |
 | `GITEE_AI_API_KEY`         | 否   | 模力方舟（Gitee AI）访问令牌（资源包余额），在 https://ai.gitee.com 生成                                   |
 | `GITEE_AI_SESSION_COOKIE`  | 否   | 模力方舟 Web 会话 Cookie（代金券查询；整段含空格，平台面板需填编码值，见「Cookie 怎么填」）                |
+| `BAIDU_ACCESS_KEY_ID`      | 否   | 百度智能云千帆 Access Key ID（BCE 签名），在 https://console.bce.baidu.com/iam/#/iam/accesslist 创建       |
+| `BAIDU_SECRET_KEY`         | 否   | 百度智能云千帆 Secret Access Key（建议子账号 + `QianfanServiceReadAccessPolicy` 只读）                     |
 | `STEPFUN_API_KEY`          | 否   | StepFun 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://platform.stepfun.com 获取                 |
 | `SILICONFLOW_API_KEY`      | 否   | SiliconFlow 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://cloud.siliconflow.cn 获取             |
 | `OPENROUTER_API_KEY`       | 否   | OpenRouter 剩余额度与限额，在 https://openrouter.ai/keys 获取                                              |
