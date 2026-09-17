@@ -14,12 +14,13 @@ import { computed } from 'vue'
 import type { ZhipuAccountBalance, ZhipuCodingPlanQuota, ZhipuPackagesResponse } from '../types'
 import { accountTitle, isFailedAccount, sliceData, sliceError } from '../types'
 import {
-  formatDateTime,
-  formatReset,
+  formatMoney,
+  formatNumber,
   formatTokens,
   progressPercentage,
-  progressStatus,
-} from '../utils'
+  truncateMoney,
+} from '../format'
+import { formatDateTime, formatReset, progressStatus } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -194,10 +195,10 @@ const cards = computed<ZhipuCard[]>(() => (props.data?.accounts ?? []).map(toCar
                     {{ creditStatusLabel(card.balance?.creditStatus ?? '') }}
                   </t-descriptions-item>
                   <t-descriptions-item label="累计充值">
-                    {{ (card.balance?.rechargeAmount ?? 0).toFixed(2) }} CNY
+                    {{ formatMoney(card.balance?.rechargeAmount ?? 0, 'CNY') }}
                   </t-descriptions-item>
                   <t-descriptions-item label="赠送金额">
-                    {{ (card.balance?.giveAmount ?? 0).toFixed(2) }} CNY
+                    {{ formatMoney(card.balance?.giveAmount ?? 0, 'CNY') }}
                   </t-descriptions-item>
                 </template>
               </t-descriptions>
@@ -264,7 +265,7 @@ const cards = computed<ZhipuCard[]>(() => (props.data?.accounts ?? []).map(toCar
                   <span class="num-strong"
                     >{{ formatTokens(window.used) }} / {{ formatTokens(window.total) }}</span
                   >
-                  <span class="num-strong">{{ window.percentage.toFixed(1) }}%</span>
+                  <span class="num-strong">{{ formatNumber(window.percentage) }}%</span>
                 </t-space>
                 <div class="muted window-foot">
                   剩余 {{ formatTokens(window.remaining) }} · 重置于
@@ -288,15 +289,15 @@ const cards = computed<ZhipuCard[]>(() => (props.data?.accounts ?? []).map(toCar
             <div v-if="variant !== 'plan' && card.balance" class="grid-metrics grid-metrics--pair">
               <t-statistic
                 title="可用余额"
-                :value="card.balance.availableBalance"
+                :value="truncateMoney(card.balance.availableBalance)"
                 :decimal-places="2"
-                unit="CNY"
+                unit="¥"
               />
               <t-statistic
                 title="账户余额"
-                :value="card.balance.balance"
+                :value="truncateMoney(card.balance.balance)"
                 :decimal-places="2"
-                unit="CNY"
+                unit="¥"
               />
             </div>
             <t-alert

@@ -14,13 +14,8 @@ import type {
   TokenPlanSharedPackage,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import {
-  formatDateTime,
-  formatReset,
-  formatTokens,
-  progressPercentage,
-  progressStatus,
-} from '../utils'
+import { formatNumber, formatTokens, progressPercentage } from '../format'
+import { formatDateTime, formatReset, progressStatus } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -326,8 +321,8 @@ function packageRows(packages: TokenPlanSharedPackage[] | null) {
                   :label="false"
                 />
                 <t-space align="center" justify="space-between" class="window-meta">
-                  <span class="muted">已用 {{ item.percent.toFixed(1) }}%</span>
-                  <span class="num">{{ item.percent.toFixed(1) }}%</span>
+                  <span class="muted">已用 {{ formatNumber(item.percent) }}%</span>
+                  <span class="num">{{ formatNumber(item.percent) }}%</span>
                 </t-space>
               </div>
             </div>

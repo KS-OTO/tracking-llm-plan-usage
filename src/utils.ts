@@ -8,25 +8,6 @@ export function maskKey(key: string): string {
   return `${key.slice(0, 4)}****${key.slice(-4)}`
 }
 
-/** 金额展示，如 "12.34 CNY"。 */
-export function formatMoney(value: number, currency: string): string {
-  return `${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-}
-
-/** Token 数量压缩展示：12.5K / 1.2M / 3.4B。 */
-export function formatTokens(value: number): string {
-  if (value >= 1e9) {
-    return `${(value / 1e9).toFixed(2)}B`
-  }
-  if (value >= 1e6) {
-    return `${(value / 1e6).toFixed(2)}M`
-  }
-  if (value >= 1e3) {
-    return `${(value / 1e3).toFixed(1)}K`
-  }
-  return String(value)
-}
-
 /** 配额使用百分比（0-100 封顶）。 */
 export function ratioOf(used: number, quota: number): number {
   return quota > 0 ? Math.min(100, (used / quota) * 100) : 0
@@ -182,18 +163,6 @@ export function progressStatus(percent: number): 'success' | 'warning' | 'error'
     return 'warning'
   }
   return 'success'
-}
-
-/**
- * 进度条的 `percentage`：取整并封顶到 [0, 100]。
- *
- * 必须收敛，不能把原始百分比直接喂给 `<t-progress>`：TDesign 会把 `percentage`
- * **原样**渲染成进度条上的百分比文案，于是「已用 / 总额」算出来的
- * `34.0101024` 会显示成 `34.0101024%`（实测 New API 卡的订阅窗口就是这个症状）。
- * 文案层原本各自 `toFixed(1)`，只有这一处漏了 —— 统一走本函数，避免再漏第二处。
- */
-export function progressPercentage(percent: number): number {
-  return Math.round(Math.min(100, Math.max(0, percent)))
 }
 
 /**

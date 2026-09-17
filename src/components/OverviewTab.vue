@@ -5,7 +5,8 @@ import { storeToRefs } from 'pinia'
 import { accountTitle, isFailedAccount, sliceData } from '../types'
 import { modelDocsUrl } from '../modelDocs'
 import { useDashboardStore } from '../stores/dashboard'
-import { formatReset, formatTokens, providerSlug, sortPlatformSections } from '../utils'
+import { formatCount, formatCurrency, formatTokens } from '../format'
+import { formatReset, providerSlug, sortPlatformSections } from '../utils'
 
 const emit = defineEmits<{
   /** 跳转到指定平台卡片：切 Tab + 滚动到锚点。 */
@@ -229,7 +230,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         tab: 'subscription',
         anchor: 'volc-plan',
         count: volcAll.length,
-        primary: `最紧窗口 ${Math.round(worstPercent)}%`,
+        primary: `最紧窗口 ${formatCount(worstPercent)}%`,
         secondary: worstReset > 0 ? formatReset(worstReset) : undefined,
         danger: worstPercent >= 90,
       },
@@ -256,7 +257,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         tab: 'subscription',
         anchor: 'zhipu',
         count: zhipuAll.length,
-        primary: `${level} · ${Math.round(worstPercent)}%`,
+        primary: `${level} · ${formatCount(worstPercent)}%`,
         secondary: `${zhipuAccounts.length} 账号`,
         danger: worstPercent >= 90,
       },
@@ -284,7 +285,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         anchor: 'tokenplan',
         count: tpAll.length,
         primary: `${seats} 座席`,
-        secondary: `剩 ${remaining >= 1e6 ? `${(remaining / 1e6).toFixed(2)}M` : Math.round(remaining)} CREDITS`,
+        secondary: `剩 ${remaining >= 1e6 ? formatTokens(remaining) : formatCount(remaining)} CREDITS`,
       },
       tpAccounts.length === 0,
     )
@@ -305,7 +306,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         tab: 'balance',
         anchor: 'deepseek',
         count: dsAll.length,
-        primary: `${total.toFixed(2)} CNY`,
+        primary: formatCurrency(total, 'CNY'),
         secondary: `${dsAccounts.length} 账号`,
       },
       dsAccounts.length === 0,
@@ -330,8 +331,8 @@ const summaries = computed<PlatformSummary[]>(() => {
         tab: 'balance',
         anchor: 'gitee',
         count: giteeAll.length,
-        primary: `${balance.toFixed(2)} CNY`,
-        secondary: voucher > 0 ? `代金券 ${voucher.toFixed(2)}` : undefined,
+        primary: formatCurrency(balance, 'CNY'),
+        secondary: voucher > 0 ? `代金券 ${formatCurrency(voucher, 'CNY')}` : undefined,
       },
       giteeAccounts.length === 0,
     )
@@ -389,10 +390,13 @@ const summaries = computed<PlatformSummary[]>(() => {
         tab: 'balance',
         anchor: 'openrouter',
         count: orAll.length,
-        primary: `${balance.toFixed(2)} USD`,
+        primary: formatCurrency(balance, 'USD'),
         secondary:
           withLimit.length > 0
-            ? `限额剩 ${withLimit.reduce((s, a) => s + (a.limitRemaining ?? 0), 0).toFixed(2)}`
+            ? `限额剩 ${formatCurrency(
+                withLimit.reduce((s, a) => s + (a.limitRemaining ?? 0), 0),
+                'USD',
+              )}`
             : orAccounts[0]?.isFreeTier
               ? '免费层'
               : undefined,
@@ -420,7 +424,7 @@ const summaries = computed<PlatformSummary[]>(() => {
         tab: 'subscription',
         anchor: `plans-${slug}`,
         count: group.accounts.length,
-        primary: `最紧窗口 ${Math.round(worstPercent)}%`,
+        primary: `最紧窗口 ${formatCount(worstPercent)}%`,
         secondary: `${group.accounts.length} 账号`,
         danger: worstPercent >= 90,
       },
@@ -537,7 +541,7 @@ function jump(tab: string, anchor: string): void {
                       :theme="alert.percent >= 90 ? 'danger' : 'warning'"
                       variant="light"
                     >
-                      {{ alert.percent.toFixed(0) }}%
+                      {{ formatCount(alert.percent) }}%
                     </t-tag>
                     <span>{{ alert.platform }}</span>
                     <span class="text-secondary">{{ alert.account }}</span>
@@ -583,13 +587,14 @@ function jump(tab: string, anchor: string): void {
         <t-card title="平台总览" header-bordered size="small">
           <t-empty v-if="summaries.length === 0 && !loading" description="未配置任何平台密钥" />
           <div v-else class="grid-metrics">
-            <t-statistic title="已配置平台" :value="summaries.length" />
+            <t-statistic title="已配置平台" :value="summaries.length" :decimal-places="0" />
             <t-statistic
               title="紧急 (≥90%)"
               :value="criticalCount"
               :color="criticalCount > 0 ? 'red' : undefined"
+              :decimal-places="0"
             />
-            <t-statistic title="注意 (≥70%)" :value="warningCount" />
+            <t-statistic title="注意 (≥70%)" :value="warningCount" :decimal-places="0" />
           </div>
         </t-card>
       </div>
