@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import {
   formatReset,
+  isCompactAccounts,
   maskKey,
   metricGridClass,
   pickLogoUrl,
   platformInitial,
   progressStatus,
   ratioOf,
+  shouldSpanFullRow,
   sortPlatformSections,
 } from './utils'
 
@@ -224,5 +229,38 @@ describe('sortPlatformSections', () => {
     const sections = [section('火山方舟', 1), section('OpenCode Go', 2)]
     sortPlatformSections(sections)
     expect(sections.map((item) => item.name)).toEqual(['火山方舟', 'OpenCode Go'])
+  })
+})
+
+describe('账号卡网格的列策略（#18）', () => {
+  const SRC_DIR = dirname(fileURLToPath(import.meta.url))
+
+  it('2 个 Key 起独占整行', () => {
+    expect(shouldSpanFullRow(1)).toBe(false)
+    expect(shouldSpanFullRow(2)).toBe(true)
+  })
+
+  it('5 个 Key 起切紧凑行式（停止加列）', () => {
+    expect(isCompactAccounts(4)).toBe(false)
+    expect(isCompactAccounts(5)).toBe(true)
+  })
+
+  /**
+   * 守卫：谓词、模板、样式表三处必须同时存在。
+   *
+   * 这三个谓词的分工是「App.vue 按区块的 Key 数决定列策略」，组件侧一律不判断。
+   * 漏了任何一环都不会让别的用例失败 —— 只会在「5 个 Key 的账号」上肉眼可见，
+   * 而那正是没人会天天搭的测试数据。所以在这里把接线固定住。
+   */
+  it('谓词真的接到了模板与样式表上', () => {
+    const app = readFileSync(resolve(SRC_DIR, 'App.vue'), 'utf8')
+    const css = readFileSync(resolve(SRC_DIR, 'assets/layout.css'), 'utf8')
+
+    expect(app).toContain("'grid-span-all': shouldSpanFullRow(section.count)")
+    expect(app).toContain("'section-compact': isCompactAccounts(section.count)")
+    // 只有谓词、没有规则 = 静默失效
+    expect(css).toContain('.grid-span-all {')
+    expect(css).toContain('.section-compact .grid-cards {')
+    expect(css).toContain('.section-compact .window-block {')
   })
 })

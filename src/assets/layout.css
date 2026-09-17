@@ -231,6 +231,29 @@
   --card-min: 200px;
 }
 
+/**
+ * 紧凑行式：Key 多到 ≥5 个时**停止加列**，一行一个 Key（`utils.isCompactAccounts`）。
+ *
+ * 与 `.grid-span-all` 同源 —— 都由 App.vue 按「这一节有几个 Key」决定，组件不判断。
+ * 为什么到 5 个就换：`.grid-cards--wide` 的轨道下限 360px，独占整行后一行最多 3 列，
+ * 5 个 Key 会排成「3 + 2」的残行；而格子越窄，卡内读数越容易撞上 `.grid-metrics`
+ * 的容器查询（≤160px 降一号字），同一个平台在 4 个与 5 个 Key 下字号就不同了。
+ *
+ * 「紧凑」的具体口径是**只去掉窗口块的底色与横向内边距，字号一律不动**：
+ * 白底的作用是让并排的格子彼此分开，一行一个之后分隔由行间距承担，再铺白底只剩噪音；
+ * 横向内边距归零则让窗口内容与上面的账号名（`.account-head`）左边缘对齐 ——
+ * 行式列表里内容不齐是最显眼的错位。字号不动，正因为它才是要治的东西。
+ */
+.section-compact .grid-cards {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.section-compact .window-block {
+  padding-inline: 0;
+  background: none;
+  border-radius: 0;
+}
+
 /* ============================================================
  * 4. 卡片内区块与文本：收敛原先散落在 10+ 个组件里的重复定义
  *
