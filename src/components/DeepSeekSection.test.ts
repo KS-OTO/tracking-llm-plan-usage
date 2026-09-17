@@ -52,11 +52,14 @@ describe('DeepSeekSection', () => {
     expect(tags).toEqual(['不可用'])
   })
 
-  it('uses the card metrics grid that fixes two readings per row', () => {
+  it('列数由读数个数声明，不由容器宽度偶然决定', () => {
     const wrapper = mountWithTDesign(DeepSeekSection, {
       props: { data: fixture, loading: false, error: null },
     })
-    expect(wrapper.find('.account-group > .grid-metrics').classes()).toContain('grid-metrics--pair')
+    // 每个账号只有 1 个币种读数 → 走 auto-fit 的 `.grid-metrics`。
+    // 曾经这里恒挂 `--pair`（按容器宽度 auto-fit 的旧变体），于是同一对读数在半宽卡里 2 列、
+    // 换到整行卡就变 3 列 —— 列数没有语义依据。现在变体名由 utils.metricGridClass 按个数给出。
+    expect(wrapper.find('.account-group > .grid-metrics').classes()).toStrictEqual(['grid-metrics'])
   })
 
   it('keeps only the total balance on the card', () => {
@@ -64,11 +67,14 @@ describe('DeepSeekSection', () => {
       props: { data: fixture, loading: false, error: null },
     })
     const text = wrapper.text()
-    expect(text).toContain('CNY 总余额')
+    // 卡面一律符号、标签里不重复币种（#19）：币种代码只留在详情弹窗
+    expect(text).toContain('总余额')
     expect(text).toContain('110.00')
-    // 充值/赠金拆分属低优先级信息，已移出卡片
-    expect(text).not.toContain('100.00 CNY')
-    expect(text).not.toContain('10.00 CNY')
+    expect(text).toContain('¥')
+    expect(text).not.toContain('CNY')
+    // 充值/赠金拆分属低优先级信息，已移出卡片（按标签断言：数值 110.00 本身含 "10.00" 子串）
+    expect(text).not.toContain('充值')
+    expect(text).not.toContain('赠金')
   })
 
   it('moves the top-up / granted breakdown into the detail dialog', async () => {
@@ -76,10 +82,11 @@ describe('DeepSeekSection', () => {
       props: { data: fixture, loading: false, error: null },
     })
     const detail = await openDetail(wrapper)
+    // 弹窗里的标签带币种代码、数值用符号：同一行不重复币种（#19）
     expect(detail).toContain('CNY 充值')
-    expect(detail).toContain('100.00 CNY')
+    expect(detail).toContain('100.00 ¥')
     expect(detail).toContain('CNY 赠金')
-    expect(detail).toContain('10.00 CNY')
+    expect(detail).toContain('10.00 ¥')
     expect(detail).toContain('主力号')
   })
 

@@ -18,13 +18,14 @@
  */
 import { computed } from 'vue'
 
-import type { InferenceRow, InferenceUsageResponse, VolcPlanResponse } from '../types'
+import type { InferenceRow, InferenceUsageResponse, VolcPlanResponse, WindowQuota } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatCount, formatNumber, formatTokens, progressPercentage } from '../format'
-import { formatDateTime, formatReset, PLAN_WINDOW_LABELS, progressStatus, ratioOf } from '../utils'
+import { formatCount, formatTokens } from '../format'
+import { formatDateTime, PLAN_WINDOW_LABELS, ratioOf, windowContainerClass } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
+import UsageBar from './ui/UsageBar.vue'
 
 const props = defineProps<{
   data: VolcPlanResponse | null
@@ -76,6 +77,44 @@ const inferenceColumns = [
 ]
 
 type VolcAccount = NonNullable<VolcPlanResponse['accounts']>[number]
+
+/**
+ * Agent Plan 各窗口 → 统一模型（`WindowQuota`）。
+ *
+ * 上游给的是 `quota`（总量）与 `used`，百分比得自己算。比值只在这里算一次：
+ * 卡面与弹窗里的进度条都读同一个 `percent`，不会各算一遍（历史上两处各算，
+ * 改动一处就漂）。`remaining` 显式钳到 0 —— 超额使用时「剩余 -1.2K」是负数噪声。
+ */
+function volcWindows(account: VolcAccount): WindowQuota[] {
+  if (isFailedAccount(account)) {
+    return []
+  }
+  return account.windows.map((window) => ({
+    key: window.window,
+    label: PLAN_WINDOW_LABELS[window.window] ?? window.window,
+    used: window.used,
+    total: window.quota,
+    remaining: Math.max(0, window.quota - window.used),
+    percent: ratioOf(window.used, window.quota),
+    resetAt: window.resetTime > 0 ? window.resetTime : null,
+  }))
+}
+
+/** Coding Plan 各窗口 → 统一模型：上游只给百分比，没有「已用 / 总量」计数。 */
+function codingWindows(account: VolcAccount): WindowQuota[] {
+  if (isFailedAccount(account)) {
+    return []
+  }
+  return (account.codingPlan?.windows ?? []).map((window) => ({
+    key: window.level,
+    label: codingWindowLabel(window.level),
+    used: null,
+    total: null,
+    remaining: null,
+    percent: window.percent,
+    resetAt: window.resetTime > 0 ? window.resetTime : null,
+  }))
+}
 
 function detailRows(account: VolcAccount) {
   if (isFailedAccount(account)) {
@@ -235,31 +274,17 @@ function inferenceOf(keyHint: string): InferenceView {
 
               <!-- 第二段：Coding Plan 额度（原卡片内区块） -->
               <t-divider align="left">
-                Coding Plan 套餐额度（{{ account.codingPlan?.windows.length ?? 0 }}）
+                Coding Plan 套餐额度（{{ codingWindows(account).length }}）
               </t-divider>
-              <div v-if="(account.codingPlan?.windows.length ?? 0) > 0" class="grid-metrics">
-                <div
-                  v-for="window in account.codingPlan?.windows ?? []"
-                  :key="window.level"
-                  class="window-block"
-                >
-                  <t-space align="center" justify="space-between" class="window-head">
-                    <strong>{{ codingWindowLabel(window.level) }}</strong>
-                    <span class="muted">{{ formatReset(window.resetTime) }}</span>
-                  </t-space>
-                  <t-progress
-                    :percentage="progressPercentage(window.percent)"
-                    :status="progressStatus(window.percent)"
-                    :label="false"
-                  />
-                  <t-space align="center" justify="space-between" class="window-meta">
-                    <span class="muted">已用 {{ formatNumber(window.percent) }}%</span>
-                    <span class="num">{{ formatNumber(window.percent) }}%</span>
-                  </t-space>
-                  <div class="muted window-foot">
-                    重置于 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}
-                  </div>
-                </div>
+              <div
+                v-if="codingWindows(account).length > 0"
+                :class="windowContainerClass(codingWindows(account).length)"
+              >
+                <UsageBar
+                  v-for="window in codingWindows(account)"
+                  :key="window.key"
+                  :quota="window"
+                />
               </div>
               <t-empty v-else description="无 Coding Plan 额度数据（订阅可能已回收或未开通）" />
 
@@ -360,29 +385,8 @@ function inferenceOf(keyHint: string): InferenceView {
             :max-line="5"
           />
 
-          <div v-else class="grid-metrics">
-            <div v-for="window in account.windows" :key="window.window" class="window-block">
-              <t-space align="center" justify="space-between" class="window-head">
-                <strong>{{ PLAN_WINDOW_LABELS[window.window] ?? window.window }}</strong>
-                <span class="muted">{{ formatReset(window.resetTime) }}</span>
-              </t-space>
-              <t-progress
-                :percentage="progressPercentage(ratioOf(window.used, window.quota))"
-                :status="progressStatus(ratioOf(window.used, window.quota))"
-                :label="false"
-              />
-              <t-space align="center" justify="space-between" class="window-meta">
-                <span class="num-strong"
-                  >{{ formatTokens(window.used) }} / {{ formatTokens(window.quota) }}</span
-                >
-                <span class="num-strong"
-                  >{{ formatNumber(ratioOf(window.used, window.quota)) }}%</span
-                >
-              </t-space>
-              <div class="muted window-foot">
-                重置 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}
-              </div>
-            </div>
+          <div v-else :class="windowContainerClass(account.windows.length)">
+            <UsageBar v-for="window in volcWindows(account)" :key="window.key" :quota="window" />
           </div>
         </div>
       </div>
