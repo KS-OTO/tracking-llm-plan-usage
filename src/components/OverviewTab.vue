@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 
-import { accountTitle, isFailedAccount } from '../types'
+import { accountTitle, isFailedAccount, sliceData } from '../types'
 import { modelDocsUrl } from '../modelDocs'
 import { useDashboardStore } from '../stores/dashboard'
 import { formatReset, formatTokens, providerSlug, sortPlatformSections } from '../utils'
@@ -98,7 +98,7 @@ const alerts = computed<WindowAlert[]>(() => {
     if ('error' in account) {
       continue
     }
-    for (const window of account.codingPlan?.windows ?? []) {
+    for (const window of sliceData(account.codingPlan)?.windows ?? []) {
       if (window.percentage >= 70) {
         list.push({
           platform: '智谱',
@@ -162,7 +162,7 @@ const earliestReset = computed(() => {
     if ('error' in account) {
       continue
     }
-    for (const window of account.codingPlan?.windows ?? []) {
+    for (const window of sliceData(account.codingPlan)?.windows ?? []) {
       consider('智谱', accountTitle(account), window.window, window.nextResetTime)
     }
   }
@@ -241,10 +241,11 @@ const summaries = computed<PlatformSummary[]>(() => {
   const zhipuAll = zhipu.value.data?.accounts ?? []
   const zhipuAccounts = okAccounts(zhipuAll)
   if (zhipuAll.length > 0 || zhipu.value.error) {
-    const level = zhipuAccounts[0]?.codingPlan?.level || '—'
+    const firstPlan = zhipuAccounts[0]?.codingPlan
+    const level = (firstPlan ? sliceData(firstPlan)?.level : '') || '—'
     let worstPercent = 0
     for (const account of zhipuAccounts) {
-      for (const window of account.codingPlan?.windows ?? []) {
+      for (const window of sliceData(account.codingPlan)?.windows ?? []) {
         worstPercent = Math.max(worstPercent, window.percentage)
       }
     }
