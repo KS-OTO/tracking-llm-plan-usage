@@ -6,6 +6,7 @@
  * 充值总额、周月用量、密钥元数据（限额重置周期、到期时间、是否管理密钥）收进「详情」弹窗。
  */
 import type { OpenRouterDetailResponse } from '../types'
+import { formatCurrency, truncateMoney } from '../format'
 import { accountTitle, isFailedAccount } from '../types'
 
 import AccountSection from './AccountSection.vue'
@@ -81,16 +82,16 @@ function expiryLabel(iso: string | null): string {
                   {{ account.isManagementKey ? '是' : '否' }}
                 </t-descriptions-item>
                 <t-descriptions-item label="充值 / 已用">
-                  {{ (account.total ?? 0).toFixed(2) }} USD
+                  {{ formatCurrency(account.total ?? 0, 'USD') }}
                 </t-descriptions-item>
                 <t-descriptions-item label="限额重置">
                   {{ limitResetLabel(account.limitReset) }}
                 </t-descriptions-item>
                 <t-descriptions-item label="本周用量">
-                  {{ account.usageWeekly.toFixed(2) }} USD
+                  {{ formatCurrency(account.usageWeekly, 'USD') }}
                 </t-descriptions-item>
                 <t-descriptions-item label="本月用量">
-                  {{ account.usageMonthly.toFixed(2) }} USD
+                  {{ formatCurrency(account.usageMonthly, 'USD') }}
                 </t-descriptions-item>
                 <t-descriptions-item label="Key 有效期">
                   {{ expiryLabel(account.expiresAt) }}
@@ -110,7 +111,7 @@ function expiryLabel(iso: string | null): string {
           <div v-else class="grid-metrics grid-metrics--pair">
             <t-statistic
               title="剩余额度"
-              :value="account.balance"
+              :value="truncateMoney(account.balance)"
               :decimal-places="2"
               unit="USD"
               :color="
@@ -120,13 +121,13 @@ function expiryLabel(iso: string | null): string {
             <t-statistic
               v-if="account.limit !== null"
               title="限额剩余"
-              :value="account.limitRemaining ?? 0"
+              :value="truncateMoney(account.limitRemaining ?? 0)"
               :decimal-places="2"
               unit="USD"
             />
             <t-statistic
               title="今日用量"
-              :value="account.usageDaily"
+              :value="truncateMoney(account.usageDaily)"
               :decimal-places="2"
               unit="USD"
             />
