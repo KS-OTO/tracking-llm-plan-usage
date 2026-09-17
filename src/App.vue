@@ -577,7 +577,8 @@ watch(
                 </template>
               </t-button>
             </t-tooltip>
-            <t-button theme="primary" :loading="loading" @click="refresh">
+            <!-- 手动刷新：force=true —— 服务端跳过 TTL 缓存，并顺带刷新火山推理 -->
+            <t-button theme="primary" :loading="loading" @click="refresh(true)">
               <template #icon><RefreshIcon /></template>
               <span class="app-refresh-text">刷新</span>
             </t-button>
@@ -600,7 +601,10 @@ watch(
           }}），数据可能不是最新
         </template>
         <template #operation>
-          <t-button size="small" variant="outline" theme="danger" @click="refresh"> 重试 </t-button>
+          <!-- 手动重试：force=true，让服务端绕过 TTL 缓存，别把缓存里的旧错误再拿回来 -->
+          <t-button size="small" variant="outline" theme="danger" @click="refresh(true)">
+            重试
+          </t-button>
         </template>
       </t-alert>
       <div v-show="activeTab === 'overview'" id="tab-panel-overview">

@@ -15,7 +15,8 @@
  *
  * 为什么必须逐字登记：`vite.config.ts` 用 `loadEnv(cwd, '', '')` —— **空前缀**加载本机
  * `.env`，因此任何没被置空的变量都会带着真实凭据进入测试服务器。
- * 症状极具误导性：`/api/status` 的 configured 变成 true、`/api/newapi` 返回 200 而不是 503，
+ * 症状极具误导性：`/api/status` 的 configured 变成 true、`/api/usage` 里该 provider 返回
+ * `{data}` 而不是 `{error:{code:'NOT_CONFIGURED'}}`，
  * 表现为「密封环境的空态断言莫名其妙失败」，而报错位置离这里很远。
  * （New API 接入时就漏登记过 NEWAPI_* 三个变量，本机 `.env` 配上真实站点即复现。）
  *
@@ -37,10 +38,7 @@ export const SERVER_ENV_GROUPS = [
       'DEEPSEEK_API_KEY',
       'ZHIPU_API_KEY',
       'GITEE_AI_API_KEY',
-      'STEPFUN_API_KEY',
-      'SILICONFLOW_API_KEY',
       'OPENROUTER_API_KEY',
-      'NOVITA_API_KEY',
       'KIMI_API_KEY',
       'MINIMAX_API_KEY',
       'OPENCODE_GO_API_KEY',
@@ -81,10 +79,7 @@ export const SERVER_ENV_GROUPS = [
       'ZHIPU_LABEL',
       'ALIYUN_LABEL',
       'GITEE_LABEL',
-      'STEPFUN_LABEL',
-      'SILICONFLOW_LABEL',
       'OPENROUTER_LABEL',
-      'NOVITA_LABEL',
       'KIMI_LABEL',
       'MINIMAX_LABEL',
       'OPENCODE_GO_LABEL',

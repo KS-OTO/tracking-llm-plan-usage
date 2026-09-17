@@ -1,9 +1,13 @@
 /**
- * 仪表盘数据 store：统一拉取全部 /api/*，逐区块独立容错。
+ * 仪表盘数据 store：统一拉取全部 `/api/*`，逐区块独立容错。
  *
  * - refresh 不清空已有数据：失败时保留上次成功值，仅更新 error
  * - 模型过滤带防抖，避免每次击键全量拉取
  * - 自动刷新感知页面可见性，隐藏时暂停
+ *
+ * 请求形状（issue #23）：每刷新 **2 个**（`/api/status` + `/api/usage`），
+ * 火山推理是唯一的按需第三路（首屏与手动刷新带上，改模型过滤时单独重拉）。
+ * 合并端点减少的是边缘节点的唤醒次数，**容错粒度不变** —— 信封里每格仍是独立切片。
  */
 import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { defineStore } from 'pinia'
@@ -22,6 +26,7 @@ import type {
   SiteConfig,
   StatusResponse,
   TokenPlanResponse,
+  UsageSlice,
   VolcPlanResponse,
   ZhipuPackagesResponse,
 } from '../types'
@@ -48,13 +53,13 @@ function toIntervalMs(seconds: number): number {
   return safe * 1000
 }
 
-function applyResult<T>(result: PromiseSettledResult<T>, target: Ref<Slice<T>>): void {
-  if (result.status === 'fulfilled') {
-    target.value = { data: result.value, error: null, notConfigured: false }
-    return
-  }
-  const reason = result.reason
-  // NOT_CONFIGURED 是正常初始状态：中性空态而非红色错误
+/**
+ * 把一个失败原因写进切片。
+ *
+ * `NOT_CONFIGURED` 是正常初始状态：中性空态而非红色错误。其余失败**保留上一次成功的数据**
+ * （`data` 不动），只更新 `error` —— 上游抖动不该把已有读数清空。
+ */
+function applyFailure<T>(reason: unknown, target: Ref<Slice<T>>): void {
   if (reason instanceof ApiError && reason.code === 'NOT_CONFIGURED') {
     target.value = { data: null, error: null, notConfigured: true }
     return
@@ -64,6 +69,32 @@ function applyResult<T>(result: PromiseSettledResult<T>, target: Ref<Slice<T>>):
     error: reason instanceof ApiError ? reason.message : String(reason),
     notConfigured: false,
   }
+}
+
+function applyResult<T>(result: PromiseSettledResult<T>, target: Ref<Slice<T>>): void {
+  if (result.status === 'fulfilled') {
+    target.value = { data: result.value, error: null, notConfigured: false }
+    return
+  }
+  applyFailure(result.reason, target)
+}
+
+/**
+ * 把 `/api/usage` 信封里的一格写进对应切片。
+ *
+ * 与 `applyResult` 的区别在于「失败」是**服务端给的业务错误**（HTTP 200 + `{error, code}`），
+ * 而不是 promise reject —— 合并端点之后，一家的失败不再让整个请求失败。
+ */
+function applyUsage<T>(slice: UsageSlice<T>, target: Ref<Slice<T>>): void {
+  if ('data' in slice) {
+    target.value = { data: slice.data, error: null, notConfigured: false }
+    return
+  }
+  if (slice.code === 'NOT_CONFIGURED') {
+    target.value = { data: null, error: null, notConfigured: true }
+    return
+  }
+  target.value = { data: target.value.data, error: slice.error, notConfigured: false }
 }
 
 export const useDashboardStore = defineStore('dashboard', () => {
@@ -125,7 +156,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   let refreshTimer: ReturnType<typeof setInterval> | undefined
 
   /**
-   * 单独拉 `/api/status` 并**立即**落地，不等其余 11 路 provider 查询。
+   * 单独拉 `/api/status` 并**立即**落地，不等 `/api/usage`（9 家平台的上游查询）。
    *
    * 站点名 / Logo / favicon / 刷新间隔都在这个切片里，而 provider 查询会真的打到各家
    * 上游接口——最慢的一家足以把品牌文案拖到几秒之后（实测 3.7s，页面一直显示默认站点名）。
@@ -148,7 +179,17 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
   }
 
-  async function refresh(): Promise<void> {
+  /** 首屏要把火山推理一起拉回来（它的明细表是卡片主内容之一）。 */
+  let needsInference = true
+
+  /**
+   * 全量刷新。
+   *
+   * @param force 手动刷新：让服务端**跳过 TTL 缓存**，并顺带把火山推理也刷新一遍。
+   *   自动刷新不传（吃缓存省上游墙钟、且跳过按需的火山推理）——
+   *   实测每次刷新的前端请求因此是 **2 个**：`/api/status` + `/api/usage`。
+   */
+  async function refresh(force = false): Promise<void> {
     if (inFlight) {
       // 防抖触发时若上一轮仍在途：标记 pending，落定后补一轮（不丢弃新过滤值）
       pending = true
@@ -157,21 +198,19 @@ export const useDashboardStore = defineStore('dashboard', () => {
     inFlight = true
     loading.value = true
     const model = modelFilter.value.trim() || undefined
+    const withInference = force || needsInference
+    needsInference = false
     // 先起 status：它决定品牌与刷新节奏，要尽早落地（见 loadStatus 注释）
     const statusPromise = loadStatus()
-    const results = await Promise.allSettled([
+    // 用 `Promise<null>` 占位而不是条件拼数组：三个结果的类型不会被合并成联合，
+    // 下面的解构因此仍然精确（`inference` 为 null 就代表「这轮不刷它」）。
+    const inferencePromise: Promise<InferenceUsageResponse | null> = withInference
+      ? api.volcInference(VOLC_DETAILS_DAYS, model, force)
+      : Promise.resolve(null)
+    const [statusOutcome, usageOutcome, inferenceOutcome] = await Promise.allSettled([
       statusPromise,
-      api.deepseekBalance(),
-      api.volcPlan(VOLC_DETAILS_DAYS),
-      api.volcInference(VOLC_DETAILS_DAYS, model),
-      api.zhipuPackages(),
-      api.aliyunPackages(),
-      api.aliyunTokenPlan(),
-      api.giteeBalance(),
-      api.baiduQianfan(),
-      api.openrouterDetail(),
-      api.plans(),
-      api.newapi(),
+      api.usage(force),
+      inferencePromise,
     ])
     inFlight = false
     loading.value = false
@@ -180,24 +219,52 @@ export const useDashboardStore = defineStore('dashboard', () => {
       void refresh()
     }
 
-    // results[0]（status）已由 loadStatus 自行 apply，这里只处理其余切片
-    applyResult(results[1], deepseek)
-    applyResult(results[2], volcPlan)
-    applyResult(results[3], volcInference)
-    applyResult(results[4], zhipu)
-    applyResult(results[5], aliyun)
-    applyResult(results[6], tokenPlan)
-    applyResult(results[7], gitee)
-    applyResult(results[8], baidu)
-    applyResult(results[9], openrouter)
-    applyResult(results[10], plans)
-    applyResult(results[11], newapi)
+    // 信封整体失败（后端不可达 / 5xx），或形状不对（老服务端没有 /api/usage）：
+    // 9 家一起标注 —— 这与「某一家上游挂了」是两件事，后者由服务端在信封里表达。
+    const providers = usageOutcome.status === 'fulfilled' ? usageOutcome.value.providers : undefined
+    if (providers) {
+      applyUsage(providers.deepseek, deepseek)
+      applyUsage(providers.volcPlan, volcPlan)
+      applyUsage(providers.zhipu, zhipu)
+      applyUsage(providers.aliyun, aliyun)
+      applyUsage(providers.tokenPlan, tokenPlan)
+      applyUsage(providers.gitee, gitee)
+      applyUsage(providers.baidu, baidu)
+      applyUsage(providers.openrouter, openrouter)
+      applyUsage(providers.plans, plans)
+      applyUsage(providers.newapi, newapi)
+    } else {
+      const reason =
+        usageOutcome.status === 'rejected'
+          ? usageOutcome.reason
+          : new ApiError(
+              'BAD_USAGE_ENVELOPE',
+              '后端未返回 /api/usage 的 providers 字段（服务端版本可能过旧）',
+            )
+      applyFailure(reason, deepseek)
+      applyFailure(reason, volcPlan)
+      applyFailure(reason, zhipu)
+      applyFailure(reason, aliyun)
+      applyFailure(reason, tokenPlan)
+      applyFailure(reason, gitee)
+      applyFailure(reason, baidu)
+      applyFailure(reason, openrouter)
+      applyFailure(reason, plans)
+      applyFailure(reason, newapi)
+    }
 
-    // 至少一个请求成功才更新时间戳：全部失败时保留旧时间，避免“刚刷新但数据是旧的”误导。
-    // status 的成败藏在 loadStatus 的返回值里（它的 promise 恒为 fulfilled），故单独判并跳过下标 0。
-    const statusResult = results[0]
-    const statusOk = statusResult.status === 'fulfilled' && statusResult.value
-    if (statusOk || results.slice(1).some((result) => result.status === 'fulfilled')) {
+    if (inferenceOutcome.status === 'fulfilled') {
+      // 自动刷新跳过火山推理（该轮为 null），保持原值不动
+      if (inferenceOutcome.value !== null) {
+        volcInference.value = { data: inferenceOutcome.value, error: null, notConfigured: false }
+      }
+    } else {
+      applyFailure(inferenceOutcome.reason, volcInference)
+    }
+
+    // 至少一路成功才更新时间戳：全部失败时保留旧时间，避免“刚刷新但数据是旧的”误导。
+    const statusOk = statusOutcome.status === 'fulfilled' && statusOutcome.value
+    if (statusOk || usageOutcome.status === 'fulfilled') {
       lastUpdated.value = new Date()
     }
   }

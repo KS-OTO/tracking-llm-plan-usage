@@ -1,19 +1,6 @@
 import { z } from 'zod'
 
-import type {
-  AliyunPackagesResponse,
-  BaiduQianfanResponse,
-  OpenRouterDetailResponse,
-  DeepSeekBalanceResponse,
-  GiteeBalanceResponse,
-  InferenceUsageResponse,
-  NewApiResponse,
-  PlansResponse,
-  StatusResponse,
-  TokenPlanResponse,
-  VolcPlanResponse,
-  ZhipuPackagesResponse,
-} from './types'
+import type { InferenceUsageResponse, StatusResponse, UsageResponse } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -77,27 +64,33 @@ async function get<T>(
   return schema.parse(json)
 }
 
+/**
+ * 同源后端（本仓库 server/app.ts）的 **3 个端点**（issue #23）。
+ *
+ * 合并端点的动机是边缘计费：托管平台按节点生存时间计费，唤醒次数越少越好。
+ * 因此不要为了「顺手」再加单个平台的端点 —— 新平台请加进 `/api/usage` 的 provider 表。
+ */
 export const api = {
+  /** 首屏：品牌 / favicon / 刷新节奏 / 半配置提示。0 次上游调用。 */
   status: () => get('/api/status', z.custom<StatusResponse>()),
-  deepseekBalance: () => get('/api/deepseek/balance', z.custom<DeepSeekBalanceResponse>()),
-  volcPlan: (days: number) => get('/api/volc/plan', z.custom<VolcPlanResponse>(), { days }),
-  volcInference: (days: number, model?: string) =>
-    get(
-      '/api/volc/inference-usage',
-      z.custom<InferenceUsageResponse>(),
-      model ? { days, model } : { days },
-    ),
-  zhipuPackages: () => get('/api/zhipu/packages', z.custom<ZhipuPackagesResponse>()),
-  aliyunPackages: (productCode?: string) =>
-    get(
-      '/api/aliyun/packages',
-      z.custom<AliyunPackagesResponse>(),
-      productCode ? { productCode } : undefined,
-    ),
-  aliyunTokenPlan: () => get('/api/aliyun/tokenplan', z.custom<TokenPlanResponse>()),
-  giteeBalance: () => get('/api/gitee/balance', z.custom<GiteeBalanceResponse>()),
-  baiduQianfan: () => get('/api/baidu/qianfan', z.custom<BaiduQianfanResponse>()),
-  openrouterDetail: () => get('/api/openrouter/detail', z.custom<OpenRouterDetailResponse>()),
-  plans: () => get('/api/plans', z.custom<PlansResponse>()),
-  newapi: () => get('/api/newapi', z.custom<NewApiResponse>()),
+  /**
+   * 每刷新一次：9 家平台的读数一次返回（每格仍是独立容错切片）。
+   *
+   * `refresh` 为 true 时服务端**跳过 TTL 缓存**（手动刷新拿实时数据），
+   * 自动刷新则吃缓存以省下上游墙钟。
+   */
+  usage: (refresh = false) =>
+    get('/api/usage', z.custom<UsageResponse>(), refresh ? { refresh: 1 } : undefined),
+  /**
+   * 火山推理用量：**唯一的按需端点**。
+   *
+   * 它带用户输入的 `model` / `modelEndpoint` 过滤，合并进 `/api/usage` 会让
+   * 「换一个模型」退化成「全量重拉 9 家平台」。
+   */
+  volcInference: (days: number, model?: string, refresh = false) =>
+    get('/api/volc/inference-usage', z.custom<InferenceUsageResponse>(), {
+      days,
+      ...(model ? { model } : {}),
+      ...(refresh ? { refresh: 1 } : {}),
+    }),
 }

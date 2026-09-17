@@ -60,15 +60,9 @@ BAIDU_ACCESS_KEY_ID=ALTAKxxxx
 BAIDU_SECRET_KEY=xxxx
 # BAIDU_LABEL=
 
-# ---------- 扩展平台 · 余额类（→「扩展平台」Tab）----------
-STEPFUN_API_KEY=
-# STEPFUN_LABEL=
-SILICONFLOW_API_KEY=
-# SILICONFLOW_LABEL=
+# ---------- 余额类（→「余额账户」Tab）----------
 OPENROUTER_API_KEY=
 # OPENROUTER_LABEL=
-NOVITA_API_KEY=
-# NOVITA_LABEL=
 
 # ---------- 扩展平台 · 套餐类（→「套餐订阅」Tab）----------
 KIMI_API_KEY=
