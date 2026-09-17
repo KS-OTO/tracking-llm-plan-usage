@@ -254,6 +254,15 @@ function vueFiles(dir: string): string[] {
 describe('数值格式化的单一入口（守卫）', () => {
   const files = vueFiles(SRC_DIR)
 
+  /**
+   * 唯一允许用 `v-bind` 传 `<t-statistic>` 的组件。
+   *
+   * 它的属性集是 `computed` 出来的（按 `Metric.kind` 选精度），因此文件里看不到
+   * 字面的 `decimal-places`。豁免的前提由下面第二条断言守着：它必须真的在用
+   * `decimalPlaces` / `format`，且全站只有这一处读数瓦片实现。
+   */
+  const METRIC_TILE = 'components/ui/MetricTile.vue'
+
   it('扫到了组件文件（守卫本身不能是空转的）', () => {
     expect(files.length).toBeGreaterThan(10)
   })
@@ -275,15 +284,33 @@ describe('数值格式化的单一入口（守卫）', () => {
   it('每个 <t-statistic> 都显式声明 decimal-places 或 format', () => {
     const offenders: string[] = []
     for (const file of files) {
+      // 路径统一成 `/`：Windows 上 `relative` 给的是反斜杠，豁免名单因此对不上
+      const name = relative(SRC_DIR, file).replaceAll('\\', '/')
       const text = readFileSync(file, 'utf8')
       for (const match of text.matchAll(/<t-statistic\b[\s\S]*?\/>/g)) {
         const block = match[0]
-        if (!block.includes('decimal-places') && !block.includes(':format')) {
+        if (
+          name !== METRIC_TILE &&
+          !block.includes('decimal-places') &&
+          !block.includes(':format')
+        ) {
           const line = text.slice(0, match.index).split('\n').length
-          offenders.push(`${relative(SRC_DIR, file)}:${line}`)
+          offenders.push(`${name}:${line}`)
         }
       }
     }
     expect(offenders).toStrictEqual([])
+  })
+
+  it('读数瓦片只有一处实现，且它自己确实在决定精度', () => {
+    const text = readFileSync(resolve(SRC_DIR, METRIC_TILE), 'utf8')
+    // 两条豁免前提：真的在用这两种属性，且模板里只渲染一个 <t-statistic>。
+    // 只数 <template> 那一半 —— 文档注释里可以随便提这个组件名，
+    // 数全文会把注释也当成一处实现（实测数出 3 处）。
+    expect(text).toContain('<template>')
+    const template = text.slice(text.indexOf('<template>'))
+    expect(text).toContain('decimalPlaces')
+    expect(text).toContain('format:')
+    expect(template.match(/<t-statistic\b/g)).toHaveLength(1)
   })
 })
