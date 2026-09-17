@@ -6,8 +6,8 @@ import { normalizeSessionCookie, parseGiteeVoucher } from './gitee.ts'
 /** 响应样本取自 docs/参考资料.md（真实控制台抓包）。 */
 const userinfoJson = {
   id: 824244,
-  username: 'lwiofvbz',
-  namespace_path: 'lwiofvbz',
+  username: 'example-ns',
+  namespace_path: 'example-ns',
 }
 
 const walletJson = {
@@ -39,7 +39,7 @@ const couponsJson = {
 describe('parseGiteeVoucher', () => {
   it('normalizes namespace, wallet balances and coupon details', () => {
     const result = parseGiteeVoucher(userinfoJson, walletJson, couponsJson)
-    expect(result.namespace).toBe('lwiofvbz')
+    expect(result.namespace).toBe('example-ns')
     expect(result.couponCashBalance).toBe(333.134932)
     expect(result.couponComputeBalance).toBe(1.5e-8)
     expect(result.coupons).toStrictEqual([

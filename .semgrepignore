@@ -1,0 +1,21 @@
+# Semgrep 扫描范围 —— 与 .gitignore 的**意图**对齐，但两者不等价：
+# .gitignore 决定「什么不入库」，.semgrepignore 决定「什么不当代码审」。
+# 下面几类即使出现在工作区里也不是项目源码，扫它们只会制造噪声。
+
+# 实机凭据：gitignored，本来就不该被审；且真实密钥必然命中 secrets 规则，
+# 每次扫描都报一遍，会把真正的问题（比如示例文件里误贴真密钥）淹掉。
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# 编码助手工作区：本地记忆、量测脚本、截图，不是交付代码。
+.workbuddy/
+
+# 构建与测试产物
+dist/
+dist-ssr/
+coverage/
+test-results/
+playwright-report/
+node_modules/
