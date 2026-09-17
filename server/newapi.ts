@@ -29,6 +29,10 @@
  *      与其整个卡片报错，不如退化到账单接口（代价是没有用户名、没有按模型明细）。
  *      实测同一站点 `/v1/models` 返回 200 而 `/api/user/self` 返回 401。
  *
+ * 回落只在「管理接口不认这个凭据」时发生。有一个例外必须排除（见 `ACCOUNT_STATE_HINTS`）：
+ * 账号被停用也是 401，但令牌是被认出来的，落下去只会把结论换成更含糊的
+ * `Invalid token`，反而盖住真正可操作的原因。
+ *
  * ## 额度单位：从站点读，而不是写死 USD
  *
  * quota 是站点内部单位，`QuotaPerUnit` 默认 500000。换算与符号**照抄官方**
@@ -303,16 +307,30 @@ export function siteUrl(baseUrl: string, path: string): string {
 }
 
 const ErrorEnvelope = z.object({
+  code: z.string().optional(),
   message: z.string().optional(),
   error: z.object({ message: z.string().optional(), code: z.string().optional() }).nullish(),
 })
 
-function messageOf(json: unknown): string | undefined {
+/**
+ * 解析上游的失败响应信封。
+ *
+ * New API 有两套信封：管理接口把业务码放顶层（`{ code: 'AUTH_USER_DISABLED', message: … }`），
+ * OpenAI 兼容接口塞进 `error` 里（`{ error: { message: …, code: … } }`）。两者都认。
+ *
+ * 为什么要单独取出业务码：它比 HTTP 状态码信息量大得多。同样是 401，「令牌不认识」
+ * 与「令牌认识、但账号被停用」要给用户的建议**完全相反**（重新生成令牌 vs 去站点解封），
+ * 而只看状态码分不出来 —— 这正是下面 `shouldFallbackToBilling` 需要它的原因。
+ */
+function errorEnvelopeOf(json: unknown): { code: string | null; message: string | null } {
   const parsed = ErrorEnvelope.safeParse(json)
   if (!parsed.success) {
-    return undefined
+    return { code: null, message: null }
   }
-  return parsed.data.error?.message ?? parsed.data.message
+  return {
+    code: parsed.data.code ?? parsed.data.error?.code ?? null,
+    message: parsed.data.error?.message ?? parsed.data.message ?? null,
+  }
 }
 
 async function newApiGet(
@@ -355,9 +373,10 @@ async function newApiGet(
   }
 
   if (!res.ok) {
+    const envelope = errorEnvelopeOf(json)
     throw new NewApiError(
-      `NewApi_HTTP_${res.status}`,
-      messageOf(json) ?? text.slice(0, 200),
+      envelope.code ?? `NewApi_HTTP_${res.status}`,
+      envelope.message ?? text.slice(0, 200),
       res.status,
     )
   }
@@ -395,7 +414,10 @@ export function parseSelf(body: unknown): NewApiSelf {
     throw new NewApiError('InvalidResponse', 'New API /api/user/self 响应结构无法解析')
   }
   if (parsed.data.success === false) {
-    throw new NewApiError('NewApi_Business', messageOf(body) ?? 'New API 返回业务失败')
+    throw new NewApiError(
+      'NewApi_Business',
+      errorEnvelopeOf(body).message ?? 'New API 返回业务失败',
+    )
   }
   const data = parsed.data.data
   return {
@@ -609,13 +631,44 @@ export function parseBillingUsage(body: unknown): number {
 }
 
 /**
+ * 「账号状态」类业务码 → 面向用户的中文说明。
+ *
+ * 这类失败里令牌是**被认出来的**，坏的是账号本身：实测 `/api/user/self` 返回
+ * `AUTH_USER_DISABLED / User has been banned`。但它属于 401，于是被当成「凭据类型不对」
+ * 回落到账单接口，账单接口也不认这个令牌、再回一句 `Invalid token` —— 用户最终在卡面上
+ * 看到的是**最没有信息量的那一句**，会去重新生成令牌，而正确动作是去站点解封账号。
+ *
+ * 上游原文是英文，直接透出同样会被读成「令牌有问题」，所以这里改写成动作导向的中文。
+ */
+const ACCOUNT_STATE_HINTS: Record<string, string> = {
+  AUTH_USER_DISABLED:
+    'New API 站点已停用该账号：令牌本身有效，但账号被禁用 / 封禁。请在站点侧解封该用户，或改用其他账号的令牌',
+}
+
+/** 账号状态类失败 → 换成能指导下一步动作的错误；不是这类失败时返回 null。 */
+function accountStateError(error: unknown): NewApiError | null {
+  if (!(error instanceof NewApiError)) {
+    return null
+  }
+  const hint = ACCOUNT_STATE_HINTS[error.code] ?? null
+  return hint === null ? null : new NewApiError(error.code, hint, error.status)
+}
+
+/**
  * 是否属于「凭据不被管理接口接受」——需要回落到账单接口。
  *
  * 401/403 之外的失败（网络不通、站点返回 HTML、JSON 解析失败）不该静默降级：
  * 降级后只会看到「字段变少」，用户会误以为站点没数据，反而掩盖真实故障。
+ * 账号状态类失败同样不该降级：降级会把「账号被封禁」换成一个更含糊的结论（见上）。
  */
 export function shouldFallbackToBilling(error: unknown): boolean {
-  return error instanceof NewApiError && (error.status === 401 || error.status === 403)
+  if (!(error instanceof NewApiError)) {
+    return false
+  }
+  if (error.status !== 401 && error.status !== 403) {
+    return false
+  }
+  return accountStateError(error) === null
 }
 
 /**
@@ -684,7 +737,8 @@ export async function fetchNewApi(creds: NewApiCredentials): Promise<NewApiAccou
     if (shouldFallbackToBilling(error)) {
       return await fetchBillingMode(creds)
     }
-    throw error
+    // 账号状态类失败：两条通道都不会成功，直接把可操作的结论给用户
+    throw accountStateError(error) ?? error
   }
 
   // 订阅信息独立容错：站点没开订阅功能（或接口被关）时退化为纯钱包模式
