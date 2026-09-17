@@ -47,8 +47,6 @@ export interface StatusResponse {
     gitee: ProviderStatus
     baidu: ProviderStatus
     tokenplan: ProviderStatus
-    /** 余额类扩展平台（`/api/extras`）：服务端仍统计，页面已不再有独立 Tab。 */
-    extras: ProviderStatus
     /** 套餐类扩展平台（Kimi / MiniMax / OpenCode Go），与「套餐订阅」Tab 对应。 */
     plans: ProviderStatus
     /** New API（自托管订阅网关，站点地址 + 系统访问令牌成对配置）。 */
@@ -60,6 +58,40 @@ export interface StatusResponse {
   site?: SiteConfig
   now: number
 }
+
+/**
+ * `/api/usage` 里单个 provider 的容错切片：成功带 `data`，失败带 `error` 与服务端业务码。
+ *
+ * 与服务端 `usageSliceOf` 同构。`code === 'NOT_CONFIGURED'` 表示该平台压根没配密钥 ——
+ * 那是**中性空态**，不是故障（渲染成 `t-empty` 而不是红色告警）。
+ */
+export type UsageSlice<T> = { data: T } | { error: string; code: string }
+
+/**
+ * 合并读数信封（issue #23）：9 家平台一次请求返回。
+ *
+ * 合并端点减少的是边缘节点的**唤醒次数**，**不是容错粒度** —— 服务端仍是
+ * 每家独立收敛成切片，一家挂了其余照常返回（与 PR #17 智谱子查询容错同一原则）。
+ */
+export interface UsageResponse {
+  providers: {
+    deepseek: UsageSlice<DeepSeekBalanceResponse>
+    volcPlan: UsageSlice<VolcPlanResponse>
+    zhipu: UsageSlice<ZhipuPackagesResponse>
+    aliyun: UsageSlice<AliyunPackagesResponse>
+    tokenPlan: UsageSlice<TokenPlanResponse>
+    gitee: UsageSlice<GiteeBalanceResponse>
+    baidu: UsageSlice<BaiduQianfanResponse>
+    openrouter: UsageSlice<OpenRouterDetailResponse>
+    plans: UsageSlice<PlansResponse>
+    newapi: UsageSlice<NewApiResponse>
+  }
+  /** 服务端组装响应的时刻（毫秒）。 */
+  fetchedAt: number
+}
+
+/** 信封里的 provider 键（与 store 的切片一一对应）。 */
+export type UsageProviderKey = keyof UsageResponse['providers']
 
 /** 多账号响应包裹：成功账号携带数据字段，失败账号仅含错误信息（服务端 runAccounts 契约）。 */
 export type AccountEnvelope<T> =
@@ -391,7 +423,7 @@ export interface GiteeBalanceResponse {
   accounts: AccountEnvelope<GiteePackageBalance>[]
 }
 
-export interface ExtrasPlanWindow {
+export interface PlanWindowUsage {
   window: 'fiveHour' | 'weekly' | 'monthly'
   percent: number
   resetTime: number
@@ -399,25 +431,26 @@ export interface ExtrasPlanWindow {
   status?: string
 }
 
-export interface ExtrasPlan {
+export interface PlanAccountUsage {
   provider: string
-  windows: ExtrasPlanWindow[]
+  windows: PlanWindowUsage[]
   error?: string
 }
 
-export interface ExtrasPlanGroup {
+export interface PlanGroup {
   provider: string
-  accounts: AccountEnvelope<ExtrasPlan>[]
+  accounts: AccountEnvelope<PlanAccountUsage>[]
 }
 
 /**
  * 套餐类扩展平台（套餐订阅 Tab）的窗口用量。
  *
- * 余额类平台（StepFun / SiliconFlow / OpenRouter / Novita，服务端 `/api/extras`）已不再
- * 有独立 Tab：OpenRouter 有自己的区块与接口（`/api/openrouter/detail`），其余三家未接入页面。
+ * 数据由 `/api/usage` 的 `plans` 切片下发（端点已合并，见 issue #23）。
+ * 余额类平台（StepFun / SiliconFlow / Novita）曾由已废弃的 `/api/extras` 提供，
+ * 因前端从未调用而随该端点一并移除；OpenRouter 有自己的切片。
  */
 export interface PlansResponse {
-  plans: ExtrasPlanGroup[]
+  plans: PlanGroup[]
   configured: number
 }
 

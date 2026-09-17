@@ -20,17 +20,59 @@ test.describe('dashboard smoke', () => {
     }
   })
 
-  test('deepseek endpoint reports NOT_CONFIGURED without erroring out', async ({ request }) => {
-    const res = await request.get('/api/deepseek/balance')
-    expect(res.status()).toBe(503)
-    const body = z.object({ error: z.object({ code: z.string() }) }).parse(await res.json())
-    expect(body.error.code).toBe('NOT_CONFIGURED')
+  /**
+   * issue #23 的核心不变量：10 个平台的读数合并进 1 封信封，且**仍按平台独立容错**。
+   *
+   * 密封环境没有任何密钥，因此整封信封必须是 200 —— 若哪天有人把某个 provider 的失败
+   * 冒泡到外层，这里是第一道会变红的锁（历史 bug：同一账号的多个子查询共用一个
+   * `Promise.all`，任一子接口 500 就把该账号其余数据全部丢掉）。
+   */
+  test('usage endpoint folds ten providers into one 200 envelope', async ({ request }) => {
+    const res = await request.get('/api/usage')
+    expect(res.status()).toBe(200)
+    const body = z
+      .object({
+        providers: z.record(z.string(), z.record(z.string(), z.unknown())),
+        fetchedAt: z.number(),
+      })
+      .parse(await res.json())
+
+    // 键集合被契约锁死：少一个说明 provider 被静默丢弃
+    // （历史 bug：成对凭据没进 INCOMPLETE_VARS 时整对被丢弃 → 卡片无声消失）
+    expect(Object.keys(body.providers).toSorted()).toEqual([
+      'aliyun',
+      'baidu',
+      'deepseek',
+      'gitee',
+      'newapi',
+      'openrouter',
+      'plans',
+      'tokenPlan',
+      'volcPlan',
+      'zhipu',
+    ])
+
+    for (const [name, slice] of Object.entries(body.providers)) {
+      if (name === 'plans') {
+        // 套餐类没有「未配置」错误态：空列表 + configured=0 就是中性空态，
+        // 前端据此渲染「未配置订阅套餐密钥」而不是错误墙
+        expect(slice.data).toEqual({ plans: [], configured: 0 })
+        continue
+      }
+      expect(slice.data, `${name} 不该有数据`).toBeUndefined()
+      expect(slice.code, `${name} 的错误码`).toBe('NOT_CONFIGURED')
+      expect(String(slice.error), `${name} 的错误文案`).toContain('未配置')
+    }
   })
 
-  test('aliyun token plan endpoint reports NOT_CONFIGURED without erroring out', async ({
+  /**
+   * 带用户输入的读数接口**故意不合入** `/api/usage`：并入会让「改一个模型过滤」退化成
+   * 「全量重拉 10 家平台」。它保留独立端点，因此未配置时仍是端点级 503（不是切片）。
+   */
+  test('volc inference endpoint reports NOT_CONFIGURED without erroring out', async ({
     request,
   }) => {
-    const res = await request.get('/api/aliyun/tokenplan')
+    const res = await request.get('/api/volc/inference-usage')
     expect(res.status()).toBe(503)
     const body = z.object({ error: z.object({ code: z.string() }) }).parse(await res.json())
     expect(body.error.code).toBe('NOT_CONFIGURED')
@@ -270,11 +312,32 @@ test.describe('dashboard smoke', () => {
     }
   })
 
-  test('newapi endpoint reports NOT_CONFIGURED without erroring out', async ({ request }) => {
-    const res = await request.get('/api/newapi')
-    expect(res.status()).toBe(503)
-    const body = z.object({ error: z.object({ code: z.string() }) }).parse(await res.json())
-    expect(body.error.code).toBe('NOT_CONFIGURED')
+  /**
+   * 端点收敛不变量（issue #23）：13 个端点砍到 3 个之后，旧端点必须真的不存在。
+   * 少了这道锁，将来「顺手加回一个端点」不会有任何测试变红 ——
+   * 而每个多出来的端点都直接变成边缘云上的唤醒次数与账单。
+   */
+  test('consolidated endpoints are gone, unknown api paths answer 404', async ({ request }) => {
+    const paths = [
+      '/api/deepseek/balance',
+      '/api/aliyun/tokenplan',
+      '/api/openrouter/balance',
+      '/api/gitee/balance',
+      '/api/extras',
+      '/api/plans',
+      '/api/newapi',
+    ]
+    const results = await Promise.all(
+      paths.map(async (path) => {
+        const res = await request.get(path)
+        return { path, status: res.status(), body: await res.json() }
+      }),
+    )
+    for (const { path, status, body } of results) {
+      expect(status, path).toBe(404)
+      const parsed = z.object({ error: z.object({ code: z.string() }) }).parse(body)
+      expect(parsed.error.code, path).toBe('NOT_FOUND')
+    }
   })
 
   test('back-to-top appears after scrolling and returns to top', async ({ page }) => {

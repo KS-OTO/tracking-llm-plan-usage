@@ -8,14 +8,8 @@
  *
  * 环境变量通过 EnvGetter 抽象注入（Bun: process.env；Worker: bindings）。
  */
-import {
-  fetchNovitaBalance,
-  fetchOpenRouterBalance,
-  fetchOpenRouterDetail,
-  fetchSiliconFlowBalance,
-  fetchStepFunBalance,
-  type BalanceInfo,
-} from './balances.ts'
+import { fetchOpenRouterDetail } from './balances.ts'
+import { cachedQuery } from './cache.ts'
 import { queryResourcePackageInstances, type AliyunCredentials } from './aliyun.ts'
 import { fetchAliyunPersonalPlan, type AliyunPersonalPlan } from './aliyun-console.ts'
 import { fetchDeepSeekBalance } from './deepseek.ts'
@@ -169,6 +163,51 @@ function subQuerySliceOf<T>(promise: Promise<T>): Promise<SubQuerySlice<T>> {
 type AccountResult<T> =
   | (T & { keyHint: string; label?: string })
   | { keyHint: string; label?: string; error: string }
+
+/**
+ * 「未配置凭据」——**不是故障**。
+ *
+ * 与「查询失败」严格区分：前者是用户还没填 Key，卡片该显示中性空态（`t-empty`）；
+ * 后者是真出了问题，该飘红。前端靠 `code === 'NOT_CONFIGURED'` 判定，
+ * 因此这个码必须原样透传，不能被套上任何中文前缀。
+ */
+class NotConfiguredError extends Error {
+  readonly code = 'NOT_CONFIGURED'
+}
+
+/** `/api/usage` 里单个 provider 的容错切片（与前端 `UsageSlice` 同构）。 */
+type UsageSliceResult<T> = { data: T } | { error: string; code: string }
+
+/**
+ * 把 provider 查询的成败收敛成切片（返回的 promise 永不 reject）。
+ *
+ * 这是 `/api/usage` 的关键：合并成一个端点后，**容错粒度必须保持不变** ——
+ * 一个平台挂了只降级它自己那一格，其余 9 家照常返回（与 PR #17 智谱子查询容错同一原则）。
+ */
+async function usageSliceOf<T>(load: Promise<T>): Promise<UsageSliceResult<T>> {
+  try {
+    return { data: await load }
+  } catch (cause) {
+    const code = cause instanceof Error && 'code' in cause ? String(cause.code) : 'INTERNAL_ERROR'
+    const raw = cause instanceof Error ? cause.message : String(cause)
+    // 未配置原样透传：那条消息本身就是「该配哪个变量」的说明，再叠一层前缀反而更难读
+    return { error: code === 'NOT_CONFIGURED' ? raw : accountErrorHint(raw, code), code }
+  }
+}
+
+/** 火山「套餐用量明细」的统计区间（天）。常量而非用户输入，故并入 `/api/usage`。 */
+const VOLC_PLAN_DAYS = 7
+
+/** 火山推理用量的缓存 TTL（秒）：它是按天聚合的表，1 分钟内不会变。 */
+const INFERENCE_TTL_SECONDS = 60
+
+/** 容错切片 → HTTP 响应：未配置是 503（中性空态），其余是 500（真故障）。 */
+function sliceResponse(result: UsageSliceResult<unknown>): Response {
+  if ('data' in result) {
+    return json(result.data)
+  }
+  return errorResponse(result.code === 'NOT_CONFIGURED' ? 503 : 500, result.code, result.error)
+}
 
 /** 按账号错误的中文化提示：优先匹配错误类携带的 code 字段，回退 message 子串。 */
 function accountErrorHint(message: string, code?: string): string {
@@ -348,10 +387,7 @@ export function createAppHandler(env: EnvGetter) {
   const GITEE_AI_KEYS = readKeys('GITEE_AI_API_KEY', env)
   // 代金券查询用的 Web 控制台会话 Cookie（可选；按 _N 后缀与同序号 API Key 精确配对，缺口不错位）
   const GITEE_AI_COOKIE_BY_KEY = readPairedMap('GITEE_AI_API_KEY', 'GITEE_AI_SESSION_COOKIE', env)
-  const STEPFUN_KEYS = readKeys('STEPFUN_API_KEY', env)
-  const SILICONFLOW_KEYS = readKeys('SILICONFLOW_API_KEY', env)
   const OPENROUTER_KEYS = readKeys('OPENROUTER_API_KEY', env)
-  const NOVITA_KEYS = readKeys('NOVITA_API_KEY', env)
   const KIMI_KEYS = readKeys('KIMI_API_KEY', env)
   const MINIMAX_KEYS = readKeys('MINIMAX_API_KEY', env)
   const OPENCODE_GO_KEYS = readKeys('OPENCODE_GO_API_KEY', env)
@@ -411,10 +447,7 @@ export function createAppHandler(env: EnvGetter) {
   labelMap('zhipu', 'ZHIPU_API_KEY', 'ZHIPU_LABEL')
   labelMap('aliyun', 'ALIYUN_ACCESS_KEY_ID', 'ALIYUN_LABEL')
   labelMap('gitee', 'GITEE_AI_API_KEY', 'GITEE_LABEL')
-  labelMap('stepfun', 'STEPFUN_API_KEY', 'STEPFUN_LABEL')
-  labelMap('siliconflow', 'SILICONFLOW_API_KEY', 'SILICONFLOW_LABEL')
   labelMap('openrouter', 'OPENROUTER_API_KEY', 'OPENROUTER_LABEL')
-  labelMap('novita', 'NOVITA_API_KEY', 'NOVITA_LABEL')
   labelMap('kimi', 'KIMI_API_KEY', 'KIMI_LABEL')
   labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
   labelMap('opencode', 'OPENCODE_GO_API_KEY', 'OPENCODE_GO_LABEL')
@@ -443,14 +476,7 @@ export function createAppHandler(env: EnvGetter) {
   // ---------------------------------------------------------------------------
 
   function handleStatus(): Response {
-    // 「扩展平台」只统计余额类凭据；套餐类（Kimi/MiniMax/OpenCode Go）归入 plans，
-    // 与前端「余额账户 / 套餐订阅」两个 Tab 的归属保持一致
-    const extrasKeyHints = [
-      ...STEPFUN_KEYS,
-      ...SILICONFLOW_KEYS,
-      ...OPENROUTER_KEYS,
-      ...NOVITA_KEYS,
-    ].map(maskKey)
+    // 套餐类（Kimi / MiniMax / OpenCode Go）单独统计，与前端「套餐订阅」Tab 的归属一致
     const plansKeyHints = [...KIMI_KEYS, ...MINIMAX_KEYS, ...OPENCODE_GO_KEYS].map(maskKey)
     return json({
       providers: {
@@ -461,7 +487,6 @@ export function createAppHandler(env: EnvGetter) {
         gitee: providerStatus(GITEE_AI_KEYS.map(maskKey)),
         baidu: providerStatus(baiduCredentialsList.map((cred) => maskKey(cred.accessKey))),
         tokenplan: providerStatus(aliyunTokenPlanSources.map((source) => source.keyHint)),
-        extras: providerStatus(extrasKeyHints),
         plans: providerStatus(plansKeyHints),
         newapi: providerStatus(NEWAPI_PAIRS.map((pair) => maskKey(pair.key))),
       },
@@ -472,61 +497,16 @@ export function createAppHandler(env: EnvGetter) {
     })
   }
 
-  /** 余额类扩展平台（余额账户 Tab 的「扩展平台」区块）。 */
-  async function handleExtras(): Promise<Response> {
-    const balanceGroups: Array<{ provider: string; entries: AccountEntry<BalanceInfo>[] }> = [
-      {
-        provider: 'StepFun 阶跃星辰',
-        entries: STEPFUN_KEYS.map((key) => ({
-          keyHint: maskKey(key),
-          label: labelOf('stepfun', key),
-          run: () => fetchStepFunBalance(key),
-        })),
-      },
-      {
-        provider: 'SiliconFlow 硅基流动',
-        entries: SILICONFLOW_KEYS.map((key) => ({
-          keyHint: maskKey(key),
-          label: labelOf('siliconflow', key),
-          run: () => fetchSiliconFlowBalance(key),
-        })),
-      },
-      {
-        provider: 'OpenRouter',
-        entries: OPENROUTER_KEYS.map((key) => ({
-          keyHint: maskKey(key),
-          label: labelOf('openrouter', key),
-          run: () => fetchOpenRouterBalance(key),
-        })),
-      },
-      {
-        provider: 'Novita AI',
-        entries: NOVITA_KEYS.map((key) => ({
-          keyHint: maskKey(key),
-          label: labelOf('novita', key),
-          run: () => fetchNovitaBalance(key),
-        })),
-      },
-    ].filter((group) => group.entries.length > 0)
-
-    const balanceGroupsResult = await Promise.all(
-      balanceGroups.map(async (group) => ({
-        provider: group.provider,
-        accounts: await runAccounts(group.entries),
-      })),
-    )
-
-    const configured = balanceGroups.reduce((sum, group) => sum + group.entries.length, 0)
-
-    return json({ balances: balanceGroupsResult, configured })
-  }
-
   /**
    * 套餐类扩展平台（套餐订阅 Tab 的「订阅套餐」区块）。
-   * 与 /api/extras 拆开是因为二者的归属 Tab 不同：这里是按窗口计的**订阅额度**，
+   *
+   * 与余额类平台分属不同 Tab、不同数据语义：这里是按窗口计的**订阅额度**，
    * 与火山 Agent Plan / Coding Plan、智谱 Coding Plan、百炼 Token Plan 同类。
    */
-  async function handlePlans(): Promise<Response> {
+  async function plansPayload(): Promise<{
+    plans: Array<{ provider: string; accounts: unknown[] }>
+    configured: number
+  }> {
     const planGroups: Array<{ provider: string; entries: AccountEntry<TokenPlanInfo>[] }> = [
       {
         provider: 'Kimi For Coding',
@@ -563,12 +543,12 @@ export function createAppHandler(env: EnvGetter) {
 
     const configured = planGroups.reduce((sum, group) => sum + group.entries.length, 0)
 
-    return json({ plans: planGroupsResult, configured })
+    return { plans: planGroupsResult, configured }
   }
 
-  async function handleGiteeBalance(): Promise<Response> {
+  async function giteePayload(): Promise<{ accounts: unknown[] }> {
     if (GITEE_AI_KEYS.length === 0) {
-      return errorResponse(503, 'NOT_CONFIGURED', '未配置 GITEE_AI_API_KEY 环境变量')
+      throw new NotConfiguredError('未配置 GITEE_AI_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
       GITEE_AI_KEYS.map((apiKey) => ({
@@ -592,12 +572,12 @@ export function createAppHandler(env: EnvGetter) {
         },
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleDeepseekBalance(): Promise<Response> {
+  async function deepseekPayload(): Promise<{ accounts: unknown[] }> {
     if (DEEPSEEK_KEYS.length === 0) {
-      return errorResponse(503, 'NOT_CONFIGURED', '未配置 DEEPSEEK_API_KEY 环境变量')
+      throw new NotConfiguredError('未配置 DEEPSEEK_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
       DEEPSEEK_KEYS.map((apiKey) => ({
@@ -606,7 +586,7 @@ export function createAppHandler(env: EnvGetter) {
         run: () => fetchDeepSeekBalance(apiKey),
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
   /**
@@ -615,9 +595,9 @@ export function createAppHandler(env: EnvGetter) {
    * 令牌在站点「个人设置 → 安全设置 → 系统访问令牌」生成；误填 `sk-` 密钥时会自动
    * 退化到账单接口（见 server/newapi.ts 的说明）。
    */
-  async function handleNewApi(): Promise<Response> {
+  async function newApiPayload(): Promise<{ accounts: unknown[] }> {
     if (NEWAPI_PAIRS.length === 0) {
-      return errorResponse(503, 'NOT_CONFIGURED', '未配置 NEWAPI_BASE_URL / NEWAPI_TOKEN 环境变量')
+      throw new NotConfiguredError('未配置 NEWAPI_BASE_URL / NEWAPI_TOKEN 环境变量')
     }
     const accounts = await runAccounts(
       NEWAPI_PAIRS.map((pair): AccountEntry<NewApiAccountData> => {
@@ -635,18 +615,14 @@ export function createAppHandler(env: EnvGetter) {
         }
       }),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleVolcPlan(requestUrl: URL): Promise<Response> {
+  async function volcPlanPayload(): Promise<{ accounts: unknown[] }> {
     if (volcCredentialsList.length === 0) {
-      return errorResponse(
-        503,
-        'NOT_CONFIGURED',
-        '未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY 环境变量',
-      )
+      throw new NotConfiguredError('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY 环境变量')
     }
-    const { start, end } = dateRange(requestUrl.searchParams.get('days'))
+    const { start, end } = dateRange(String(VOLC_PLAN_DAYS))
     const accounts = await runAccounts(
       volcCredentialsList.map((creds) => ({
         keyHint: maskKey(creds.accessKey),
@@ -668,12 +644,12 @@ export function createAppHandler(env: EnvGetter) {
         },
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleZhipu(): Promise<Response> {
+  async function zhipuPayload(): Promise<{ accounts: unknown[] }> {
     if (ZHIPU_KEYS.length === 0) {
-      return errorResponse(503, 'NOT_CONFIGURED', '未配置 ZHIPU_API_KEY 环境变量')
+      throw new NotConfiguredError('未配置 ZHIPU_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
       ZHIPU_KEYS.map((apiKey) => ({
@@ -690,33 +666,26 @@ export function createAppHandler(env: EnvGetter) {
         },
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleAliyun(requestUrl: URL): Promise<Response> {
+  async function aliyunPayload(): Promise<{ accounts: unknown[] }> {
     if (aliyunCredentialsList.length === 0) {
-      return errorResponse(
-        503,
-        'NOT_CONFIGURED',
-        '未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY 环境变量',
-      )
+      throw new NotConfiguredError('未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY 环境变量')
     }
-    const productCode = requestUrl.searchParams.get('productCode')?.trim() || undefined
     const accounts = await runAccounts(
       aliyunCredentialsList.map((creds) => ({
         keyHint: maskKey(creds.accessKey),
         label: labelOf('aliyun', creds.accessKey),
-        run: () => queryResourcePackageInstances(creds, { productCode }),
+        run: () => queryResourcePackageInstances(creds),
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleTokenPlan(): Promise<Response> {
+  async function tokenPlanPayload(): Promise<{ accounts: unknown[] }> {
     if (aliyunTokenPlanSources.length === 0) {
-      return errorResponse(
-        503,
-        'NOT_CONFIGURED',
+      throw new NotConfiguredError(
         '未配置 ALIYUN_ACCESS_KEY_ID / ALIYUN_SECRET_KEY（组织与座席）或 ALIYUN_TOKENPLAN_COOKIE（个人版用量）环境变量',
       )
     }
@@ -754,16 +723,12 @@ export function createAppHandler(env: EnvGetter) {
         },
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleBaidu(): Promise<Response> {
+  async function baiduPayload(): Promise<{ accounts: unknown[] }> {
     if (baiduCredentialsList.length === 0) {
-      return errorResponse(
-        503,
-        'NOT_CONFIGURED',
-        '未配置 BAIDU_ACCESS_KEY_ID / BAIDU_SECRET_KEY 环境变量',
-      )
+      throw new NotConfiguredError('未配置 BAIDU_ACCESS_KEY_ID / BAIDU_SECRET_KEY 环境变量')
     }
     const accounts = await runAccounts(
       baiduCredentialsList.map((creds) => ({
@@ -772,12 +737,12 @@ export function createAppHandler(env: EnvGetter) {
         run: () => fetchQianfanData(creds),
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleOpenRouter(): Promise<Response> {
+  async function openRouterPayload(): Promise<{ accounts: unknown[] }> {
     if (OPENROUTER_KEYS.length === 0) {
-      return errorResponse(503, 'NOT_CONFIGURED', '未配置 OPENROUTER_API_KEY 环境变量')
+      throw new NotConfiguredError('未配置 OPENROUTER_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
       OPENROUTER_KEYS.map((apiKey) => ({
@@ -786,27 +751,25 @@ export function createAppHandler(env: EnvGetter) {
         run: () => fetchOpenRouterDetail(apiKey),
       })),
     )
-    return json({ accounts })
+    return { accounts }
   }
 
-  async function handleVolcInference(requestUrl: URL): Promise<Response> {
+  async function volcInferencePayload(filters: {
+    days: string | null
+    model?: string
+    modelEndpoint?: string
+  }): Promise<unknown> {
     if (volcCredentialsList.length === 0) {
-      return errorResponse(
-        503,
-        'NOT_CONFIGURED',
-        '未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY 环境变量',
-      )
+      throw new NotConfiguredError('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY 环境变量')
     }
-    const { start, end } = dateRange(requestUrl.searchParams.get('days'))
-    const model = requestUrl.searchParams.get('model')?.trim() || undefined
-    const modelEndpoint = requestUrl.searchParams.get('modelEndpoint')?.trim() || undefined
+    const { start, end } = dateRange(filters.days)
 
-    const filters: Array<{ key: string; values: string[] }> = []
-    if (model) {
-      filters.push({ key: 'ModelName', values: [model] })
+    const apiFilters: Array<{ key: string; values: string[] }> = []
+    if (filters.model) {
+      apiFilters.push({ key: 'ModelName', values: [filters.model] })
     }
-    if (modelEndpoint) {
-      filters.push({ key: 'ModelEndpoint', values: [modelEndpoint] })
+    if (filters.modelEndpoint) {
+      apiFilters.push({ key: 'ModelEndpoint', values: [filters.modelEndpoint] })
     }
 
     const accounts = await runAccounts(
@@ -814,16 +777,125 @@ export function createAppHandler(env: EnvGetter) {
         keyHint: maskKey(creds.accessKey),
         label: labelOf('volc', creds.accessKey),
         run: async () => {
-          const usage = await getInferenceUsage(creds, start, end, filters)
+          const usage = await getInferenceUsage(creds, start, end, apiFilters)
           return { rows: usage.rows, start, end }
         },
       })),
     )
-    return json({ accounts })
+    return { accounts }
+  }
+
+  /**
+   * 火山推理用量：**保留独立端点**。
+   *
+   * 它是唯一带用户输入的读数接口（`model` / `modelEndpoint` 过滤），并入 `/api/usage`
+   * 会让「改一个模型过滤」退化成「全量重拉 10 家平台」—— 反而更贵。
+   * 缓存按参数分 key，因此在同一组过滤条件上来回切换不会重复打上游。
+   */
+  async function handleVolcInference(requestUrl: URL): Promise<Response> {
+    const days = requestUrl.searchParams.get('days')
+    const model = requestUrl.searchParams.get('model')?.trim() || undefined
+    const modelEndpoint = requestUrl.searchParams.get('modelEndpoint')?.trim() || undefined
+    const cacheKey = `volc-inference:${days ?? ''}:${model ?? ''}:${modelEndpoint ?? ''}`
+    const bypass = requestUrl.searchParams.get('refresh') === '1'
+    const result = await usageSliceOf(
+      cachedQuery(cacheKey, { ttlSeconds: INFERENCE_TTL_SECONDS, bypass }, () =>
+        volcInferencePayload({ days, model, modelEndpoint }),
+      ),
+    )
+    return sliceResponse(result)
+  }
+
+  /**
+   * `/api/usage` 的 provider 缓存 TTL（秒），按**数据变化节奏**分两档：
+   * - `300`：结构与权益类（资源包、套餐、座席）—— 变化以天计；
+   * - `60`：余额与用量类 —— 变化以分钟计。
+   *
+   * 默认刷新间隔 180s，因此按天计的那几项大约每两次自动刷新才真正打一次上游。
+   * 手动刷新会绕过缓存（`?refresh=1`，见 cachedQuery 的 bypass）。
+   */
+  const USAGE_TTL_SECONDS = {
+    deepseek: 60,
+    volcPlan: 300,
+    zhipu: 60,
+    aliyun: 300,
+    tokenPlan: 300,
+    gitee: 60,
+    baidu: 300,
+    openrouter: 60,
+    plans: 300,
+    newapi: 60,
+  } as const
+
+  type UsageProviderKey = keyof typeof USAGE_TTL_SECONDS
+
+  /**
+   * 带缓存地执行一个 provider 查询，并收敛成容错切片。
+   *
+   * 注意缓存粒度是**整个 provider 的返回**，而 `runAccounts` 会把账号级失败吸收进
+   * `accounts` 数组 —— 也就是说「某个账号这次查失败了」也会被缓存住 TTL 秒。
+   * 这是可接受的：TTL（60/300s）短于默认自动刷新间隔（180s）的两倍，
+   * 且手动刷新走 `bypass` 永远拿实时值；反过来若把账号失败也当成「不该缓存」，
+   * 就得让 provider 层感知账号层的成败，容错的两级会被搅在一起。
+   */
+  function usageProvider<T>(
+    key: UsageProviderKey,
+    load: () => Promise<T>,
+    bypass: boolean,
+  ): Promise<UsageSliceResult<T>> {
+    return usageSliceOf(
+      cachedQuery(`usage:${key}`, { ttlSeconds: USAGE_TTL_SECONDS[key], bypass }, load),
+    )
+  }
+
+  /**
+   * `/api/usage`：把 9 个「每刷新一次、无用户参数、纯读数」的端点合成 1 个。
+   *
+   * 动机见 issue #23：托管在边缘云上，部分平台按**节点生存时间**计费 ——
+   * 端点数直接决定唤醒次数与单次存活时长。合并后每次刷新的前端请求 12 → 2
+   * （`/api/status` + `/api/usage`），而**服务端的上游调用数一个不少**，
+   * 每个 provider 仍是独立容错切片：一家挂了其余 9 家照常返回。
+   *
+   * `?refresh=1` 表示手动刷新：跳过缓存读取（但仍复用进行中的同 key 请求），
+   * 因此点「刷新」永远拿得到实时数据，而自动刷新走缓存省下上游墙钟。
+   */
+  async function handleUsage(requestUrl: URL): Promise<Response> {
+    const bypass = requestUrl.searchParams.get('refresh') === '1'
+    const [deepseek, volcPlan, zhipu, aliyun, tokenPlan, gitee, baidu, openrouter, plans, newapi] =
+      await Promise.all([
+        usageProvider('deepseek', deepseekPayload, bypass),
+        usageProvider('volcPlan', volcPlanPayload, bypass),
+        usageProvider('zhipu', zhipuPayload, bypass),
+        usageProvider('aliyun', aliyunPayload, bypass),
+        usageProvider('tokenPlan', tokenPlanPayload, bypass),
+        usageProvider('gitee', giteePayload, bypass),
+        usageProvider('baidu', baiduPayload, bypass),
+        usageProvider('openrouter', openRouterPayload, bypass),
+        usageProvider('plans', plansPayload, bypass),
+        usageProvider('newapi', newApiPayload, bypass),
+      ])
+    return json({
+      providers: {
+        deepseek,
+        volcPlan,
+        zhipu,
+        aliyun,
+        tokenPlan,
+        gitee,
+        baidu,
+        openrouter,
+        plans,
+        newapi,
+      },
+      fetchedAt: Date.now(),
+    })
   }
 
   // ---------------------------------------------------------------------------
   // 请求分发：/api/* 返回 API 响应；其余路径返回 null（由宿主处理静态资源）
+  //
+  // 只有 3 个端点（issue #23 的验收标准）：/api/status（首屏、0 上游调用）、
+  // /api/usage（每刷新、9 家平台合并）、/api/volc/inference-usage（带用户输入，按需）。
   // ---------------------------------------------------------------------------
 
   return async (request: Request): Promise<Response | null> => {
@@ -832,41 +904,11 @@ export function createAppHandler(env: EnvGetter) {
       if (url.pathname === '/api/status') {
         return handleStatus()
       }
-      if (url.pathname === '/api/deepseek/balance') {
-        return await handleDeepseekBalance()
-      }
-      if (url.pathname === '/api/volc/plan') {
-        return await handleVolcPlan(url)
+      if (url.pathname === '/api/usage') {
+        return await handleUsage(url)
       }
       if (url.pathname === '/api/volc/inference-usage') {
         return await handleVolcInference(url)
-      }
-      if (url.pathname === '/api/zhipu/packages') {
-        return await handleZhipu()
-      }
-      if (url.pathname === '/api/aliyun/packages') {
-        return await handleAliyun(url)
-      }
-      if (url.pathname === '/api/aliyun/tokenplan') {
-        return await handleTokenPlan()
-      }
-      if (url.pathname === '/api/gitee/balance') {
-        return await handleGiteeBalance()
-      }
-      if (url.pathname === '/api/baidu/qianfan') {
-        return await handleBaidu()
-      }
-      if (url.pathname === '/api/openrouter/detail') {
-        return await handleOpenRouter()
-      }
-      if (url.pathname === '/api/extras') {
-        return await handleExtras()
-      }
-      if (url.pathname === '/api/plans') {
-        return await handlePlans()
-      }
-      if (url.pathname === '/api/newapi') {
-        return await handleNewApi()
       }
       if (url.pathname.startsWith('/api/')) {
         return errorResponse(404, 'NOT_FOUND', `未知接口: ${url.pathname}`)

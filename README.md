@@ -39,21 +39,53 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
 - **账号别名**：多 Key 场景下 `*_LABEL` 给每个 Key 起人类可读的名字，卡片主标题显示别名、
   Key 掩码退居次要位置（详见「账号别名」）。
 
-| 数据源                     | 接口                                                                                                                                                                                            | 展示内容                                                                                                                                                                    |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DeepSeek                   | `GET /user/balance`                                                                                                                                                                             | 总余额、充值余额、赠金余额（CNY/USD）、可用状态                                                                                                                             |
-| 火山方舟 Agent Plan        | `GetAFPUsage` + `GetUsageDetails` + `GetCodingPlanUsage` + `GetInferenceUsage`                                                                                                                  | 卡片上是 Agent Plan 的 5 小时/每日/每周/每月配额与进度、重置倒计时；套餐类型、Coding Plan 状态与窗口额度、模型调用明细、近 N 天推理用量（可按模型过滤）全部收进「详情」弹窗 |
-| 智谱 GLM                   | `GET /api/monitor/usage/quota/limit`（Coding Plan）+ 控制台 biz API（余额/资源包）                                                                                                              | Coding Plan 套餐等级与 5 小时/每周窗口额度、账户余额、Token 资源包明细                                                                                                      |
-| 阿里云百炼                 | `QueryResourcePackageInstances`（BSS）                                                                                                                                                          | Token 资源包实例：总量/剩余、有效期、状态、适用产品（需 BSS 只读权限）                                                                                                      |
-| 阿里云百炼 Token Plan      | ModelStudio OpenAPI（ROA）：`GetSubscriptionSeatDetails` / `ListSubscriptionSharedPackages`；个人版用量经控制台网关（`zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/*`，Cookie 或 AK/SK 均可） | TokenPlan 账户/组织信息、订阅座席与共享包的 CREDITS 额度周期、总额/剩余；**个人版** 5 小时/7 天窗口用量、订阅状态与剩余天数、加购包 Credits、重置卡                         |
-| 模力方舟（Gitee AI）       | `GET /tokens/packages/balance` + 内部接口（Cookie）                                                                                                                                             | 资源包总金额/已用/剩余、代金券余额与明细（需配置会话 Cookie）                                                                                                               |
-| 百度智能云千帆             | 平台功能 OpenAPI（/v2/charge + /v2/service，BCE AK/SK 签名）                                                                                                                                    | 量包（总量/已用/到期/状态）+ TPM 配额 + 近 7 天调用概览（Token/次数/服务数）                                                                                                |
-| OpenRouter                 | `GET /api/v1/credits` + `GET /api/v1/key`                                                                                                                                                       | 剩余额度 / 限额剩余 / 今日用量（「余额账户」Tab）；充值总额、周月用量、密钥元数据在「详情」弹窗内                                                                           |
-| 扩展平台（余额，仅服务端） | StepFun / SiliconFlow / OpenRouter / Novita 余额（`/api/extras`）                                                                                                                               | **页面已无独立 Tab**：OpenRouter 由上一行单独出卡，其余三家仅保留服务端接口（需要时可直接对接 `/api/extras`）                                                               |
-| New API（自托管网关）      | 管理接口 `/api/user/self` + `/api/log/self/stat` + `/api/data/self`（系统访问令牌）；无管理权限时回落 OpenAI 兼容 `/v1/dashboard/billing/*`（普通 API Key）                                     | **订阅**（周期额度窗口：已用百分比、周期额度、下次重置时间）归「套餐订阅」；**钱包**（剩余 / 累计已用 / 请求数）归「余额账户」；两者并存时订阅为主、钱包作次要读数          |
-| 订阅套餐（可选）           | Kimi For Coding（`/coding/v1/usages`）/ MiniMax（`coding_plan/remains`）/ **OpenCode Go**（`/zen/go/v1/usage`），统一走 `/api/plans`                                                            | 按窗口计的**订阅额度**，与火山/智谱/百炼并列在「套餐订阅」Tab；**一平台一张卡，卡片标题即平台名**，卡显示窗口进度条，账号身份与窗口明细在「详情」弹窗内                     |
+| 数据源                | 接口                                                                                                                                                                                            | 展示内容                                                                                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DeepSeek              | `GET /user/balance`                                                                                                                                                                             | 总余额、充值余额、赠金余额（CNY/USD）、可用状态                                                                                                                             |
+| 火山方舟 Agent Plan   | `GetAFPUsage` + `GetUsageDetails` + `GetCodingPlanUsage` + `GetInferenceUsage`                                                                                                                  | 卡片上是 Agent Plan 的 5 小时/每日/每周/每月配额与进度、重置倒计时；套餐类型、Coding Plan 状态与窗口额度、模型调用明细、近 N 天推理用量（可按模型过滤）全部收进「详情」弹窗 |
+| 智谱 GLM              | `GET /api/monitor/usage/quota/limit`（Coding Plan）+ 控制台 biz API（余额/资源包）                                                                                                              | Coding Plan 套餐等级与 5 小时/每周窗口额度、账户余额、Token 资源包明细                                                                                                      |
+| 阿里云百炼            | `QueryResourcePackageInstances`（BSS）                                                                                                                                                          | Token 资源包实例：总量/剩余、有效期、状态、适用产品（需 BSS 只读权限）                                                                                                      |
+| 阿里云百炼 Token Plan | ModelStudio OpenAPI（ROA）：`GetSubscriptionSeatDetails` / `ListSubscriptionSharedPackages`；个人版用量经控制台网关（`zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/*`，Cookie 或 AK/SK 均可） | TokenPlan 账户/组织信息、订阅座席与共享包的 CREDITS 额度周期、总额/剩余；**个人版** 5 小时/7 天窗口用量、订阅状态与剩余天数、加购包 Credits、重置卡                         |
+| 模力方舟（Gitee AI）  | `GET /tokens/packages/balance` + 内部接口（Cookie）                                                                                                                                             | 资源包总金额/已用/剩余、代金券余额与明细（需配置会话 Cookie）                                                                                                               |
+| 百度智能云千帆        | 平台功能 OpenAPI（/v2/charge + /v2/service，BCE AK/SK 签名）                                                                                                                                    | 量包（总量/已用/到期/状态）+ TPM 配额 + 近 7 天调用概览（Token/次数/服务数）                                                                                                |
+| OpenRouter            | `GET /api/v1/credits` + `GET /api/v1/key`                                                                                                                                                       | 剩余额度 / 限额剩余 / 今日用量（「余额账户」Tab）；充值总额、周月用量、密钥元数据在「详情」弹窗内                                                                           |
+| New API（自托管网关） | 管理接口 `/api/user/self` + `/api/log/self/stat` + `/api/data/self`（系统访问令牌）；无管理权限时回落 OpenAI 兼容 `/v1/dashboard/billing/*`（普通 API Key）                                     | **订阅**（周期额度窗口：已用百分比、周期额度、下次重置时间）归「套餐订阅」；**钱包**（剩余 / 累计已用 / 请求数）归「余额账户」；两者并存时订阅为主、钱包作次要读数          |
+| 订阅套餐（可选）      | Kimi For Coding（`/coding/v1/usages`）/ MiniMax（`coding_plan/remains`）/ **OpenCode Go**（`/zen/go/v1/usage`），统一走 `/api/usage` 的 `plans` 切片                                            | 按窗口计的**订阅额度**，与火山/智谱/百炼并列在「套餐订阅」Tab；**一平台一张卡，卡片标题即平台名**，卡显示窗口进度条，账号身份与窗口明细在「详情」弹窗内                     |
 
 密钥只存在于服务端环境变量，前端页面不接触任何 Key（仅展示掩码）。
+
+### 对外接口只有 3 个
+
+页面挂在边缘云上，而部分平台按**节点生存时间**计费——端点数直接决定唤醒次数与单次存活时长。
+因此所有读数合并成 3 个接口（此前是 13 个）：
+
+| 接口                            | 何时调用             | 说明                                                                                                           |
+| ------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /api/status`               | 首屏一次             | 只回**配置状态**（哪些平台配了几个 Key、缺哪一半、站点自定义），**0 次上游调用**，因此极快                     |
+| `GET /api/usage`                | 每次刷新             | 10 家平台的读数合并成**一封信封**，见下                                                                        |
+| `GET /api/volc/inference-usage` | 按需（改模型过滤时） | 火山推理用量。**故意不合并**：它是唯一带用户输入的读数接口，并入会让「改一个模型过滤」退化成「全量重拉 10 家」 |
+
+`/api/usage` 的信封形状：
+
+```jsonc
+{
+  "providers": {
+    "deepseek": { "data": { "accounts": [] } }, // 成功
+    "newapi": { "error": "未配置 …", "code": "NOT_CONFIGURED" }, // 未配置
+    "zhipu": { "error": "…", "code": "Zhipu_HTTP_500" }, // 真实失败
+  },
+  "fetchedAt": 1789616585319,
+}
+```
+
+两个设计要点：
+
+- **每个平台是独立切片**，一家的失败不会污染其余九家（也不会让整封信封变成 500）。
+  未配置走 `NOT_CONFIGURED`，前端渲染成中性空态而不是错误墙。**未配置的 Key 不影响其他平台出卡**。
+- **服务端有 TTL 缓存 + 单飞（single-flight）**：命中缓存时**上游调用为 0**，并发刷新共享同一次上游请求。
+  TTL 按数据变化节奏分两档——余额/用量类 60 秒，结构/权益类（资源包、套餐、座席）300 秒。
+  默认刷新间隔 180 秒，所以按天计的那几项大约每两次自动刷新才真正打一次上游。
+  **手动点「刷新」会绕过缓存**（`?refresh=1`），因此手动刷新永远拿得到实时数据。
 
 ## 快速开始
 
@@ -167,7 +199,6 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 | 阿里 Token Plan 个人版（仅 Cookie）     | `ALIYUN_TOKENPLAN_COOKIE` | `ALIYUN_TOKENPLAN_LABEL` |
 | 模力方舟                                | `GITEE_AI_API_KEY`        | `GITEE_LABEL`            |
 | 百度千帆                                | `BAIDU_ACCESS_KEY_ID`     | `BAIDU_LABEL`            |
-| StepFun / SiliconFlow / Novita          | `STEPFUN_API_KEY` 等      | `STEPFUN_LABEL` 等       |
 | OpenRouter                              | `OPENROUTER_API_KEY`      | `OPENROUTER_LABEL`       |
 | Kimi For Coding / MiniMax               | `KIMI_API_KEY` 等         | `KIMI_LABEL` 等          |
 | OpenCode Go                             | `OPENCODE_GO_API_KEY`     | `OPENCODE_GO_LABEL`      |
@@ -207,10 +238,7 @@ OPENCODE_GO_LABEL_3=算法组（长上下文）
 | `GITEE_AI_SESSION_COOKIE`  | 否   | 模力方舟 Web 会话 Cookie（代金券查询；整段含空格，平台面板需填编码值，见「Cookie 怎么填」）                |
 | `BAIDU_ACCESS_KEY_ID`      | 否   | 百度智能云千帆 Access Key ID（BCE 签名），在 https://console.bce.baidu.com/iam/#/iam/accesslist 创建       |
 | `BAIDU_SECRET_KEY`         | 否   | 百度智能云千帆 Secret Access Key（建议子账号 + `QianfanServiceReadAccessPolicy` 只读）                     |
-| `STEPFUN_API_KEY`          | 否   | StepFun 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://platform.stepfun.com 获取                 |
-| `SILICONFLOW_API_KEY`      | 否   | SiliconFlow 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://cloud.siliconflow.cn 获取             |
 | `OPENROUTER_API_KEY`       | 否   | OpenRouter 剩余额度与限额，在 https://openrouter.ai/keys 获取                                              |
-| `NOVITA_API_KEY`           | 否   | Novita AI 账户余额（仅 `/api/extras`，页面无独立 Tab），在 https://novita.ai 获取                          |
 | `KIMI_API_KEY`             | 否   | Kimi For Coding Token Plan 额度，在 https://platform.moonshot.cn 获取                                      |
 | `MINIMAX_API_KEY`          | 否   | MiniMax Token Plan 额度，在 https://platform.minimaxi.com 获取                                             |
 | `OPENCODE_GO_API_KEY`      | 否   | OpenCode Go 订阅额度（5 小时/7 天/30 天窗口），在 https://opencode.ai 获取                                 |
@@ -371,11 +399,11 @@ Logo 采用**高度固定、宽度自适应**，高度与宽度上限按断点�
 
 `ALIYUN_ACCESS_KEY_ID` / `ALIYUN_SECRET_KEY` 与 `ALIYUN_TOKENPLAN_COOKIE` **各管一块数据，互不替代**：
 
-| 展示内容                                              | 依赖的凭据                                                             | 缺失后果                                          |
-| ----------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------- |
-| 阿里云百炼 Token 资源包实例（`/api/aliyun/packages`） | `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_SECRET_KEY`（BSS）                    | 该接口返回 `NOT_CONFIGURED`，「资源包」区块不显示 |
-| Token Plan 组织 / 座席 / 共享包                       | 同上（ModelStudio ROA）                                                | 组织/座席区块隐藏                                 |
-| Token Plan **个人版**用量                             | `ALIYUN_TOKENPLAN_COOKIE`（**或** AK/SK + 额外 RAM 授权，Cookie 优先） | 「个人版套餐用量」处显示黄色提示                  |
+| 展示内容                                         | 依赖的凭据                                                             | 缺失后果                                          |
+| ------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------- |
+| 阿里云百炼 Token 资源包实例（`/api/usage` 切片） | `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_SECRET_KEY`（BSS）                    | 该切片返回 `NOT_CONFIGURED`，「资源包」区块不显示 |
+| Token Plan 组织 / 座席 / 共享包                  | 同上（ModelStudio ROA）                                                | 组织/座席区块隐藏                                 |
+| Token Plan **个人版**用量                        | `ALIYUN_TOKENPLAN_COOKIE`（**或** AK/SK + 额外 RAM 授权，Cookie 优先） | 「个人版套餐用量」处显示黄色提示                  |
 
 结论：
 
@@ -461,7 +489,8 @@ vp build            # 生产构建（含 vue-tsc 严格类型检查）
 
 ```
 server/           平台无关 API 核心 + Bun 入口
-  app.ts          createAppHandler(env)：全部 /api/* 路由（Bun/Worker/Vite 共用）
+  app.ts          createAppHandler(env)：3 个接口（/api/status + /api/usage + /api/volc/inference-usage）
+  cache.ts        上游查询的 TTL 缓存 + 单飞（边缘计费下把缓存命中变成 0 次上游调用）
   index.ts        Bun 入口：Bun.serve + dist/ 静态服务
   multi.ts        多账号凭据读取（PREFIX / PREFIX_2 / ...）
   sign.ts         火山引擎 v4 签名（Web Crypto）
@@ -474,7 +503,7 @@ server/           平台无关 API 核心 + Bun 入口
   tokenplan.ts    阿里云 Model Studio Token Plan 客户端（组织/座席/共享包）
   opencode.ts     OpenCode Go 订阅额度客户端（rolling/weekly/monthly + 窗口 status）
   newapi.ts       New API（自托管网关）客户端：管理接口优先、账单接口回落，订阅/钱包模式判定
-  balances.ts     StepFun / SiliconFlow / OpenRouter / Novita 余额客户端
+  balances.ts     OpenRouter 余额客户端
   plans.ts        Kimi / MiniMax Token Plan 客户端
 src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
   api.ts          前端 API 客户端（错误信封 zod 校验）
