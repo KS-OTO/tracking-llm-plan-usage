@@ -5,17 +5,20 @@ export interface ProviderStatus {
 }
 
 /**
- * 站点自定义（服务端由 `SITE_NAME` / `SITE_LOGO_URL` / `SITE_FAVICON_URL` /
- * `REFRESH_INTERVAL_SECONDS` 运行时读取，随 `/api/status` 下发）。
+ * 站点自定义（服务端由 `SITE_NAME` / `SITE_LOGO_URL` / `SITE_LOGO_URL_DARK` /
+ * `SITE_FAVICON_URL` / `REFRESH_INTERVAL_SECONDS` 运行时读取，随 `/api/status` 下发）。
  *
  * 与 `server/app.ts` 的 `SiteConfig` 是同构契约：server 侧不 import src，
  * 因此两边各声明一份，默认值必须保持一致。
  */
 export interface SiteConfig {
-  /** 站点标题：导航栏品牌位 + 浏览器标签页。 */
+  /** 站点标题：导航栏品牌位 + 浏览器标签页。**可以为空串** —— 表示品牌位只显示 Logo
+   *  （Logo 本身已是完整字标时很常见），此时标签页标题回落到 `DEFAULT_SITE_NAME`。 */
   name: string
-  /** Logo 地址；未配置为 null（此时品牌位只显示文字）。 */
+  /** Logo 地址（明亮模式，也是暗黑模式的回落值）；未配置为 null（此时品牌位只显示文字）。 */
   logoUrl: string | null
+  /** 暗黑模式专用 Logo 地址；未配置为 null（此时暗黑模式沿用 `logoUrl`）。 */
+  logoUrlDark: string | null
   /** favicon 地址；未配置为 null（此时保留 index.html 里的 /favicon.ico）。 */
   faviconUrl: string | null
   /** 自动刷新间隔（秒）。 */
@@ -30,6 +33,7 @@ export const DEFAULT_REFRESH_INTERVAL_SECONDS = 180
 export const FALLBACK_SITE_CONFIG: SiteConfig = {
   name: DEFAULT_SITE_NAME,
   logoUrl: null,
+  logoUrlDark: null,
   faviconUrl: null,
   refreshIntervalSeconds: DEFAULT_REFRESH_INTERVAL_SECONDS,
 }

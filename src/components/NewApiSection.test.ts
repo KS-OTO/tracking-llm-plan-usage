@@ -72,6 +72,21 @@ describe('NewApiSection', () => {
     expect(text).not.toContain('gpt-6-astra')
   })
 
+  it('进度条百分比只取整数，不把上游的原始精度漏到卡面上', () => {
+    // 上游给的是 3.2147572 这种未收敛的原始值，t-progress 会原样打印成
+    // "3.2147572%"（真实案例："34.0101024%"）。收敛由 utils.progressPercentage 负责。
+    const wrapper = mountWithTDesign(NewApiSection, {
+      props: {
+        data: response([{ ...account, keyHint: 'eJ****OLM=', label: '主力站' }]),
+        loading: false,
+        error: null,
+      },
+    })
+    const info = wrapper.find('.t-progress__info')
+    expect(info.exists()).toBe(true)
+    expect(info.text()).toBe('3%')
+  })
+
   it('纯钱包账号不渲染订阅窗口', () => {
     const wrapper = mountWithTDesign(NewApiSection, {
       props: {

@@ -42,11 +42,14 @@ BAIDU_ACCESS_KEY_ID=ALTAKxxxx
 BAIDU_SECRET_KEY=xxxx
 
 # 站点自定义（可选，纯前端外观）：
-#   SITE_NAME                 品牌名（导航栏 + 标签页标题），默认「LLM 用量监控」
-#   SITE_LOGO_URL             导航栏 Logo 地址（浏览器直连，不受 CORS 限制，但须 https）
+#   SITE_NAME                 品牌名（导航栏 + 标签页标题），默认「LLM 用量监控」；
+#                             显式留空 = 只显示 Logo（适合 Logo 已是完整字标）
+#   SITE_LOGO_URL             明亮模式 Logo 地址（浏览器直连，不受 CORS 限制，但须 https）
+#   SITE_LOGO_URL_DARK        暗黑模式 Logo 地址；不配则暗黑模式沿用 SITE_LOGO_URL
 #   SITE_FAVICON_URL          标签页图标地址（同上；未配置保留自带 /favicon.ico）
 #   REFRESH_INTERVAL_SECONDS  自动刷新间隔秒数，默认 180，允许 10–3600
 # SITE_NAME=内部用量面板
 # SITE_LOGO_URL=https://cdn.example.com/logo.svg
+# SITE_LOGO_URL_DARK=https://cdn.example.com/logo-dark.svg
 # SITE_FAVICON_URL=https://cdn.example.com/favicon.png
 # REFRESH_INTERVAL_SECONDS=180

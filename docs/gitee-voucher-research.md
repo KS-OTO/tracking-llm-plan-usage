@@ -30,7 +30,7 @@
 | `GET /api/pay/{namespace}/consumption/detail`               | 消费明细：含 `cash_coupon_amount`（代金券抵扣额）                             | （同上，Cookie） | —            |
 | `GET /api/base/{namespace}/inference-log/operation-summary` | 模型用量汇总                                                                  | （同上，Cookie） | —            |
 
-> `{namespace}` 是账号命名空间（如参考资料中的 `git18bit`），需先调 `/api/base/userinfo` 拿到 `namespace_path` —— 而 userinfo 本身也要 Cookie。即「拿 namespace」与「拿代金券」同属 Cookie 鉴权域，无法用 Token 串联。
+> `{namespace}` 是账号命名空间（如 `git-example`），需先调 `/api/base/userinfo` 拿到 `namespace_path` —— 而 userinfo 本身也要 Cookie。即「拿 namespace」与「拿代金券」同属 Cookie 鉴权域，无法用 Token 串联。
 
 ### 鉴权模型差异
 

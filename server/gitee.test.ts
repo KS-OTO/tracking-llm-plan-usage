@@ -83,8 +83,8 @@ describe('normalizeSessionCookie', () => {
   })
 
   it('decodes percent-encoded cookie values (EdgeOne EnvVars format)', () => {
-    const encoded = encodeURIComponent('a=1; session-token=xyz; ns=git18bit')
-    expect(normalizeSessionCookie(encoded)).toBe('a=1; session-token=xyz; ns=git18bit')
+    const encoded = encodeURIComponent('a=1; session-token=xyz; ns=git-example')
+    expect(normalizeSessionCookie(encoded)).toBe('a=1; session-token=xyz; ns=git-example')
   })
 
   it('leaves percent signs alone when the value is not an encoded cookie', () => {
