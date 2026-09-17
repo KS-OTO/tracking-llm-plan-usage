@@ -107,7 +107,7 @@ describe('ZhipuSection', () => {
     expect(detail).toContain('信用支付')
     expect(detail).toContain('已开通')
     expect(detail).toContain('累计充值')
-    expect(detail).toContain('10.00 CNY')
+    expect(detail).toContain('10.00 ¥')
     expect(detail).toContain('GLM 资源包 A')
   })
 

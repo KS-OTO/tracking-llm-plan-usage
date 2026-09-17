@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 import {
   formatReset,
   maskKey,
+  metricGridClass,
   pickLogoUrl,
   platformInitial,
   progressStatus,
@@ -29,6 +30,25 @@ describe('ratioOf', () => {
 
   it('returns 0 for zero quota', () => {
     expect(ratioOf(10, 0)).toBe(0)
+  })
+})
+
+describe('metricGridClass', () => {
+  /**
+   * 列数由**读数个数**声明（#19）。这两个变体名是「语义 → class」的唯一映射，
+   * 组件里不许再手写 `grid-metrics--2`，否则加变体时要 grep 十个组件。
+   */
+  it('成对读数固定两列，不再受容器宽度影响', () => {
+    expect(metricGridClass(2)).toBe('grid-metrics grid-metrics--2')
+  })
+
+  it('三个读数用 --3（桌面 3 / 平板 2 / 手机 1）', () => {
+    expect(metricGridClass(3)).toBe('grid-metrics grid-metrics--3')
+  })
+
+  it('1 个与 4 个以上落回通用 auto-fit', () => {
+    expect(metricGridClass(1)).toBe('grid-metrics')
+    expect(metricGridClass(5)).toBe('grid-metrics')
   })
 })
 

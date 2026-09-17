@@ -60,11 +60,13 @@ describe('NewApiSection', () => {
     })
     const text = wrapper.text()
     expect(text).toContain('主力站')
-    expect(text).toContain('本周期已用')
+    // 统一用量条（#18）：标题行给窗口名与重置倒计时，数值行给「已用 X / Y」+ 百分比，
+    // 脚注行给重置时刻与周期长度。货币是符号前置的。
+    expect(text).toContain('本周期额度')
+    expect(text).toContain('本周期已用 $48.22 / $1,500.00')
     expect(text).toContain('3.2%')
-    expect(text).toContain('48.22')
-    expect(text).toContain('1,500.00')
-    expect(text).toContain('下次重置')
+    expect(text).toContain('重置于')
+    expect(text).toContain('周期 7 天')
     // 钱包读数同时给出（该账号两种模式并存）
     expect(text).toContain('钱包余额')
     expect(text).toContain('414,265')
@@ -72,9 +74,10 @@ describe('NewApiSection', () => {
     expect(text).not.toContain('gpt-6-astra')
   })
 
-  it('进度条百分比只取整数，不把上游的原始精度漏到卡面上', () => {
-    // 上游给的是 3.2147572 这种未收敛的原始值，t-progress 会原样打印成
-    // "3.2147572%"（真实案例："34.0101024%"）。收敛由 utils.progressPercentage 负责。
+  it('进度条自己不打印数字，卡面百分比一律 1 位（不漏上游原始精度）', () => {
+    // 上游给的是 3.2147572 这种未收敛的原始值。历史症状是 `t-progress` 原样打印成
+    // "3.2147572%"（真实案例："34.0101024%"）。现在进度条一律 `:label="false"`，
+    // 卡面百分比只由 formatNumber 产出（#19 的 N 类精度 = 1 位）。
     const wrapper = mountWithTDesign(NewApiSection, {
       props: {
         data: response([{ ...account, keyHint: 'eJ****OLM=', label: '主力站' }]),
@@ -82,9 +85,11 @@ describe('NewApiSection', () => {
         error: null,
       },
     })
-    const info = wrapper.find('.t-progress__info')
-    expect(info.exists()).toBe(true)
-    expect(info.text()).toBe('3%')
+    const bar = wrapper.findComponent({ name: 'TProgress' })
+    expect(bar.props('label')).toBe(false)
+    expect(bar.props('percentage')).toBe(3)
+    expect(wrapper.text()).toContain('3.2%')
+    expect(wrapper.text()).not.toContain('3.2147572')
   })
 
   it('纯钱包账号不渲染订阅窗口', () => {
@@ -100,7 +105,7 @@ describe('NewApiSection', () => {
     const text = wrapper.text()
     expect(text).toContain('钱包')
     expect(text).not.toContain('本周期已用')
-    expect(text).not.toContain('下次重置')
+    expect(text).not.toContain('重置于')
   })
 
   it('单站点时卡片标题旁给出按站点拼接的外链', () => {

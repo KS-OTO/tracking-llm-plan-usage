@@ -6,7 +6,8 @@
  * 充值总额、周月用量、密钥元数据（限额重置周期、到期时间、是否管理密钥）收进「详情」弹窗。
  */
 import type { OpenRouterDetailResponse } from '../types'
-import { formatCurrency, truncateMoney } from '../format'
+import { currencySymbol, formatCurrency, truncateMoney } from '../format'
+import { metricGridClass } from '../utils'
 import { accountTitle, isFailedAccount } from '../types'
 
 import AccountSection from './AccountSection.vue'
@@ -18,6 +19,12 @@ defineProps<{
   error: string | null
   notConfigured?: boolean
 }>()
+
+/**
+ * OpenRouter 的读数一律 USD，卡面按统一规则只显示**符号**（#19）。
+ * 取符号走 `currencySymbol()`，不在这里写死 `'$'` —— 映射只维护一份。
+ */
+const UNIT = currencySymbol('USD')
 
 function limitResetLabel(reset: string | null): string {
   if (!reset) {
@@ -108,12 +115,12 @@ function expiryLabel(iso: string | null): string {
             :max-line="5"
           />
 
-          <div v-else class="grid-metrics grid-metrics--pair">
+          <div v-else :class="metricGridClass(account.limit !== null ? 3 : 2)">
             <t-statistic
               title="剩余额度"
               :value="truncateMoney(account.balance)"
               :decimal-places="2"
-              unit="USD"
+              :unit="UNIT"
               :color="
                 account.limitRemaining !== null && account.limitRemaining <= 1 ? 'red' : undefined
               "
@@ -123,13 +130,13 @@ function expiryLabel(iso: string | null): string {
               title="限额剩余"
               :value="truncateMoney(account.limitRemaining ?? 0)"
               :decimal-places="2"
-              unit="USD"
+              :unit="UNIT"
             />
             <t-statistic
               title="今日用量"
               :value="truncateMoney(account.usageDaily)"
               :decimal-places="2"
-              unit="USD"
+              :unit="UNIT"
             />
           </div>
         </div>

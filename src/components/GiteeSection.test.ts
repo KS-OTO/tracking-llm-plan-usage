@@ -72,7 +72,7 @@ describe('GiteeSection', () => {
     expect(detail).toContain('现金代金券余额')
     expect(detail).toContain('333.13')
     expect(detail).toContain('黑客松奖品券')
-    expect(detail).toContain('200.00 CNY')
+    expect(detail).toContain('200.00 ¥')
     expect(detail).toContain('已用尽')
   })
 

@@ -12,38 +12,56 @@
  *
  * 卡片只保留高优先级信息：窗口进度条 + 上游异常状态；账号身份与窗口明细收进「详情」弹窗。
  */
-import type { PlanAccountUsage, PlanGroup } from '../types'
+import type { PlanAccountUsage, PlanGroup, WindowQuota } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatNumber, progressPercentage } from '../format'
-import { formatDateTime, formatReset, progressStatus } from '../utils'
+import { formatNumber } from '../format'
+import {
+  formatDateTime,
+  formatReset,
+  PLAN_WINDOW_LABELS,
+  windowContainerClass,
+  windowStatusLabel,
+} from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
+import UsageBar from './ui/UsageBar.vue'
 
 defineProps<{
   /** 单个平台的账号分组（App.vue 按平台展开，一个平台一个网格单元）。 */
   group: PlanGroup
 }>()
 
-const WINDOW_LABELS: Record<string, string> = {
-  fiveHour: '5 小时窗口',
-  weekly: '每周窗口',
-  monthly: '30 天窗口',
+/**
+ * 平台专属窗口名：OpenCode Go 的 `monthly` 是 rolling 30 天，叫「每月窗口」会让人
+ * 以为按自然月重置；写「30 天窗口」才是它的真实语义。
+ */
+const PROVIDER_WINDOW_LABELS: Record<string, Record<string, string>> = {
+  'OpenCode Go': { monthly: '30 天窗口' },
 }
 
-/** 上游窗口状态的展示文案；未收录的状态原样回退显示，不隐藏信息。 */
-const WINDOW_STATUS_LABELS: Record<string, string> = {
-  'rate-limited': '上游限流中',
+function windowLabelOf(provider: string, window: string): string {
+  return PROVIDER_WINDOW_LABELS[provider]?.[window] ?? PLAN_WINDOW_LABELS[window] ?? window
 }
 
-function windowStatusLabel(status: string): string {
-  return WINDOW_STATUS_LABELS[status] ?? status
-}
-
-function windowStatusNote(status: string): string {
-  return status === 'rate-limited'
-    ? '该窗口已被上游限流，期间的请求可能被拒绝；百分比仍为已用额度'
-    : `上游返回的窗口状态：${status}`
+/**
+ * 平台原始窗口 → 统一模型（`WindowQuota`）。
+ *
+ * 这一步就是 `#20` 的适配器思路：原始返回形状只出现在适配函数里，
+ * 渲染层（`UsageBar`）只认模型。本平台这三种窗口都没有 used/total，
+ * 因此数值行会退化成「已用 N%」而不是「已用 X / Y」。
+ */
+function windowsOf(account: PlanAccountUsage, provider: string): WindowQuota[] {
+  return account.windows.map((window) => ({
+    key: window.window,
+    label: windowLabelOf(provider, window.window),
+    used: null,
+    total: null,
+    remaining: null,
+    percent: window.percent,
+    resetAt: window.resetTime > 0 ? window.resetTime : null,
+    status: window.status,
+  }))
 }
 
 /** 各平台用量端点（详情弹窗内的「数据来源」，排障时用得上）。 */
@@ -102,7 +120,7 @@ function windowRows(account: PlanAccountUsage) {
               size="small"
             >
               <template #window="{ row }">
-                {{ WINDOW_LABELS[row.window] ?? row.window }}
+                {{ windowLabelOf(group.provider, row.window) }}
               </template>
               <template #percent="{ row }">
                 <span class="num">{{ formatNumber(row.percent) }}%</span>
@@ -131,32 +149,16 @@ function windowRows(account: PlanAccountUsage) {
         />
 
         <template v-else>
-          <!-- .window-list 负责间距与「N 个窗口块各占 1/N 高度」（见 assets/layout.css）：
-               并排的两个账号即使其中一个多了「上游限流」说明行，窗口块也逐行同高同顶 -->
-          <div v-if="account.windows.length > 0" class="window-list">
-            <div v-for="window in account.windows" :key="window.window" class="window-block">
-              <t-space align="center" justify="space-between" class="window-head">
-                <t-space align="center" size="small">
-                  <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
-                  <t-tag v-if="window.status" size="small" theme="warning" variant="light-outline">
-                    {{ windowStatusLabel(window.status) }}
-                  </t-tag>
-                </t-space>
-                <span class="muted">{{ formatReset(window.resetTime) }}</span>
-              </t-space>
-              <t-progress
-                :percentage="progressPercentage(window.percent)"
-                :status="progressStatus(window.percent)"
-                :label="false"
-              />
-              <t-space align="center" justify="space-between" class="window-meta">
-                <span class="muted">已用 {{ formatNumber(window.percent) }}%</span>
-                <span class="num-strong">{{ formatNumber(window.percent) }}%</span>
-              </t-space>
-              <div v-if="window.status" class="muted window-foot">
-                {{ windowStatusNote(window.status) }}
-              </div>
-            </div>
+          <!-- 容器由**窗口个数**决定（#18）：1–2 个并排、≥3 个纵向等分逐行对齐 -->
+          <div
+            v-if="account.windows.length > 0"
+            :class="windowContainerClass(account.windows.length)"
+          >
+            <UsageBar
+              v-for="window in windowsOf(account, group.provider)"
+              :key="window.key"
+              :quota="window"
+            />
           </div>
           <t-empty v-else description="无额度数据" />
         </template>

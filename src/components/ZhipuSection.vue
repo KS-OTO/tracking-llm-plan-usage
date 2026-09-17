@@ -11,19 +11,19 @@
  * 那不该让余额和资源包一起消失。
  */
 import { computed } from 'vue'
-import type { ZhipuAccountBalance, ZhipuCodingPlanQuota, ZhipuPackagesResponse } from '../types'
+import type {
+  ZhipuAccountBalance,
+  ZhipuCodingPlanQuota,
+  ZhipuPackagesResponse,
+  WindowQuota,
+} from '../types'
 import { accountTitle, isFailedAccount, sliceData, sliceError } from '../types'
-import {
-  formatMoney,
-  formatNumber,
-  formatTokens,
-  progressPercentage,
-  truncateMoney,
-} from '../format'
-import { formatDateTime, formatReset, progressStatus } from '../utils'
+import { currencySymbol, formatCurrency, formatTokens, truncateMoney } from '../format'
+import { metricGridClass, windowContainerClass } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
+import UsageBar from './ui/UsageBar.vue'
 
 const props = defineProps<{
   data: ZhipuPackagesResponse | null
@@ -34,9 +34,25 @@ const props = defineProps<{
   variant?: 'plan' | 'balance'
 }>()
 
+/** 智谱余额一律 CNY，卡面按统一规则只显示**符号**（#19）。 */
+const UNIT = currencySymbol('CNY')
+
 const WINDOW_LABELS: Record<string, string> = {
   fiveHour: '5 小时窗口',
   weekly: '每周窗口',
+}
+
+/** Coding Plan 窗口 → 统一模型（`WindowQuota`）：三个子接口里唯一带完整计数的窗口。 */
+function codingWindows(codingPlan: ZhipuCodingPlanQuota | null): WindowQuota[] {
+  return (codingPlan?.windows ?? []).map((window) => ({
+    key: window.window,
+    label: WINDOW_LABELS[window.window] ?? window.window,
+    used: window.used,
+    total: window.total,
+    remaining: window.remaining,
+    percent: window.percentage,
+    resetAt: window.nextResetTime > 0 ? window.nextResetTime : null,
+  }))
 }
 
 function creditStatusLabel(status: string): string {
@@ -195,10 +211,10 @@ const cards = computed<ZhipuCard[]>(() => (props.data?.accounts ?? []).map(toCar
                     {{ creditStatusLabel(card.balance?.creditStatus ?? '') }}
                   </t-descriptions-item>
                   <t-descriptions-item label="累计充值">
-                    {{ formatMoney(card.balance?.rechargeAmount ?? 0, 'CNY') }}
+                    {{ formatCurrency(card.balance?.rechargeAmount ?? 0, 'CNY') }}
                   </t-descriptions-item>
                   <t-descriptions-item label="赠送金额">
-                    {{ formatMoney(card.balance?.giveAmount ?? 0, 'CNY') }}
+                    {{ formatCurrency(card.balance?.giveAmount ?? 0, 'CNY') }}
                   </t-descriptions-item>
                 </template>
               </t-descriptions>
@@ -244,34 +260,14 @@ const cards = computed<ZhipuCard[]>(() => (props.data?.accounts ?? []).map(toCar
 
           <template v-else>
             <div
-              v-if="variant !== 'balance' && card.codingPlan && card.codingPlan.windows.length > 0"
-              class="grid-metrics"
+              v-if="variant !== 'balance' && codingWindows(card.codingPlan).length > 0"
+              :class="windowContainerClass(codingWindows(card.codingPlan).length)"
             >
-              <div
-                v-for="window in card.codingPlan.windows"
-                :key="window.window"
-                class="window-block"
-              >
-                <t-space align="center" justify="space-between" class="window-head">
-                  <strong>{{ WINDOW_LABELS[window.window] ?? window.window }}</strong>
-                  <span class="muted">{{ formatReset(window.nextResetTime) }}</span>
-                </t-space>
-                <t-progress
-                  :percentage="progressPercentage(window.percentage)"
-                  :status="progressStatus(window.percentage)"
-                  :label="false"
-                />
-                <t-space align="center" justify="space-between" class="window-meta">
-                  <span class="num-strong"
-                    >{{ formatTokens(window.used) }} / {{ formatTokens(window.total) }}</span
-                  >
-                  <span class="num-strong">{{ formatNumber(window.percentage) }}%</span>
-                </t-space>
-                <div class="muted window-foot">
-                  剩余 {{ formatTokens(window.remaining) }} · 重置于
-                  {{ window.nextResetTime > 0 ? formatDateTime(window.nextResetTime) : '—' }}
-                </div>
-              </div>
+              <UsageBar
+                v-for="window in codingWindows(card.codingPlan)"
+                :key="window.key"
+                :quota="window"
+              />
             </div>
             <!-- 额度查不到时优先说明原因；上游对未订阅账号直接 500，别只说「未查询到」 -->
             <t-alert
@@ -286,18 +282,18 @@ const cards = computed<ZhipuCard[]>(() => (props.data?.accounts ?? []).map(toCar
               description="未查询到 Coding Plan 额度（可能未订阅）"
             />
 
-            <div v-if="variant !== 'plan' && card.balance" class="grid-metrics grid-metrics--pair">
+            <div v-if="variant !== 'plan' && card.balance" :class="metricGridClass(2)">
               <t-statistic
                 title="可用余额"
                 :value="truncateMoney(card.balance.availableBalance)"
                 :decimal-places="2"
-                unit="¥"
+                :unit="UNIT"
               />
               <t-statistic
                 title="账户余额"
                 :value="truncateMoney(card.balance.balance)"
                 :decimal-places="2"
-                unit="¥"
+                :unit="UNIT"
               />
             </div>
             <t-alert

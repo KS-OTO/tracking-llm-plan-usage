@@ -19,19 +19,15 @@ import type {
   NewApiResponse,
   NewApiSubscription,
   NewApiWallet,
+  WindowQuota,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import {
-  formatCount,
-  formatMoney,
-  formatNumber,
-  progressPercentage,
-  truncateMoney,
-} from '../format'
-import { formatDateTime } from '../utils'
+import { formatCount, formatMoney, progressPercentage, truncateMoney } from '../format'
+import { formatDateTime, metricGridClass, windowContainerClass } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
+import UsageBar from './ui/UsageBar.vue'
 
 const props = defineProps<{
   data: NewApiResponse | null
@@ -99,14 +95,6 @@ const singleSite = computed(() => {
   return ok.length === 1 ? ok[0] : null
 })
 
-/** 金额文本：单位后缀直接取站点口径（$ / ¥ / 自定义符号 / 点），未知时不带单位。 */
-function amount(value: number | null | undefined, currency: NewApiQuotaUnit | null): string {
-  if (value === null || value === undefined) {
-    return '无限'
-  }
-  return formatMoney(value, currency?.unit)
-}
-
 /**
  * 读数瓦片的单位串。
  *
@@ -135,18 +123,74 @@ function integer(value: number | null | undefined): string {
   return formatCount(value)
 }
 
+/**
+ * 弹窗内「按模型用量」表的列定义。
+ *
+ * 用 `cell` 指向**预计算好的文本字段**（`_quota` / `_usage`），因此整表不需要任何插槽：
+ * 表格槽位的 `row` 会遮蔽外层的 `row`（账号行），一旦在槽里写 `row.currency`
+ * 就会指到模型行上 —— 这类遮蔽错误编译期不报，只有渲染出来才发现。
+ */
+const modelColumns = [
+  { colKey: 'model', title: '模型', cell: 'model' },
+  { colKey: 'quota', title: '额度', align: 'right' as const, cell: '_quota' },
+  { colKey: 'usage', title: '请求 / Tokens', align: 'right' as const, cell: '_usage' },
+]
+
+/** 按模型用量行：额度与用量在这里格式化完，渲染层只读字符串。 */
+function modelRows(row: NewApiRow) {
+  return row.models.map((model) =>
+    Object.assign({}, model, {
+      _key: model.model,
+      _quota: formatMoney(model.quota, currencyUnit(row)),
+      _usage: `${integer(model.requests)} 次 · ${integer(model.tokens)} tokens`,
+    }),
+  )
+}
+
 function dateTime(value: number | null): string {
   return value ? formatDateTime(value) : '—'
 }
 
-/** 周期长度：订阅周期多为 7 / 30 天，站点可自定义。 */
-function cycleDays(row: NewApiRow): string {
-  const sub = row.subscription
-  if (!sub?.lastResetAt || !sub.nextResetAt) {
-    return '—'
+/**
+ * 周期长度提示（④ 脚注行）：订阅周期多为 7 / 30 天，站点可自定义。
+ *
+ * 取不到时返回**空串**而不是 `—`：没有这条信息就不进脚注行，
+ * 比在行尾挂一个破折号干净（`UsageBar` 的 `note` 为空时不渲染该段）。
+ */
+function cycleNote(sub: NewApiSubscription): string {
+  if (!sub.lastResetAt || !sub.nextResetAt) {
+    return ''
   }
   const days = (sub.nextResetAt - sub.lastResetAt) / 86_400_000
-  return days >= 1 ? `${formatCount(days)} 天` : `${formatCount(days * 24)} 小时`
+  return `周期 ${days >= 1 ? `${formatCount(days)} 天` : `${formatCount(days * 24)} 小时`}`
+}
+
+/**
+ * 订阅周期窗口 → 统一模型（`WindowQuota`）。这就是 #20 里各平台适配器的形态：
+ * 平台原始字段只在适配函数里出现，渲染层（`UsageBar`）只认模型。
+ *
+ * `countKind: 'money'` 必须显式声明：站点可把额度折算成金额，缺省的 `tokens`
+ * 会把 `12.00` 缩写成 `12`。币种未知（账单接口回落）时 `unit` 为 undefined，
+ * 此时只显示数值，不猜符号。
+ */
+function subscriptionWindow(sub: NewApiSubscription, unit: string | undefined): WindowQuota {
+  return {
+    key: 'subscription',
+    label: '本周期额度',
+    used: sub.used,
+    total: sub.total,
+    remaining: sub.remain,
+    percent: sub.percent,
+    resetAt: sub.nextResetAt ?? null,
+    unit,
+    countKind: 'money',
+  }
+}
+
+/** 钱包读数的个数：累计请求数可能缺失（账单接口回落），网格列数要跟着变（#19）。 */
+function walletMetricCount(row: NewApiRow): number {
+  const count = row.wallet?.requestCount
+  return count === null || count === undefined ? 2 : 3
 }
 
 function modeLabel(row: NewApiRow): string {
@@ -241,20 +285,15 @@ function modeLabel(row: NewApiRow): string {
             </div>
 
             <template v-if="row.models.length > 0">
-              <div class="section-title">
-                <span>窗口内按模型用量</span>
-                <span class="muted">Top {{ row.models.length }}</span>
-              </div>
-              <div class="window-list">
-                <div v-for="model in row.models" :key="model.model" class="window-block">
-                  <div class="group-head">
-                    <span class="text-secondary">{{ model.model }}</span>
-                    <span class="num-strong">{{ amount(model.quota, row.currency) }}</span>
-                  </div>
-                  <div class="muted window-foot">
-                    {{ integer(model.requests) }} 次请求 · {{ integer(model.tokens) }} tokens
-                  </div>
-                </div>
+              <t-divider align="left">窗口内按模型用量（Top {{ row.models.length }}）</t-divider>
+              <div class="detail-block">
+                <t-table
+                  :data="modelRows(row)"
+                  :columns="modelColumns"
+                  row-key="_key"
+                  max-height="300"
+                  size="small"
+                />
               </div>
             </template>
             <p v-else class="muted">窗口内无明细（账单接口不提供按模型用量）</p>
@@ -271,25 +310,16 @@ function modeLabel(row: NewApiRow): string {
 
         <template v-else>
           <!-- 订阅：周期额度窗口（每周期重置，不能与钱包余额混算） -->
-          <div v-if="row.subscription" class="window-list">
-            <div class="window-block">
-              <div class="group-head">
-                <span>本周期已用</span>
-                <span class="num-strong">{{ formatNumber(row.subscription.percent) }}%</span>
-              </div>
-              <t-progress :percentage="progressPercentage(row.subscription.percent)" />
-              <div class="muted window-meta">
-                已用 {{ amount(row.subscription.used, row.currency) }} /
-                {{ amount(row.subscription.total, row.currency) }}
-              </div>
-              <div class="muted window-foot">
-                周期 {{ cycleDays(row) }} · 下次重置 {{ dateTime(row.subscription.nextResetAt) }}
-              </div>
-            </div>
+          <div v-if="row.subscription" :class="windowContainerClass(1)">
+            <UsageBar
+              :quota="subscriptionWindow(row.subscription, currencyUnit(row))"
+              used-label="本周期已用"
+              :note="cycleNote(row.subscription)"
+            />
           </div>
 
           <!-- 钱包：只减不重置的余额 -->
-          <div v-if="row.wallet" class="grid-metrics grid-metrics--pair">
+          <div v-if="row.wallet" :class="metricGridClass(walletMetricCount(row))">
             <t-statistic
               title="钱包余额"
               :value="row.wallet.unlimited ? 0 : truncateMoney(row.wallet.remain ?? 0)"
