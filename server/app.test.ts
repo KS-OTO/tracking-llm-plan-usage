@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test'
+import { z } from 'zod'
 
 import {
+  createAppHandler,
   DEFAULT_REFRESH_INTERVAL_SECONDS,
   DEFAULT_SITE_NAME,
   readSiteConfig,
@@ -213,5 +215,41 @@ describe('runAccounts', () => {
       },
     ])
     expect(calls).toStrictEqual(['a', 'b'])
+  })
+})
+
+const StatusBody = z.object({ incomplete: z.array(z.string()) })
+
+/**
+ * 半配置检测（`/api/status` 的 `incomplete`）。
+ *
+ * 成对凭据遇到「只配了一半」时会**整对丢弃**，对应平台的卡片于是整个消失 ——
+ * 页面上既没有报错也没有空状态，用户能观察到的只有「少了一张卡」，无从自查。
+ * New API 曾经漏在这张表之外，本机就因为变量改过名（`NEWAPI_API_KEY` → `NEWAPI_TOKEN`）
+ * 而无声丢卡。这里把它钉住，让「缺哪个变量」由总览页的提示条说出来。
+ */
+describe('INCOMPLETE_VARS', () => {
+  async function incompleteOf(vars: Record<string, string>): Promise<string[]> {
+    const handler = createAppHandler(envOf(vars))
+    const res = await handler(new Request('https://app.example.com/api/status'))
+    if (!res) {
+      throw new Error('/api/status 必须返回响应（只有未匹配的路径才会是 null）')
+    }
+    return StatusBody.parse(JSON.parse(await res.text())).incomplete
+  }
+
+  it('New API 只配了站点地址、没配令牌时，点名缺的是 NEWAPI_TOKEN', async () => {
+    expect(await incompleteOf({ NEWAPI_BASE_URL: 'https://ai.example.com/' })).toStrictEqual([
+      'NEWAPI_TOKEN',
+    ])
+  })
+
+  it('成对配齐后不再报缺', async () => {
+    expect(
+      await incompleteOf({
+        NEWAPI_BASE_URL: 'https://ai.example.com/',
+        NEWAPI_TOKEN: 'system-access-token',
+      }),
+    ).toStrictEqual([])
   })
 })
