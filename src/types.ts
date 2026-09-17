@@ -66,6 +66,21 @@ export type AccountEnvelope<T> =
   | (T & { keyHint: string; label?: string })
   | { keyHint: string; label?: string; error: string }
 
+/**
+ * 从切片里取数据，失败时返回 null。
+ *
+ * 做成泛型函数而不是让调用点写 `'data' in slice`：TS 无法对**调用表达式**做收窄，
+ * 但函数内部收窄后返回的 `T | null` 是明确的，模板与 computed 里都能直接用。
+ */
+export function sliceData<T>(slice: { data: T } | { error: string }): T | null {
+  return 'data' in slice ? slice.data : null
+}
+
+/** 从切片里取错误，成功时返回 null（与 `sliceData` 成对使用）。 */
+export function sliceError(slice: { data: unknown } | { error: string }): string | null {
+  return 'error' in slice ? slice.error : null
+}
+
 /** 账号查询是否失败（失败账号不含数据字段）。 */
 export function isFailedAccount<T>(
   account: AccountEnvelope<T>,
@@ -200,10 +215,20 @@ export interface ZhipuTokenPackage {
   packageExpirationTime: string
 }
 
+/**
+ * 智谱子查询切片（判别联合）：成功带 `data`，失败只带 `error`。
+ *
+ * 三个子接口互相独立——Coding Plan 额度接口对未订阅的账号会直接 500，
+ * 这时余额与资源包依然查得到，不该跟着一起消失。
+ */
+export type ZhipuCodingPlanSlice = { data: ZhipuCodingPlanQuota } | { error: string }
+export type ZhipuBalanceSlice = { data: ZhipuAccountBalance } | { error: string }
+export type ZhipuPackagesSlice = { data: ZhipuTokenPackage[] } | { error: string }
+
 export interface ZhipuPackagesData {
-  codingPlan: ZhipuCodingPlanQuota
-  balance: ZhipuAccountBalance
-  packages: ZhipuTokenPackage[]
+  codingPlan: ZhipuCodingPlanSlice
+  balance: ZhipuBalanceSlice
+  packages: ZhipuPackagesSlice
 }
 
 export interface ZhipuPackagesResponse {

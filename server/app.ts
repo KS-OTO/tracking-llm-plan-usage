@@ -102,6 +102,12 @@ const ACCOUNT_ERROR_HINTS: Array<{ pattern: string; hint: string }> = [
   { pattern: 'ConsoleSessionExpired', hint: '百炼控制台会话已失效，需更新 Cookie' },
   { pattern: 'OpenCodeGo_HTTP_401', hint: 'OpenCode Go API Key 无效或已失效' },
   { pattern: 'OpenCodeGo_HTTP_403', hint: 'OpenCode Go 无权限（该 Key 可能未开通订阅）' },
+  {
+    pattern: 'Zhipu_500',
+    hint: '智谱上游内部错误（未订阅 GLM Coding Plan 的账号查额度也会这样报，可先到控制台确认订阅状态）',
+  },
+  { pattern: 'Zhipu_1000', hint: '智谱 API Key 无效或已失效' },
+  { pattern: 'Zhipu_1001', hint: '未携带鉴权头（智谱 API Key 可能是空值）' },
 ]
 
 function errorResponse(status: number, code: string, message: string): Response {
@@ -136,6 +142,29 @@ interface AccountEntry<T> {
  * 与账号级容错解耦——个人版查询失败不影响组织/座席视图渲染。
  */
 type PersonalSlice = { data: AliyunPersonalPlan } | { error: string }
+
+/**
+ * 子查询切片（判别联合）：成功带 data，失败只带 error。
+ *
+ * 用途与 `PersonalSlice` 相同——把「某个子查询挂了」和「这个账号整体查不了」分开。
+ * 智谱的 Coding Plan 额度接口对**未订阅**的账号会直接返回 `code:500 内部服务器错误`
+ * （上游没做空态），而同一个 Key 查余额、查资源包都是好的；不切片的话，一个子接口
+ * 的 500 会让整张卡片连余额一起消失，用户以为 Key 坏了。
+ */
+type SubQuerySlice<T> = { data: T } | { error: string }
+
+/** 把子查询的异常收敛成切片（返回的 promise 永不 reject）。 */
+function subQuerySliceOf<T>(promise: Promise<T>): Promise<SubQuerySlice<T>> {
+  return promise.then(
+    (data): SubQuerySlice<T> => ({ data }),
+    (cause: unknown): SubQuerySlice<T> => ({
+      error: accountErrorHint(
+        cause instanceof Error ? cause.message : String(cause),
+        cause instanceof Error && 'code' in cause ? String(cause.code) : undefined,
+      ),
+    }),
+  )
+}
 
 type AccountResult<T> =
   | (T & { keyHint: string; label?: string })
@@ -651,10 +680,11 @@ export function createAppHandler(env: EnvGetter) {
         keyHint: maskKey(apiKey),
         label: labelOf('zhipu', apiKey),
         run: async () => {
+          // 三个子查询各自容错：任何一路失败都只降级它自己对应的区块
           const [codingPlan, balance, packages] = await Promise.all([
-            getZhipuCodingPlanQuota(apiKey),
-            getZhipuAccountBalance(apiKey),
-            getZhipuTokenPackages(apiKey),
+            subQuerySliceOf(getZhipuCodingPlanQuota(apiKey)),
+            subQuerySliceOf(getZhipuAccountBalance(apiKey)),
+            subQuerySliceOf(getZhipuTokenPackages(apiKey)),
           ])
           return { codingPlan, balance, packages }
         },
