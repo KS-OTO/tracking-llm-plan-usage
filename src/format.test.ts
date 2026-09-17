@@ -14,6 +14,7 @@ import {
   formatNumber,
   formatTokens,
   hasValue,
+  metricValueText,
   progressPercentage,
   roundCount,
   roundNumber,
@@ -130,12 +131,36 @@ describe('roundNumber / roundCount（喂给只吃数值的展示组件）', () =
 describe('formatMetric', () => {
   it('按 kind 选精度', () => {
     expect(formatMetric({ kind: 'money', value: 12.345, unit: '¥' })).toBe('12.34 ¥')
-    expect(formatMetric({ kind: 'number', value: 34.0101024, unit: '%' })).toBe('34.0 %')
+    expect(formatMetric({ kind: 'percent', value: 34.0101024, unit: '%' })).toBe('34.0 %')
     expect(formatMetric({ kind: 'count', value: 1234.5, unit: '次' })).toBe('1,235 次')
+    expect(formatMetric({ kind: 'tokens', value: 1_250_000, unit: 'token' })).toBe('1.25M token')
+  })
+
+  it('文本类原样透传，不做数值解析', () => {
+    expect(formatMetric({ kind: 'text', value: 'active' })).toBe('active')
+    expect(formatMetric({ kind: 'duration', value: '30 天' })).toBe('30 天')
+    expect(formatMetric({ kind: 'text', value: '' })).toBe(EMPTY_VALUE)
   })
 
   it('缺值时单位也一起消失', () => {
     expect(formatMetric({ kind: 'money', value: null, unit: '¥' })).toBe(EMPTY_VALUE)
+  })
+})
+
+/**
+ * 单位是**独立元素**（#19）：卡面上数值与单位是两个节点，
+ * 所以取值文本的入口必须能单独拿到「不含单位」的那一段。
+ */
+describe('metricValueText', () => {
+  it('只给数值，不带单位', () => {
+    expect(metricValueText({ kind: 'money', value: 12.345 })).toBe('12.34')
+    expect(metricValueText({ kind: 'count', value: 1234.5 })).toBe('1,235')
+    expect(metricValueText({ kind: 'percent', value: 34.0101024 })).toBe('34.0')
+  })
+
+  it('数值缺位时给中性占位（此时单位也不该渲染）', () => {
+    expect(metricValueText({ kind: 'money', value: null })).toBe(EMPTY_VALUE)
+    expect(metricValueText({ kind: 'percent', value: Number.NaN })).toBe(EMPTY_VALUE)
   })
 })
 

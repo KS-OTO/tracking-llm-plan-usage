@@ -6,6 +6,7 @@
  */
 import type { BaiduQianfanResponse } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
+import { metricGridClass } from '../utils'
 import { formatCount, formatTokens } from '../format'
 
 import AccountSection from './AccountSection.vue'
@@ -152,7 +153,7 @@ function formatTime(iso: string): string {
             :max-line="5"
           />
 
-          <div v-else class="grid-metrics grid-metrics--pair">
+          <div v-else :class="metricGridClass(3)">
             <t-statistic
               title="量包（近 7 天用量）"
               :value="account.usage.totalTokens"

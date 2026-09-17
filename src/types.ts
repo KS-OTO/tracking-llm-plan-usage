@@ -133,6 +133,127 @@ export function accountTitle(account: { keyHint: string; label?: string }): stri
   return account.label || account.keyHint
 }
 
+// ---------------------------------------------------------------------------
+// 统一展示模型（`AccountDetail`）—— 规格见 docs/design-baseline.md 第 6 节
+//
+// 各平台的原始返回形状（本文件下半部分那些 `XxxResponse`）**只允许出现在
+// `toAccountDetail()` 适配器里**；组件一律只认下面这套模型。
+//
+// 这么做是因为弹窗的不一致只是**模型的投影**：10 个平台各有一套结构，弹窗就有 10 种摆法，
+// 模型不统一，弹窗怎么调都会再漂。
+// ---------------------------------------------------------------------------
+
+/** 一个字段（① 身份区 / ③ 扩展区的通用单元）。 */
+export interface Field {
+  label: string
+  value: string
+  /** 次要说明，弱化色渲染。 */
+  hint?: string
+  /** 需要独占一行时置 2。 */
+  span?: 1 | 2
+}
+
+/**
+ * 读数的语义类别 —— 决定精度，不由调用点决定（见基线第 5 节）。
+ *
+ * - `money` 2 位截断（货币）· `count` 0 位+千分位（次数/总量）· `percent` 1 位（比率）
+ * - `tokens` 量级缩写（12.5K / 1.20M）
+ * - `text` / `duration` 原样文本（枚举、日期、倒计时文案）
+ */
+export type MetricKind = 'money' | 'tokens' | 'count' | 'percent' | 'text' | 'duration'
+
+/** 一个读数（卡片读数带与弹窗 ② 读数区**共用同一份**）。 */
+export interface Metric {
+  key: string
+  label: string
+  /**
+   * 读数原值。**允许 `null`**：上游把「没有这个值」表达成 null（如 New API 的
+   * `limitRemaining`），适配器如实搬运即可，由 `formatMetric` / `metricValueText`
+   * 统一渲染成中性占位 `—`。不要在这里提前写 `0` —— 「没有值」与「值为零」
+   * 在余额类读数上是完全不同的事，伪造 0 会让用户以为额度耗尽了。
+   */
+  value: number | string | null
+  /** 货币用符号（¥ / $）、计数用量纲（次 / 万 token）、未知为 undefined。 */
+  unit?: string
+  kind: MetricKind
+}
+
+/** 时间窗口额度（W 语义）：有周期、会重置。 */
+export interface WindowQuota {
+  key: string
+  /** 「5 小时窗口」/「每周窗口」。 */
+  label: string
+  used: number | null
+  total: number | null
+  remaining: number | null
+  /**
+   * 已用百分比（0–100，**原始值**，可能带小数、也可能越界）。
+   *
+   * 不要在这里提前 `progressPercentage`：进度条要的是取整封顶值（由 `UsageBar` 负责），
+   * 而数值行的百分比是 1 位小数（#19 的 N 类精度）—— 提前取整会把 `62.4%` 变成 `62%`。
+   * 两者取自同一个原始值，只是各自的渲染规则不同。
+   */
+  percent: number
+  /** 重置时刻（毫秒）；null 表示该窗口不适用或不提供。 */
+  resetAt: number | null
+  unit?: string
+  /**
+   * 计数读数（used / total / remaining）的语义，决定精度（见基线第 5 节）。
+   *
+   * 缺省按 `tokens` 处理：窗口额度绝大多数是 token 或调用次数，用量级缩写（64.0K）
+   * 才放得进数值行。按金额计的窗口（New API 订阅周期）必须显式声明 `money`，
+   * 否则 12.00 会被缩写成 12，丢掉两位小数。
+   */
+  countKind?: 'money' | 'tokens' | 'count'
+  /** 上游窗口状态（如 OpenCode Go 的 `rate-limited`）；缺省表示正常或不适用。 */
+  status?: string
+}
+
+/** 明细表（③ 区，空则渲染空态）。 */
+export interface DataTable {
+  title: string
+  columns: Array<{ key: string; label: string; align?: 'left' | 'right' }>
+  rows: Array<Record<string, string | number>>
+}
+
+/** 平台注入的告警：弹窗内一律沉到 ④ 附加区（不散落在各分节旁）。 */
+export interface Notice {
+  level: 'info' | 'warn' | 'error'
+  text: string
+}
+
+/** 外链（④ 附加区）。 */
+export interface LinkField {
+  label: string
+  url: string
+}
+
+/**
+ * 所有平台同构的账号详情。
+ *
+ * 骨架 **① 身份 → ② 读数 → ③ 明细 → ④ 附加** 对每个平台**恒定**；
+ * 平台差异只通过 `meta` 与 `tables` 追加，**不改结构**。
+ * 新平台接入 = 写一个 `toAccountDetail()` 适配器 + 零组件改动。
+ */
+export interface AccountDetail {
+  /** ① 身份：别名 / Key / 站点（标签全站统一，见基线第 6 节的词汇表）。 */
+  identity: Field[]
+  /** ② 读数：与卡片同源，同一份 `Metric[]` 两处共用。 */
+  metrics: Metric[]
+  /** W 语义；无则空数组（**区级有无**，不是字段级）。 */
+  windows: WindowQuota[]
+  /** B 语义；无则空数组。 */
+  balances: Metric[]
+  /** ③ 明细 + 平台扩展表。 */
+  tables: DataTable[]
+  /** ③ 平台特有字段 —— 唯一允许自由发挥的区。 */
+  meta: Field[]
+  /** ④ 外链。 */
+  links: LinkField[]
+  /** ④ 告警（统一沉底）。 */
+  notices: Notice[]
+}
+
 export interface BalanceEntry {
   currency: string
   total: number

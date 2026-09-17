@@ -7,6 +7,7 @@
 import type { AliyunPackagesResponse } from '../types'
 import { roundCount } from '../format'
 import { accountTitle, isFailedAccount } from '../types'
+import { metricGridClass } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -130,7 +131,7 @@ function availableCount(account: NonNullable<AliyunPackagesResponse['accounts']>
             :message="account.error"
             :max-line="5"
           />
-          <div v-else class="grid-metrics grid-metrics--pair">
+          <div v-else :class="metricGridClass(2)">
             <t-statistic
               title="资源包实例"
               :value="roundCount(account.totalCount ?? 0)"

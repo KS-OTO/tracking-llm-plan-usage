@@ -8,17 +8,21 @@
  */
 import type {
   TokenPlanPersonalPlan,
+  TokenPlanPersonalSlice,
+  TokenPlanPersonalWindow,
   TokenPlanResetCard,
   TokenPlanResponse,
   TokenPlanSeat,
   TokenPlanSharedPackage,
+  WindowQuota,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatNumber, formatTokens, progressPercentage } from '../format'
-import { formatDateTime, formatReset, progressStatus } from '../utils'
+import { formatTokens } from '../format'
+import { formatDateTime, windowContainerClass } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
+import UsageBar from './ui/UsageBar.vue'
 
 defineProps<{
   data: TokenPlanResponse | null
@@ -27,19 +31,39 @@ defineProps<{
   notConfigured?: boolean
 }>()
 
-/** 个人版用量窗口：5 小时窗口官方取消后不渲染，7 天窗口恒展示。 */
-function personalWindows(personal: TokenPlanPersonalPlan): Array<{
-  key: string
-  label: string
-  percent: number
-  resetTime: number
-}> {
-  const windows: Array<{ key: string; label: string; percent: number; resetTime: number }> = []
-  if (personal.fiveHour) {
-    windows.push({ key: 'fiveHour', label: '5 小时窗口', ...personal.fiveHour })
+/** 个人版用量窗口 → 统一模型（`WindowQuota`）：上游只给百分比，没有「已用 / 总量」计数。 */
+function windowOf(key: string, label: string, window: TokenPlanPersonalWindow): WindowQuota {
+  return {
+    key,
+    label,
+    // 没有计数时数值行退化成「已用 N%」，进度条长度仍由 percent 决定
+    used: null,
+    total: null,
+    remaining: null,
+    percent: window.percent,
+    resetAt: window.resetTime > 0 ? window.resetTime : null,
   }
-  windows.push({ key: 'weekly', label: '7 天窗口', ...personal.weekly })
+}
+
+/** 个人版用量窗口：5 小时窗口官方取消后不渲染，7 天窗口恒展示。 */
+function personalWindows(personal: TokenPlanPersonalPlan): WindowQuota[] {
+  const windows: WindowQuota[] = []
+  if (personal.fiveHour) {
+    windows.push(windowOf('fiveHour', '5 小时窗口', personal.fiveHour))
+  }
+  windows.push(windowOf('weekly', '7 天窗口', personal.weekly))
   return windows
+}
+
+/**
+ * 卡片上的个人版窗口区。
+ *
+ * 参数取整个账号数据（而不是 `account.personal.data`）：切片收窄交给函数内部做，
+ * 模板里就不必先 `'data' in account.personal` 再取属性 —— vue-tsc 对**调用表达式**
+ * 不做收窄，模板里那套写法一旦挪进表达式就会变成 TS2339。
+ */
+function personalWindowsOf(account: { personal: TokenPlanPersonalSlice }): WindowQuota[] {
+  return 'data' in account.personal ? personalWindows(account.personal.data) : []
 }
 
 function cycleLabel(start: number, end: number): string {
@@ -305,26 +329,16 @@ function packageRows(packages: TokenPlanSharedPackage[] | null) {
             <div class="account-head">
               <strong>个人版套餐用量</strong>
             </div>
-            <div v-if="'data' in account.personal" class="grid-metrics">
-              <div
-                v-for="item in personalWindows(account.personal.data)"
-                :key="item.key"
-                class="window-block"
-              >
-                <t-space align="center" justify="space-between" class="window-head">
-                  <strong>{{ item.label }}</strong>
-                  <span class="muted">{{ formatReset(item.resetTime) }}</span>
-                </t-space>
-                <t-progress
-                  :percentage="progressPercentage(item.percent)"
-                  :status="progressStatus(item.percent)"
-                  :label="false"
-                />
-                <t-space align="center" justify="space-between" class="window-meta">
-                  <span class="muted">已用 {{ formatNumber(item.percent) }}%</span>
-                  <span class="num">{{ formatNumber(item.percent) }}%</span>
-                </t-space>
-              </div>
+            <!-- 容器由**窗口个数**决定（#18）：1–2 个并排、≥3 个纵向等分 -->
+            <div
+              v-if="personalWindowsOf(account).length > 0"
+              :class="windowContainerClass(personalWindowsOf(account).length)"
+            >
+              <UsageBar
+                v-for="window in personalWindowsOf(account)"
+                :key="window.key"
+                :quota="window"
+              />
             </div>
           </template>
         </div>
