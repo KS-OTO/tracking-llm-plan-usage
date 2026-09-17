@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vite-plus/test'
+import { describe, expect, it, vi } from 'vite-plus/test'
 import { z } from 'zod'
 
 import {
@@ -252,6 +252,93 @@ describe('INCOMPLETE_VARS', () => {
         NEWAPI_TOKEN: 'system-access-token',
       }),
     ).toStrictEqual([])
+  })
+})
+
+/**
+ * 智谱子查询的独立容错（`/api/zhipu/packages`）。
+ *
+ * 上游的 Coding Plan 额度接口对**未订阅**的账号直接返回 `{"success":false,"code":500,
+ * "msg":"内部服务器错误"}`，而同一个 Key 查余额、查资源包都是好的。三个子查询若共用一个
+ * `Promise.all`，额度这一路失败就会把余额和资源包一起丢掉，卡片只剩一句不知所云的
+ * "Internal service error"。这里钉住：额度失败只降级额度，其余照常返回。
+ */
+/**
+ * 账号体的最小契约。
+ *
+ * 切片是判别联合（`{data} | {error}`），而 zod 的 `z.unknown()` / `z.custom()` 会把键判成
+ * 可选、union 于是塌成 `{}`，TS 侧拿不到字段。改用 record：既保留「对象」这个运行时校验，
+ * 又能让索引签名把字段放出来。
+ */
+const ZhipuBody = z.object({ accounts: z.array(z.record(z.string(), z.unknown())) })
+
+/** 三个智谱子接口各自返回预设响应，按 URL 区分（额度 500，余额与资源包正常）。 */
+function stubZhipuFetch(): void {
+  vi.stubGlobal('fetch', (input: unknown) => {
+    const url = String(input)
+    const payload = url.includes('/api/monitor/usage/quota/limit')
+      ? { success: false, code: 500, msg: '内部服务器错误' }
+      : url.includes('tokenAccounts/list/my')
+        ? { code: 200, msg: '操作成功', total: 0, rows: [] }
+        : {
+            code: 200,
+            msg: '操作成功',
+            data: {
+              balance: 56.7,
+              availableBalance: 56.7,
+              rechargeAmount: 0,
+              giveAmount: 56.7,
+              creditStatus: 'NOT_OPEN',
+            },
+          }
+    return Promise.resolve(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+  })
+}
+
+describe('handleZhipu 子查询容错', () => {
+  async function zhipuAccountsOf(vars: Record<string, string>): Promise<Record<string, unknown>[]> {
+    const handler = createAppHandler(envOf(vars))
+    const res = await handler(new Request('https://app.example.com/api/zhipu/packages'))
+    if (!res) {
+      throw new Error('/api/zhipu/packages 必须返回响应')
+    }
+    return ZhipuBody.parse(await res.json()).accounts
+  }
+
+  it('额度接口 500 时，余额与资源包仍然返回（不再整卡失败）', async () => {
+    stubZhipuFetch()
+    try {
+      const accounts = await zhipuAccountsOf({ ZHIPU_API_KEY: 'test.zhipu-key' })
+      expect(accounts).toHaveLength(1)
+      const account = accounts[0]
+      expect(account?.codingPlan).toHaveProperty('error')
+      expect(account?.balance).toHaveProperty('data')
+      expect(account?.packages).toHaveProperty('data')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('额度失败的原因要给出可自查的中文提示，而不是上游英文原文', async () => {
+    stubZhipuFetch()
+    try {
+      const accounts = await zhipuAccountsOf({ ZHIPU_API_KEY: 'test.zhipu-key' })
+      const codingPlan = accounts[0]?.codingPlan
+      if (!codingPlan || typeof codingPlan !== 'object' || !('error' in codingPlan)) {
+        throw new Error('额度查询应当以 error 切片的形式返回')
+      }
+      const reason = String(codingPlan.error)
+      // 带上「未订阅」这条自查线索，否则用户只能看到一句「内部服务器错误」
+      expect(reason).toContain('Coding Plan')
+      expect(reason).toContain('未订阅')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

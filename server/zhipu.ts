@@ -98,6 +98,7 @@ export interface ZhipuCodingPlanQuota {
 
 const ZhipuQuotaBody = z.object({
   success: z.boolean().optional().catch(undefined),
+  code: z.coerce.number().optional().catch(undefined),
   msg: z.string().catch(''),
   data: z
     .object({
@@ -128,7 +129,8 @@ export async function getZhipuCodingPlanQuota(apiKey: string): Promise<ZhipuCodi
     {
       authorization: apiKey,
       'content-type': 'application/json',
-      'accept-language': 'en-US,en',
+      // 上游按 accept-language 本地化 msg；要中文（英文 "Internal service error" 对用户无意义）
+      'accept-language': 'zh-CN,zh',
     },
     apiKey,
     'Coding Plan 额度查询',
@@ -136,7 +138,13 @@ export async function getZhipuCodingPlanQuota(apiKey: string): Promise<ZhipuCodi
   const body = parseZhipuBody(ZhipuQuotaBody, json)
 
   if (body.success === false) {
-    throw new ZhipuApiError('Zhipu_BUSINESS', `Coding Plan 额度查询失败: ${body.msg}`)
+    // 业务码必须透传：500=上游内部错误（未订阅 Coding Plan 的账号也会走到这里），
+    // 1000=Key 无效，1001=没带鉴权头。写成统一的 Zhipu_BUSINESS 就只剩一句没用的
+    // "内部服务器错误"，用户无从判断是该换 Key 还是根本没订阅。
+    throw new ZhipuApiError(
+      `Zhipu_${body.code ?? 'BUSINESS'}`,
+      `Coding Plan 额度查询失败: ${body.msg}`,
+    )
   }
 
   const windows: ZhipuQuotaWindow[] = []
@@ -202,7 +210,7 @@ export async function getZhipuAccountBalance(apiKey: string): Promise<ZhipuAccou
   const body = parseZhipuBody(ZhipuBalanceBody, json)
 
   if (body.code !== 200) {
-    throw new ZhipuApiError('Zhipu_BUSINESS', `账户余额查询失败: ${body.msg}`)
+    throw new ZhipuApiError(`Zhipu_${body.code}`, `账户余额查询失败: ${body.msg}`)
   }
 
   return {
@@ -263,7 +271,7 @@ export async function getZhipuTokenPackages(apiKey: string): Promise<ZhipuTokenP
   const body = parseZhipuBody(ZhipuPackagesBody, json)
 
   if (body.code !== 200) {
-    throw new ZhipuApiError('Zhipu_BUSINESS', `资源包查询失败: ${body.msg}`)
+    throw new ZhipuApiError(`Zhipu_${body.code}`, `资源包查询失败: ${body.msg}`)
   }
 
   return body.rows.filter((row): row is ZhipuTokenPackage => row !== null && row !== undefined)
