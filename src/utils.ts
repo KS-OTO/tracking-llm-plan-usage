@@ -190,6 +190,24 @@ export function shouldSpanFullRow(accountCount: number): boolean {
 }
 
 /**
+ * 卡内 Key（账号）数是否多到该**停止加列**、改「一行一个 Key」的紧凑行式（#18）。
+ *
+ * 为什么要有这条：`.grid-cards--wide` 的轨道下限是 360px，独占整行后一行最多排 3 列，
+ * 5 个 Key 就变成「3 + 2」的残行；而格子越窄，卡内读数越容易撞上 `.grid-metrics`
+ * 的容器查询（160px 降一号字），于是同一个平台在 4 个 Key 与 5 个 Key 下字号不同。
+ * 到 5 个 Key 时加列的边际收益已经很小（每格只剩约 450px，放不下两个读数并排），
+ * 改成一行一个后每个 Key 都用满整行宽度，读数回到正常字号。
+ *
+ * 与 `shouldSpanFullRow` 同源：都由 App.vue 按「这一节有几个 Key」决定，
+ * 10 个 Section 自己不判断 —— 各写一遍必然漂。
+ */
+export const COMPACT_ACCOUNTS_THRESHOLD = 5
+
+export function isCompactAccounts(accountCount: number): boolean {
+  return accountCount >= COMPACT_ACCOUNTS_THRESHOLD
+}
+
+/**
  * 平台名首字母（中文取拼音首字母，拉丁取首字母）。
  *
  * 为什么不用 `localeCompare(name, 'zh')` 直接比整个名字：ICU 的 zh 排序规则把
