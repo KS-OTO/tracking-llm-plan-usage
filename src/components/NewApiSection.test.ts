@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { mountWithTDesign } from '../test-utils/mount'
+import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
 import NewApiSection from './NewApiSection.vue'
 import type { AccountEnvelope, NewApiAccountData, NewApiResponse } from '../types'
@@ -63,7 +63,9 @@ describe('NewApiSection', () => {
     // 统一用量条（#18）：标题行给窗口名与重置倒计时，数值行给「已用 X / Y」+ 百分比，
     // 脚注行给重置时刻与周期长度。货币是符号前置的。
     expect(text).toContain('本周期额度')
-    expect(text).toContain('本周期已用 $48.22 / $1,500.00')
+    // 数值行的左标签是统一用量条的缺省「已用」：周期语义由标题行（本周期额度）承担，
+    // 标签里不再重复「本周期」
+    expect(text).toContain('已用 $48.22 / $1,500.00')
     expect(text).toContain('3.2%')
     expect(text).toContain('重置于')
     expect(text).toContain('周期 7 天')
@@ -137,6 +139,36 @@ describe('NewApiSection', () => {
     })
     expect(wrapper.find('a.models-link').exists()).toBe(false)
     expect(wrapper.findAll('a').some((a) => a.text().includes('控制台'))).toBe(false)
+  })
+
+  it('把站点身份、额度口径与按模型用量收进详情弹窗', async () => {
+    const wrapper = mountWithTDesign(NewApiSection, {
+      props: {
+        data: response([{ ...account, keyHint: 'eJ****OLM=', label: '主力站' }]),
+        loading: false,
+        error: null,
+      },
+    })
+    // 卡面已经承担「还够不够用」，站点身份与口径属于核对数据时才看的信息
+    expect(wrapper.text()).not.toContain('许凌志')
+    expect(wrapper.text()).not.toContain('gpt-6-astra')
+
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('主力站')
+    expect(detail).toContain('站点')
+    expect(detail).toContain('ai.example.com')
+    expect(detail).toContain('用户名')
+    expect(detail).toContain('许凌志')
+    expect(detail).toContain('计费模式')
+    expect(detail).toContain('订阅 + 钱包（subscription_first）')
+    // 卡面用符号、币种代码只留在这里（#19 的单位规范）
+    expect(detail).toContain('美元（$）')
+    expect(detail).toContain('窗口内按模型用量（1）')
+    expect(detail).toContain('gpt-6-astra')
+    expect(detail).toContain('3,473 次')
+    // 外链在弹窗里保留一份：卡片级只在单站点时给
+    expect(detail).toContain('控制台')
+    expect(detail).toContain('可用模型')
   })
 
   it('shows neutral empty state when notConfigured', () => {

@@ -34,8 +34,6 @@ const props = defineProps<{
   quota: WindowQuota
   /** 数值行左标签，默认「已用」。 */
   usedLabel?: string
-  /** 追加到 ④ 脚注行的平台专属说明（如 New API 的「周期 30 天」）。 */
-  note?: string
 }>()
 
 /**
@@ -108,7 +106,7 @@ const resetText = computed(() => formatReset(props.quota.resetAt ?? -1))
  * 一个回答「具体什么时候」，后者是排障与对账时真正要抄下来的值。
  */
 const footText = computed(() => {
-  const { remaining, resetAt, status } = props.quota
+  const { remaining, resetAt, status, note } = props.quota
   const parts: string[] = []
   if (remaining !== null) {
     parts.push(`剩余 ${amountText(remaining)}`)
@@ -119,8 +117,9 @@ const footText = computed(() => {
   if (status) {
     parts.push(windowStatusNote(status))
   }
-  if (props.note) {
-    parts.push(props.note)
+  if (note) {
+    // 平台专属说明随窗口从模型里来（`WindowQuota.note`），不由调用方另外传 prop
+    parts.push(note)
   }
   return parts.join(' · ')
 })

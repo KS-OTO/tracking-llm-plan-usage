@@ -176,6 +176,17 @@ export interface Metric {
   /** 货币用符号（¥ / $）、计数用量纲（次 / 万 token）、未知为 undefined。 */
   unit?: string
   kind: MetricKind
+  /**
+   * 是否出现在卡片读数带上（默认 true）。
+   *
+   * 置 false 的场合只有一种：**同一个账号下属于另一个 Tab 的读数**。
+   * 智谱一个账号同时有 Coding Plan 窗口（套餐订阅 Tab）与账户余额（余额账户 Tab），
+   * 两个 Tab 的卡片各展示一半 —— 由适配器按「这张卡属于哪个 Tab」置位，
+   * 而不是让组件自己挑字段（组件挑字段就是回到「10 种摆法」的老路）。
+   */
+  cardFace?: boolean
+  /** 危险读数（余额接近耗尽）标红，卡面与弹窗一致。 */
+  tone?: 'danger'
 }
 
 /** 时间窗口额度（W 语义）：有周期、会重置。 */
@@ -207,25 +218,98 @@ export interface WindowQuota {
   countKind?: 'money' | 'tokens' | 'count'
   /** 上游窗口状态（如 OpenCode Go 的 `rate-limited`）；缺省表示正常或不适用。 */
   status?: string
+  /**
+   * 是否出现在卡片读数带上（默认 true）。与 `Metric.cardFace` 同一约定，
+   * 但这里更常用：火山 Coding Plan 与 Agent Plan 共用一对 AK/SK、归属不同订阅，
+   * CodePlan 的窗口只在弹窗里展示 —— 否则卡面上会出现两个「5 小时窗口」。
+   */
+  cardFace?: boolean
+  /**
+   * 平台专属补充说明，追加到脚注行末尾（如 New API 的「周期 30 天」）。
+   *
+   * 为什么不放在组件里传：窗口是模型的一部分，脚注行的内容就该随窗口一起来 ——
+   * 否则每加一个平台，调用方又要多记一个 prop。
+   */
+  note?: string
 }
 
 /** 明细表（③ 区，空则渲染空态）。 */
 export interface DataTable {
   title: string
-  columns: Array<{ key: string; label: string; align?: 'left' | 'right' }>
+  columns: Array<{
+    key: string
+    label: string
+    align?: 'left' | 'right'
+    /**
+     * 列的渲染方式：`status` 用状态标签（配色走 `utils.statusTheme` 的共享词表），
+     * 缺省为纯文本。**不给「平台自定义渲染」的口子** —— 一旦允许，10 个平台又会各有一种表格。
+     */
+    kind?: 'text' | 'status'
+  }>
+  /** 行必须是**已格式化**的字符串/数字；`_key` 用于表格行键（适配器负责补齐）。 */
   rows: Array<Record<string, string | number>>
+  /**
+   * 空态文案；缺省按标题生成「没有<标题>」。
+   *
+   * 给自定义留口子的理由：有些空态要**告诉用户下一步做什么**
+   * （「无量包（可在千帆控制台购买 Token 量包）」），模板生成不出来。
+   */
+  emptyText?: string
+  /**
+   * 该表的汇总读数（可选）：渲染在标题与表格之间。
+   *
+   * 存在的理由：有些读数**只对某张表成立**（火山推理用量的「总 Token / 输入 / 输出 / 请求数」、
+   * Gitee 代金券的「现金 / 算力余额」），塞进账号级 `metrics` 会让卡面凭空多出几个数字，
+   * 塞进 `meta` 又丢掉读数该有的大字排版。挂在表上，语义与位置都对。
+   */
+  summary?: Metric[]
 }
 
 /** 平台注入的告警：弹窗内一律沉到 ④ 附加区（不散落在各分节旁）。 */
 export interface Notice {
   level: 'info' | 'warn' | 'error'
   text: string
+  /**
+   * 是否同时显示在卡片上（默认 false —— 只进弹窗 ④）。
+   *
+   * 默认不上的理由：弹窗里再放一遍会让人以为数据是坏的，而卡面上已有
+   * `card.error`（账号级失败）与 `badge`（异常态）承担「第一眼发现问题」。
+   * 需要额外说明的（如 New API 的「站点未给额度口径，读数不带货币符号」）
+   * 由适配器显式置 true。
+   */
+  cardFace?: boolean
 }
 
 /** 外链（④ 附加区）。 */
 export interface LinkField {
   label: string
   url: string
+  /**
+   * 用途标记。`console` 是主控制台入口（卡片操作区要用它）、`models` 是可用模型页
+   * （区块卡标题旁的「可用模型」外链用它）；缺省为普通外链。
+   *
+   * 用标记而不是按出现顺序取：顺序一旦被新链接插队，卡片操作区就会指到别处，
+   * 而按标签字符串匹配同样脆弱（改文案就断了）。
+   */
+  role?: 'console' | 'models'
+}
+
+/**
+ * 卡头标签（最多一个）。
+ *
+ * 与 `layout.css` 的 `.account-head` 约定一致，只允许两种语义：
+ * **跨平台同义的分类**（New API 的「订阅 / 钱包」—— 它解释了这张卡为什么归当前 Tab）
+ * 或**异常态警示**（「不可用」）。正常态不挂牌。
+ */
+export interface AccountBadge {
+  label: string
+  theme: 'primary' | 'warning' | 'default'
+}
+
+/** 适配器收到的账号身份（`keyHint` 恒有，`label` 是可选别名）。 */
+export interface AccountIdentity {
+  keyHint: string
+  label?: string
 }
 
 /**
@@ -234,9 +318,24 @@ export interface LinkField {
  * 骨架 **① 身份 → ② 读数 → ③ 明细 → ④ 附加** 对每个平台**恒定**；
  * 平台差异只通过 `meta` 与 `tables` 追加，**不改结构**。
  * 新平台接入 = 写一个 `toAccountDetail()` 适配器 + 零组件改动。
+ *
+ * 分区职责（适配器按这张表落位，不要越界）：
+ *
+ * | 数组              | 卡面 | 弹窗 | 放什么                                       |
+ * | ----------------- | ---- | ---- | -------------------------------------------- |
+ * | `identity`        | 否   | ①    | 别名 / Key / 站点（标签全站统一）             |
+ * | `windows`         | 是   | ②    | **W** 时间窗口额度（有周期、会重置）          |
+ * | `balances`        | 是   | ②    | **B** 余额类读数（带币种、只减不重置）        |
+ * | `metrics`         | 是   | ②    | 其余主读数（汇总 / 计数 / 用量）              |
+ * | `meta`            | 否   | ③    | 平台特有字段 —— 唯一允许自由发挥的区          |
+ * | `tables`          | 否   | ③    | **P** 预购资源包 + 平台扩展明细表             |
+ * | `notices` / `links` | 否 | ④    | 告警与外链，统一沉底                          |
+ *
+ * 卡面 = `windows` + `balances` + `metrics` 里 `cardFace !== false` 的那些 —— 于是
+ * 「卡型的差异」退化成「适配器往哪个数组放了什么」，组件侧完全不用分支。
  */
 export interface AccountDetail {
-  /** ① 身份：别名 / Key / 站点（标签全站统一，见基线第 6 节的词汇表）。 */
+  /** ① 身份：别名 / Key / 站点（标签全站统一）。 */
   identity: Field[]
   /** ② 读数：与卡片同源，同一份 `Metric[]` 两处共用。 */
   metrics: Metric[]
@@ -252,6 +351,52 @@ export interface AccountDetail {
   links: LinkField[]
   /** ④ 告警（统一沉底）。 */
   notices: Notice[]
+  /** 卡头标签（可选，最多一个）。 */
+  badge?: AccountBadge
+}
+
+/**
+ * 页面渲染用的账号卡视图：**字段恒存在**，失败时 `detail` 为 null。
+ *
+ * 组件只认 `AccountCard`：`error` 判断渲染告警、`detail` 渲染卡面与弹窗。
+ * 这样「失败账号」与「成功账号」在模板里是同一条路径，不需要每次收窄判别联合
+ * （vue-tsc 对调用表达式不做收窄，见 `docs/design-baseline.md` 第 1 节）。
+ */
+export interface AccountCard {
+  keyHint: string
+  label?: string
+  error: string | null
+  detail: AccountDetail | null
+}
+
+/**
+ * 适配器签名：平台原始账号数据 → 同构的 `AccountDetail`。
+ *
+ * 需要额外上下文（平台名、卡片变体）的适配器由调用方**闭包捕获**，不设计第二参数 ——
+ * `toPlansDetail(account, provider)` 这类签名会迫使每个调用点都要凑一个泛型参数，
+ * 而 `const adapt = (a) => toPlansDetail(a, provider)` 只多一行且类型天然收窄。
+ */
+export type AccountDetailAdapter<T> = (account: T & AccountIdentity) => AccountDetail
+
+/** 单个账号 → 卡片视图（失败账号只带错误，不调适配器）。 */
+export function toAccountCard<T>(
+  account: AccountEnvelope<T>,
+  adapt: AccountDetailAdapter<T>,
+): AccountCard {
+  if (isFailedAccount(account)) {
+    return {
+      keyHint: account.keyHint,
+      ...(account.label ? { label: account.label } : {}),
+      error: account.error,
+      detail: null,
+    }
+  }
+  return {
+    keyHint: account.keyHint,
+    ...(account.label ? { label: account.label } : {}),
+    error: null,
+    detail: adapt(account),
+  }
 }
 
 export interface BalanceEntry {

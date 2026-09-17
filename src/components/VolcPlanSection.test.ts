@@ -120,7 +120,9 @@ describe('VolcPlanSection', () => {
   it('moves the Coding Plan quota block into the detail dialog', async () => {
     const wrapper = mountWithTDesign(VolcPlanSection, { props: baseProps() })
     const detail = await openDetail(wrapper)
-    expect(detail).toContain('Coding Plan 套餐额度（1）')
+    // Coding Plan 窗口与 Agent Plan 窗口并排落在「额度窗口」分节里，靠标签前缀区分
+    //（它不进卡面：同一对 AK/SK 下会出现两个「5 小时窗口」）
+    expect(detail).toContain('Coding Plan · 5 小时窗口')
     expect(detail).toContain('Coding Plan 状态')
     expect(detail).toContain('NORMAL')
     expect(detail).toContain('5 小时窗口')
