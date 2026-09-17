@@ -19,7 +19,13 @@ import { useDashboardStore } from './stores/dashboard'
 import { useThemeStore } from './stores/theme'
 import type { NewApiResponse } from './types'
 import { DEFAULT_SITE_NAME, isFailedAccount } from './types'
-import { pickLogoUrl, providerSlug, shouldSpanFullRow, sortPlatformSections } from './utils'
+import {
+  isCompactAccounts,
+  pickLogoUrl,
+  providerSlug,
+  shouldSpanFullRow,
+  sortPlatformSections,
+} from './utils'
 
 const dashboard = useDashboardStore()
 const {
@@ -619,7 +625,10 @@ watch(
             v-for="section in subscriptionSections"
             :key="section.key"
             :id="`anchor-${section.anchor}`"
-            :class="{ 'grid-span-all': shouldSpanFullRow(section.count) }"
+            :class="{
+              'grid-span-all': shouldSpanFullRow(section.count),
+              'section-compact': isCompactAccounts(section.count),
+            }"
           >
             <component
               :is="section.component"
@@ -635,7 +644,10 @@ watch(
             v-for="section in balanceSections"
             :key="section.key"
             :id="`anchor-${section.anchor}`"
-            :class="{ 'grid-span-all': shouldSpanFullRow(section.count) }"
+            :class="{
+              'grid-span-all': shouldSpanFullRow(section.count),
+              'section-compact': isCompactAccounts(section.count),
+            }"
           >
             <component :is="section.component" v-bind="section.props" />
           </div>
