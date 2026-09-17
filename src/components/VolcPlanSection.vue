@@ -25,6 +25,7 @@ import {
   formatReset,
   formatTokens,
   PLAN_WINDOW_LABELS,
+  progressPercentage,
   progressStatus,
   ratioOf,
 } from '../utils'
@@ -254,7 +255,7 @@ function inferenceOf(keyHint: string): InferenceView {
                     <span class="muted">{{ formatReset(window.resetTime) }}</span>
                   </t-space>
                   <t-progress
-                    :percentage="Math.round(Math.min(100, window.percent))"
+                    :percentage="progressPercentage(window.percent)"
                     :status="progressStatus(window.percent)"
                     :label="false"
                   />
@@ -374,7 +375,7 @@ function inferenceOf(keyHint: string): InferenceView {
                 <span class="muted">{{ formatReset(window.resetTime) }}</span>
               </t-space>
               <t-progress
-                :percentage="Math.round(ratioOf(window.used, window.quota))"
+                :percentage="progressPercentage(ratioOf(window.used, window.quota))"
                 :status="progressStatus(ratioOf(window.used, window.quota))"
                 :label="false"
               />

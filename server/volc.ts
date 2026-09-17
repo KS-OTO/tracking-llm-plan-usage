@@ -149,7 +149,9 @@ const AfpWindowShape = z
   .nullish()
 
 function warnSchemaFallback(label: string, value: unknown): void {
-  console.warn(`[volc] ${label} 响应契约漂移，已降级解析（原始值见日志）`, value)
+  // 格式串必须是**字面量**：`label` 若含 `%s` 之类的占位符，写进模板字符串后会被
+  // console 当成格式串解析、把 `value` 顶掉（semgrep: unsafe-formatstring）。
+  console.warn('[volc] %s 响应契约漂移，已降级解析（原始值见日志）', label, value)
 }
 
 const AfpResult = z

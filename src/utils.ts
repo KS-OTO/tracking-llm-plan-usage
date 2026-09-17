@@ -1,3 +1,5 @@
+import type { SiteConfig } from './types'
+
 /** 掩码展示密钥，仅保留首尾各 4 位。 */
 export function maskKey(key: string): string {
   if (key.length <= 8) {
@@ -180,4 +182,42 @@ export function progressStatus(percent: number): 'success' | 'warning' | 'error'
     return 'warning'
   }
   return 'success'
+}
+
+/**
+ * 进度条的 `percentage`：取整并封顶到 [0, 100]。
+ *
+ * 必须收敛，不能把原始百分比直接喂给 `<t-progress>`：TDesign 会把 `percentage`
+ * **原样**渲染成进度条上的百分比文案，于是「已用 / 总额」算出来的
+ * `34.0101024` 会显示成 `34.0101024%`（实测 New API 卡的订阅窗口就是这个症状）。
+ * 文案层原本各自 `toFixed(1)`，只有这一处漏了 —— 统一走本函数，避免再漏第二处。
+ */
+export function progressPercentage(percent: number): number {
+  return Math.round(Math.min(100, Math.max(0, percent)))
+}
+
+/**
+ * 按当前主题选出要展示的 Logo。
+ *
+ * 站点可以配两套 Logo（`SITE_LOGO_URL` 明亮 / `SITE_LOGO_URL_DARK` 暗黑）——
+ * 深色字标落在深色导航上会糊成一片，这类「字标型」Logo 必须按主题换图。
+ *
+ * 取值是**有序回落**，不是「取一套、取不到就空白」：
+ *   1. 当前主题那套（明亮模式取 `logoUrl`，暗黑模式取 `logoUrlDark`）；
+ *   2. 另一套 —— 覆盖两种真实情况：暗色图**没配**（服务端不镜像，这里就是 null），
+ *      或配了但**加载失败**（CDN 挂了 / 填错地址）；
+ *   3. 都没有则返回 null，品牌位只显示站点名。
+ * 回落到另一套而不是直接隐藏：暗色图缺失时，亮色图在深色底上虽然对比度差，
+ * 但至少品牌位不空 —— 空掉是「功能消失」，发暗是「配置待补」，后者更容易被发现和修好。
+ *
+ * 宽度与高度由 `height` + `auto` 决定（见 layout.css 的 --app-logo-h），
+ * 所以这里只需要给出一个 URL，不需要区分两套图的长宽比。
+ */
+export function pickLogoUrl(
+  site: Pick<SiteConfig, 'logoUrl' | 'logoUrlDark'>,
+  isDark: boolean,
+  broken: ReadonlySet<string>,
+): string | null {
+  const candidates = isDark ? [site.logoUrlDark, site.logoUrl] : [site.logoUrl, site.logoUrlDark]
+  return candidates.find((url) => url !== null && !broken.has(url)) ?? null
 }

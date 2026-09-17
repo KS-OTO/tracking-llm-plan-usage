@@ -27,6 +27,7 @@ describe('readSiteConfig', () => {
     expect(readSiteConfig(envOf({}))).toStrictEqual({
       name: DEFAULT_SITE_NAME,
       logoUrl: null,
+      logoUrlDark: null,
       faviconUrl: null,
       refreshIntervalSeconds: DEFAULT_REFRESH_INTERVAL_SECONDS,
     })
@@ -36,9 +37,20 @@ describe('readSiteConfig', () => {
     expect(readSiteConfig(envOf({ SITE_NAME: '  内部用量面板  ' })).name).toBe('内部用量面板')
   })
 
-  it('treats a blank site name as unconfigured', () => {
-    // 平台面板里留空是常见写法：空白名会让品牌位变成一块空白，不如退回默认名
-    expect(readSiteConfig(envOf({ SITE_NAME: '   ' })).name).toBe(DEFAULT_SITE_NAME)
+  it('treats an explicitly blank site name as "logo only" instead of the default', () => {
+    // 显式留空 = 用户要求品牌位只显示 Logo（Logo 本身已是完整字标时很常见）。
+    // 绝不能悄悄换成默认名——那是「没配过」的语义。
+    expect(readSiteConfig(envOf({ SITE_NAME: '   ' })).name).toBe('')
+    expect(readSiteConfig(envOf({ SITE_NAME: '' })).name).toBe('')
+    expect(readSiteConfig(envOf({ SITE_NAME: '  ' })).name).toBe('')
+  })
+
+  it('keeps the default name when SITE_NAME is absent (not the same as blank)', () => {
+    // 变量缺失 = 从没配过 → 开箱即用的默认名
+    expect(readSiteConfig(envOf({})).name).toBe(DEFAULT_SITE_NAME)
+    expect(readSiteConfig(envOf({ SITE_LOGO_URL: 'https://cdn.example.com/logo.png' })).name).toBe(
+      DEFAULT_SITE_NAME,
+    )
   })
 
   it('reads logo and favicon urls, treating blank as not configured', () => {
@@ -50,6 +62,25 @@ describe('readSiteConfig', () => {
     )
     expect(config.logoUrl).toBe('https://cdn.example.com/logo.svg')
     expect(config.faviconUrl).toBeNull()
+  })
+
+  it('reads a separate dark-mode logo without mirroring the light one into it', () => {
+    const both = readSiteConfig(
+      envOf({
+        SITE_LOGO_URL: 'https://cdn.example.com/logo-light.svg',
+        SITE_LOGO_URL_DARK: 'https://cdn.example.com/logo-dark.svg',
+      }),
+    )
+    expect(both.logoUrl).toBe('https://cdn.example.com/logo-light.svg')
+    expect(both.logoUrlDark).toBe('https://cdn.example.com/logo-dark.svg')
+
+    // 不镜像：只配了亮色时 logoUrlDark 必须是 null，前端才能区分
+    // 「用户配了同一张图」和「用户没配暗色图」。回落由前端的 pickLogoUrl 负责。
+    const lightOnly = readSiteConfig(envOf({ SITE_LOGO_URL: 'https://cdn.example.com/logo.svg' }))
+    expect(lightOnly.logoUrlDark).toBeNull()
+
+    // 留空与缺失同义：都当作「没配暗色图」
+    expect(readSiteConfig(envOf({ SITE_LOGO_URL_DARK: '   ' })).logoUrlDark).toBeNull()
   })
 
   it('uses the published refresh interval when it is a plain number', () => {

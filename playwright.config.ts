@@ -37,6 +37,7 @@ const SERVER_ENV_VARS = [
   // 站点自定义：不改鉴权，但会改品牌文案与刷新节奏，留着同样会污染断言
   'SITE_NAME',
   'SITE_LOGO_URL',
+  'SITE_LOGO_URL_DARK',
   'SITE_FAVICON_URL',
   'REFRESH_INTERVAL_SECONDS',
   // 可选旁路凭据（会话 Cookie / 请求头），单独配置即可生效
@@ -62,9 +63,21 @@ const SERVER_ENV_VARS = [
 ]
 
 /** 构造无凭据环境：置空上面列出的全部变量（含多账号 `_2.._9` 后缀）。 */
+/**
+ * 构造无凭据环境：跳过本机 `.env`（`SKIP_DOTENV=1`，见 vite.config.ts），
+ * 并把上面列出的变量置空兜底（防开发者 shell / 系统环境里带着真实值）。
+ *
+ * `SITE_NAME` 是唯一的例外，**不能置空**：空串在本项目里是「显式留空 → 品牌位只显示
+ * Logo」（`SITE_NAME=`），拿它当「删掉这个变量」用会把测试的意图悄悄改写 ——
+ * 密封环境本该看到默认站点名 `LLM 用量监控`，置空后渲染的是一个没有文字的品牌位。
+ * 跳过 `.env` 之后，「未配置」本身就是 `undefined`，不再需要置空来表达。
+ */
 function hermeticEnv(): Record<string, string> {
-  const cleared: Record<string, string> = {}
+  const cleared: Record<string, string> = { SKIP_DOTENV: '1' }
   for (const name of SERVER_ENV_VARS) {
+    if (name === 'SITE_NAME') {
+      continue
+    }
     cleared[name] = ''
     for (let i = 2; i <= 9; i++) {
       cleared[`${name}_${i}`] = ''
