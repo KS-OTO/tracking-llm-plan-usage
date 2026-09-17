@@ -130,21 +130,36 @@
 }
 
 /**
- * 卡面读数：**每排固定 2 个**（容器过窄才降为 1 个）。
+ * 卡面读数（余额 / 用量这类成对读数）：列数**完全由容器宽度决定**。
  *
- * 为什么不能用默认的 auto-fit 列数：auto-fit 的列数随容器宽度浮动，
- * 而「余额账户」里半宽卡的读数容器实测只有 371px（3 区块列 × 1440 视口），
- * 只能排 2 列 —— 于是 3 个瓦片的卡折成 2 行、2 个瓦片的卡只有 1 行，
- * 同屏就出现「一排 2 个 / 一排 3 个 / 空一格」三种节奏（用户实测报的正是这个）。
+ * 历史：这里曾经是「每排固定 2 个 + `max-width: 424px` 封顶」，目的是让半宽卡与整行卡的
+ * 瓦片尺度一致。但实测下来它在大屏上是纯浪费 —— 1920 视口下卡内可用 745px，网格仍被锁在
+ * 424px，右侧空出 321px，3 个读数的卡还被折成 2+1 两行（.workbuddy/diag/pair-measure.json）。
  *
- * 下限 162px 来自最长读数的实测宽度：「5 位整数 + 2 位小数 + 货币单位」
- * 即 "58,205.77 USD" = 149px（测量脚本 .workbuddy/diag/measure-text.mjs）。
- * 取 162px 留 ~9% 余量，保证 2 列时数值永不溢出（.t-statistic-content 是 nowrap，
- * 溢出不会折行、只会压到隔壁瓦片上）；容器窄于 2×162+gap 时自动降为 1 列。
+ * 现在按可用宽度自适应：宽容器排 3 个、半宽容器排 2 个、390 手机也排 2 个。
  *
- * 上限 424px = 2×200 + gap：整行卡（同平台多个 Key）里的账号卡宽达 665px，
- * 不封顶瓦片会被拉到 300px+，与半宽卡的瓦片尺度差出近一倍。封顶后瓦片
- * 落在 162–200px 区间，两种卡看起来是同一套尺度。
+ * 下限 131px 是解出来的。列数 = floor((W + gap) / (N + gap))，待满足的两条硬约束：
+ *   ① 390 手机卡内实测 284px 必须排 2 列 —— 2N + 16 ≤ 284 → N ≤ 134；
+ *   ② 768 平板半宽卡内实测 278px 也必须排 2 列 —— 2N + 16 ≤ 278 → N ≤ 131。
+ * ② 比 ① 更紧，所以取 131（原先的 132 就差这 1px：278px 的卡只排 1 列，
+ * 三个读数被竖着堆成三行，而隔壁 654px 的整行卡排着 3 列 —— 一屏里两种节奏）。
+ * 反方向还有一条约束：N 越小越容易在中等容器里多挤一列，瓦片会被压窄。
+ *
+ * 边界如实记录：3 列的门槛是 3×131 + 2×16 = 425px，而 1440 / 1920 视口下半宽卡的内宽
+ * 实测 424.x px —— **恰好停在门槛内侧**，所以它们仍是 2 列（132 时是 428，同样 2 列）。
+ * 这是「卡内宽度」与「阈值」贴得很近的一段：将来若卡片内边距或视口留白有变，
+ * 这几个卡会翻到 3 列。那样也不难看（瓦片约 131px，读数 13–97px、标题 131px 都放得下，
+ * 且下面的容器查询会自动降一号字），只是不再是当前这个观感。
+ *
+ * 3 列真正开始的地方是整行卡：1440 的 633 / 1920 的 713 → 3 列（瓦片 200 / 227）。
+ *
+ * 注：想同时做到「284 排 2 列」且「465 只排 2 列」在数学上不可能 ——
+ * 两者相差不到 1.64 倍，而列数从 2 变 3 需要轨道宽度有足够落差。所以 406–433
+ * 这一段（1024 的卡）会排 3 列、瓦片约 134px，靠下面的容器查询降一号字来保证
+ * 长读数不溢出。实测这些卡的读数很短（多为 "0.00 CNY" 一类），3 列是舒适的。
+ *
+ * 去掉 `max-width` 后不再封顶：读数的实际宽度远小于轨道宽度（实测 .t-statistic-content
+ * 只有 82–97px），所以宽瓦片不会出现「数字被拉得很空」的问题，反而少了右侧的空洞。
  *
  * align-content: start —— 行高按内容，不被剩余高度拉伸。
  * 默认的 stretch 会让「1 行的卡」与「2 行的卡」行高不同（实测 136px vs 66px），
@@ -152,9 +167,30 @@
  * 第一行都严格同高，第二行（读数多于 2 个时）再另起一行。
  */
 .grid-metrics--pair {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 162px), 1fr));
-  max-width: 424px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--metric-pair-min, 131px)), 1fr));
   align-content: start;
+}
+
+/**
+ * 窄瓦片里把读数字号降一号（28px → 24px）。
+ *
+ * 轨道下限降到 132px 后，最坏情况的长读数（"58,205.77 USD" 实测 149px）会超过轨道宽度；
+ * 而 `.t-statistic-content` 是 `white-space: nowrap`，溢出不会折行、只会**压到隔壁瓦片上**
+ * （视觉上像是两个数字粘连）。这里用容器查询在窄瓦片内降一号字：149px × 24/28 ≈ 128px，
+ * 134px 的轨道放得下。比截断数字或让瓦片溢出都体面。
+ *
+ * 字号要打在 `.t-statistic-content-value` 上 —— 数值本身是这个内层 span 渲染的，
+ * 写在外层 `.t-statistic-content` 上不会有人继承（它只是个 inline-block 外壳）。
+ */
+.grid-metrics--pair > * {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+@container (max-width: 160px) {
+  .grid-metrics--pair .t-statistic-content-value {
+    font-size: var(--td-font-size-headline-small);
+  }
 }
 
 /* ============================================================
@@ -242,6 +278,17 @@
    * 让「账号卡 → 窗口块」两级都铺满，两个并排账号的窗口块才能逐行对齐。 */
   display: flex;
   flex-direction: column;
+  /* 卡内各内容块之间的纵向间距**只由这里负责**。
+   * 原来靠各块自带的 margin，结果 New API 卡里「周期额度窗口」与「钱包读数网格」
+   * 之间实测 0px，两块直接贴在一起（.window-list 和 .grid-metrics 自己都没有外边距）。
+   * 统一成 gap 之后，谁先谁后、有几个块，节奏都一样。 */
+  gap: var(--td-size-4);
+}
+
+/* 与之配套：直接子元素不再自带纵向外边距，避免与 gap 叠加成双倍间距
+ * （.account-head 原本有 margin-bottom: 8px，.window-foot 有 margin-top: 8px）。 */
+.account-group > * {
+  margin-block: 0;
 }
 
 .account-group > .grid-metrics,
@@ -267,7 +314,8 @@
   align-items: center;
   gap: var(--td-size-2);
   flex-wrap: wrap;
-  margin-bottom: var(--td-size-4);
+  /* 与下一个块的间距由 .account-group 的 gap 统一给（原本是这里的 margin-bottom，
+   * 两处并存会叠加成 16px）。 */
 }
 
 .account-name {
@@ -402,11 +450,40 @@
   --app-menu-h: var(--td-comp-size-xxxl);
   /** 品牌字号；手机上降一号，给操作区腾出宽度。 */
   --app-title-size: var(--td-font-size-title-large);
-  /** 品牌 Logo 高度（--td-size-9 = 28px）：与 18px 品牌字号同一视觉量级，在 56px 导航里不压抑。 */
-  --app-logo-h: var(--td-size-9);
+  /**
+   * Logo 盒子高度：**高度固定、宽度自适应**（`width: auto`），宽度上限由 max-width 兜住。
+   *
+   * 24px（不是 28px）是量出来的，不是拍的：这类 Logo 多是「图形 + 品牌名」的完整字标，
+   * 而字标部分通常只占画布高度的一部分（实测 18Bit 的 logo 为 1268×420，字标占 69.3%）。
+   * 盒子给 28px 时字标实际画到 ~19.4px，**比 18px 的站点名还大**；给 24px 时约 16.6px，
+   * 与站点名的字面高度基本齐平 —— 「Logo 和站点名大小不匹配」的根因就在这里。
+   */
+  --app-logo-h: var(--td-size-8);
   /** Logo 最大宽度：品牌位与 3 个 Tab、右侧操作区共处一行，用户填的可能是很宽的文字 Logo，必须设上限。
    *  132px ≈ 品牌位可用宽度减去站点名后的余量（实测品牌位约 300px）。 */
   --app-logo-max-w: 132px;
+  /**
+   * Logo 与站点名之间的间距。
+   *
+   * TDesign 相邻元素的默认观感是 6px（`--td-size-3`），但这里左边是**图片里的字标**、
+   * 右边是**真实文字**，6px 下两者会读成一个词（实测 "18BitAI用量跟踪" 连成一片）。
+   * 12px 才读得出「Logo | 站点名」两段。
+   */
+  --app-brand-gap: var(--td-size-5);
+  /**
+   * 导航内时间文案的 display 值。
+   *
+   * 为什么要绕一层变量，而不是直接写 `.last-updated { display: none }`：
+   * `.last-updated` 的**其它属性**（inline-flex / gap / nowrap）声明在 App.vue 的
+   * `<style scoped>` 里，落到元素上变成 `.last-updated[data-v-x]`（特异性 0-2-0），
+   * 而本节在全局样式表里的 `.last-updated`（0-1-0）**永远赢不了** ——
+   * 实测即便把 `display:none` 关在 `@media (max-width:1199px)` 里，
+   * 320 / 360 / 390 / 768 四个视口的计算值仍是 `inline-flex`，规则一条也没生效。
+   *
+   * 按本节既有的约定绕开特异性：组件只写 `display: var(--app-last-updated-display)`，
+   * 值的（含断点）唯一来源留在全局 `:root`。
+   */
+  --app-last-updated-display: inline-flex;
   /** 锚点落点需要的顶部避让量。 */
   --app-anchor-offset: calc(var(--app-menu-h) + var(--td-comp-margin-s));
 }
@@ -427,6 +504,10 @@
 .app-menu.t-head-menu .t-menu__logo:not(:empty) {
   min-width: 0;
   overflow: hidden;
+  /* TDesign 默认给 32px（.t-head-menu .t-menu__logo），那是「Logo 与第一个 Tab」的间距。
+   * 实测 768 视口下它独自吃掉 32px，而这一行本来就只剩几十像素余量
+   * → 站点名被截成 "AI…"。收到 12px，与品牌内部的间距同一量级，视觉上仍是清晰的分隔。 */
+  margin-right: var(--app-brand-gap);
 }
 
 .app-title {
@@ -444,8 +525,22 @@
     --app-logo-max-w: 108px;
   }
 
-  .last-updated__label {
-    display: none;
+  /**
+   * 时间文案整块下移到内容区顶部。
+   *
+   * 实测 768：`inner` 736px = 品牌位 187（品牌 155 + 32 外边距）+ Tab 组 228 + 操作区 321，
+   * **零余量**，于是站点名被压到 41px（需要 92px）显示成 "AI…"。而时间文案占 107px，
+   * 却是这一行里优先级最低的信息 —— 它只是「上次更新 / 下次刷新」的读数。
+   *
+   * 把它交给内容区顶部的 `.app-status-compact`（同一份数据、同一个位置语义），
+   * 导航行立刻多出 107px，站点名完整显示。手机上原本就是这么做的，这里只是把分界线
+   * 从 767 提到 1199 —— 与全站「只有 768 / 1200 两档断点」的约定一致。
+   *
+   * 这里改的是**变量**而非类本身：`.last-updated` 的实体规则在 App.vue 的 scoped 样式里，
+   * 全局媒体查询写多少都赢不了（见 :root 里 --app-last-updated-display 的说明）。
+   */
+  :root {
+    --app-last-updated-display: none;
   }
 }
 
@@ -455,11 +550,18 @@
  * 时间文案（约 96px）在 375 视口下会把操作区顶到第二行 —— 量测：
  * 品牌 127 + 操作区 274 = 401，而可用宽度只有 351。与其把文案截短到
  * 「只剩一个时间、还得赌 320px 的机型」，不如整块下移到内容区顶部
- * （App.vue 的 .app-status-mobile），信息一个不少，导航恢复两行。
+ * （App.vue 的 .app-status-compact），信息一个不少，导航恢复两行。
  */
-/** 内容区顶部的时间文案：默认隐藏，只在窄屏出现（宽屏由导航内的同一信息承担）。
- *  注意顺序：基础规则必须写在媒体查询**之前**，同特异性下后者胜。 */
-.app-status-mobile {
+/**
+ * 内容区顶部的时间文案：默认隐藏，只在「导航里放不下」时出现
+ * （≤1199；宽屏由导航内的同一信息承担，两边不会同时出现）。
+ *
+ * 与 `.last-updated` 是一对互斥开关：那边 ≤1199 变 none，这边 ≤1199 变 block。
+ * 两者的值都集中在全局样式表，组件侧只引用变量 / 类名（原因见第 5 节开头）。
+ *
+ * 注意顺序：基础规则必须写在媒体查询**之前**，同特异性下后者胜。
+ */
+.app-status-compact {
   display: none;
   margin: 0 0 var(--td-size-4);
   font-size: var(--td-font-size-body-small);
@@ -468,12 +570,8 @@
   text-align: center;
 }
 
-@media (max-width: 767px) {
-  .last-updated {
-    display: none;
-  }
-
-  .app-status-mobile {
+@media (max-width: 1199px) {
+  .app-status-compact {
     display: block;
   }
 }
@@ -488,7 +586,10 @@
      * 操作区约 178px、站点名（16px 字号）约 113px，Logo 上限只能给到约 40px。
      * 高度同步降一档，避免 Logo 比品牌文字高出一截。 */
     --app-logo-h: var(--td-size-7);
-    --app-logo-max-w: var(--td-size-12);
+    /* 60px = 20px 高 × 3.019（该 Logo 的宽高比）。原来的 40px 比「按高度算出来的宽度」还窄，
+     * `object-fit: contain` 于是把整幅画布压进 40×13.2 —— 字标只剩 ~9px，几乎看不清。
+     * 给到 72px 留余量，让**高度**成为约束方，Logo 才真的按 20px 渲染。 */
+    --app-logo-max-w: 72px;
     /* 两行导航的实测高度（品牌行 + Tab 行），锚点据此避让 */
     --app-anchor-offset: calc(var(--td-comp-size-xxxl) * 2);
   }
@@ -517,10 +618,11 @@
   }
 
   /* 第一行：品牌（order 默认 0）+ 操作区推到右侧；第二行：Tab 独占整行 */
-  /* 品牌的可压缩能力（min-width:0 / overflow:hidden）在文件上方统一定义，
-   * 这里只补与操作区之间的固定间距 */
+  /* 品牌的可压缩能力（min-width:0 / overflow:hidden）与外边距都在文件上方统一定义；
+   * 手机上这一行是「品牌 + 操作区」，操作区靠 margin-left:auto 顶到右侧，
+   * 所以这里只把间距收回一档，避免窄屏两侧留白不均。 */
   .app-menu.t-head-menu .t-menu__logo:not(:empty) {
-    margin-right: var(--td-size-2);
+    margin-right: var(--td-size-4);
   }
 
   .app-menu.t-head-menu .t-menu__operations:not(:empty) {

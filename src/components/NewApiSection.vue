@@ -21,6 +21,7 @@ import type {
   NewApiWallet,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
+import { progressPercentage } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -279,7 +280,7 @@ function modeLabel(row: NewApiRow): string {
                 <span>本周期已用</span>
                 <span class="num-strong">{{ row.subscription.percent.toFixed(1) }}%</span>
               </div>
-              <t-progress :percentage="row.subscription.percent" />
+              <t-progress :percentage="progressPercentage(row.subscription.percent)" />
               <div class="muted window-meta">
                 已用 {{ amount(row.subscription.used, row.currency) }} /
                 {{ amount(row.subscription.total, row.currency) }}

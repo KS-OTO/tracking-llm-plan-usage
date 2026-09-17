@@ -18,8 +18,8 @@ import ZhipuSection from './components/ZhipuSection.vue'
 import { useDashboardStore } from './stores/dashboard'
 import { useThemeStore } from './stores/theme'
 import type { NewApiResponse } from './types'
-import { isFailedAccount } from './types'
-import { providerSlug, shouldSpanFullRow, sortPlatformSections } from './utils'
+import { DEFAULT_SITE_NAME, isFailedAccount } from './types'
+import { pickLogoUrl, providerSlug, shouldSpanFullRow, sortPlatformSections } from './utils'
 
 const dashboard = useDashboardStore()
 const {
@@ -423,21 +423,56 @@ const nextRefreshText = computed(() => {
 // 站点自定义（站点名 / Logo / favicon）：由 /api/status 的 site 字段驱动
 // ---------------------------------------------------------------------------
 
-/** 自定义 Logo 加载失败后不再重试，退回纯文字品牌位（避免反复请求破图）。 */
-const logoBroken = ref(false)
+/** 已确认加载失败的 Logo 地址。记 URL 而不是一个布尔量：亮 / 暗两套各自独立失败，
+ *  且 URL 一换（改了配置）就自动重试，不需要额外的重置分支。 */
+const brokenLogos = ref<ReadonlySet<string>>(new Set())
 
-watch(
-  () => site.value.logoUrl,
-  () => {
-    logoBroken.value = false
-  },
-)
+/**
+ * 当前主题下该展示哪一套 Logo。
+ *
+ * 站点可以配两套图（`SITE_LOGO_URL` 明亮 / `SITE_LOGO_URL_DARK` 暗黑）——深色字标
+ * 落在深色导航上会糊成一片，字标型 Logo 必须按主题换图。取哪一套、失败怎么回落
+ * 都收敛在 `utils.pickLogoUrl`（纯函数，可单测）。
+ */
+const activeLogoUrl = computed(() => pickLogoUrl(site.value, isDark.value, brokenLogos.value))
 
-/** 站点名 → 浏览器标签页标题（index.html 里的 <title> 只是首屏默认值）。 */
+/**
+ * 另一套 Logo 的**预热**地址。
+ *
+ * 换主题时 `.app-logo` 的 `src` 会变，而它是「高度固定、宽度自适应」——新图就绪前
+ * 宽度为 0，右边的站点名会先左移再右移，肉眼可见地抖一下。把另一套也提前载入
+ * （`<img>` 即使 `display:none` 也会发起请求）后，切换就是瞬时的。
+ */
+const inactiveLogoUrl = computed(() => (isDark.value ? site.value.logoUrl : site.value.logoUrlDark))
+
+/** 当前这套加载失败 → 换另一套；两套都失败才退回纯文字品牌位（避免反复请求破图）。 */
+function onLogoError(): void {
+  const url = activeLogoUrl.value
+  if (url !== null) {
+    brokenLogos.value = new Set([...brokenLogos.value, url])
+  }
+}
+
+/**
+ * 品牌位是否显示。
+ *
+ * 站点名与 Logo 都可由环境变量控制，而 `SITE_NAME` **允许显式配成空**（只显示 Logo ——
+ * 很多站点的 Logo 本身就是「图形 + 品牌名」的完整字标，再并一个站点名反而成了两个品牌名）。
+ * 两个都没有时不渲染整个品牌位，让 `.t-menu__logo` 真正为空，避免留下一个带外边距的空壳。
+ */
+const showLogo = computed(() => activeLogoUrl.value !== null)
+const showBrand = computed(() => showLogo.value || Boolean(site.value.name))
+
+/**
+ * 站点名 → 浏览器标签页标题（index.html 里的 <title> 只是首屏默认值）。
+ *
+ * 站点名可以为空（品牌位只显示 Logo），但**标签页不能没有名字** ——
+ * 空标题在浏览器标签栏/收藏夹里是一片空白，所以回落到默认名。
+ */
 watch(
   () => site.value.name,
   (name) => {
-    document.title = name
+    document.title = name || DEFAULT_SITE_NAME
   },
   { immediate: true },
 )
@@ -484,16 +519,19 @@ watch(
     <t-header class="app-header">
       <t-head-menu v-model="activeTab" theme="light" class="app-menu" @change="onMenuChange">
         <template #logo>
-          <span class="app-brand">
-            <!-- alt 留空：紧邻的文字标题已经承担了名称语义，再读一遍 Logo 只会重复 -->
+          <!-- 站点名可被 SITE_NAME 显式配成空（只显示 Logo）。此时 .app-brand 只剩一个
+               子元素，flex 的 gap 自然不产生间距，不需要额外分支。 -->
+          <span v-if="showBrand" class="app-brand">
+            <!-- alt 留空：紧邻的文字标题已经承担了名称语义，再读一遍 Logo 只会重复。
+                 主题切换时 src 换成另一套（明亮 / 暗黑），回落规则见 utils.pickLogoUrl。 -->
             <img
-              v-if="site.logoUrl && !logoBroken"
+              v-if="showLogo"
               class="app-logo"
-              :src="site.logoUrl"
+              :src="activeLogoUrl ?? ''"
               alt=""
-              @error="logoBroken = true"
+              @error="onLogoError"
             />
-            <span class="app-title">{{ site.name }}</span>
+            <span v-if="site.name" class="app-title">{{ site.name }}</span>
           </span>
         </template>
         <t-menu-item value="overview">总览</t-menu-item>
@@ -501,9 +539,10 @@ watch(
         <t-menu-item value="balance">余额账户</t-menu-item>
         <template #operations>
           <t-space size="medium" align="center">
-            <!-- 两段独立包裹，窄屏由 CSS 分别取舍（见 layout.css 第 5 节）：
-                 平板去掉「更新于 / 下次刷新」前缀只留时间；手机进一步去掉「更新于」，
-                 保留用户更关心的「下次刷新」。 -->
+            <!-- 时间文案整块在窄屏撤出导航（≤1199 时 display 变 none，值见 layout.css
+                 的 --app-last-updated-display），改由内容区顶部的 .app-status-compact
+                 承担 —— 两处不会同时可见。这里保留「更新于 / 下次刷新 / ·」的完整结构，
+                 宽屏下 gap 负责间距（模板换行空白会被编译器折叠）。 -->
             <span class="last-updated" aria-live="polite">
               <span class="last-updated__updated">
                 <span class="last-updated__label">更新于</span>
@@ -550,7 +589,7 @@ watch(
     <main class="app-main">
       <!-- 手机上导航只放得下「品牌 + 操作」，时间文案下移到内容区顶部
            （同一份数据渲染两次：header 那份在窄屏被 CSS 隐藏，此份加了 aria-hidden） -->
-      <p class="app-status-mobile" aria-hidden="true">
+      <p class="app-status-compact" aria-hidden="true">
         更新于 {{ lastUpdatedText || '—' }} · 下次刷新 {{ nextRefreshText || '已暂停' }}
       </p>
       <!-- 全局失败聚合：N 个平台失败 + 一键重试（P0-5） -->
@@ -608,6 +647,14 @@ watch(
       </footer>
     </main>
 
+    <!-- 另一套 Logo 的预热占位：不参与布局，只为在切主题前把图放进缓存（见 inactiveLogoUrl） -->
+    <img
+      v-if="inactiveLogoUrl"
+      class="logo-preload"
+      :src="inactiveLogoUrl"
+      alt=""
+      aria-hidden="true"
+    />
     <t-back-top />
   </t-layout>
 </template>
@@ -634,23 +681,31 @@ watch(
 }
 
 /* 品牌位：Logo + 站点名。min-width:0 让过长的站点名能被省略号截断，
- * 否则 flex 子项的「最小内容宽度」会把导航顶出视口（手机上尤其明显）。 */
+ * 否则 flex 子项的「最小内容宽度」会把导航顶出视口（手机上尤其明显）。
+ * 间距走变量：断点在 layout.css 统一覆盖（6px 会让图片里的字标和站点名读成一个词）。 */
 .app-brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--td-size-3);
+  gap: var(--app-brand-gap);
   min-width: 0;
 }
 
-/* Logo 高度与最大宽度都走变量：断点在 layout.css 第 6 节统一覆盖。
+/* Logo 高度与最大宽度都走变量：断点在 layout.css 统一覆盖。
  * width:auto 由高度推出宽度、object-fit:contain 保证任意长宽比的图都不变形；
  * 上限靠 max-width 兜住——用户填的可能是很宽的文字 Logo。 */
 .app-logo {
   display: block;
+  /* 永不参与 flex 收缩。被压缩时 object-fit:contain 会把图按比例缩小（盒子高度不变、
+   * 图形变小），又回到「Logo 看起来比站点名小一截」的老问题 —— 宽度不够应该由
+   * 站点名去让（它本来就是可截断的文本）。 */
+  flex: none;
   height: var(--app-logo-h);
   width: auto;
   max-width: var(--app-logo-max-w);
   object-fit: contain;
+  /* max-width 兜住一个很宽的 Logo 时，contain 会在盒内留白；靠左对齐可以让
+   * 「Logo → 站点名」的视觉间距保持稳定，而不是忽大忽小。 */
+  object-position: left center;
 }
 
 /* 字号同样走变量：手机断点要降一号，写死会被 scoped 特异性锁住。
@@ -664,14 +719,24 @@ watch(
   white-space: nowrap;
 }
 
+/* 另一套 Logo 的预热占位：不进渲染树（`<img>` 即使 display:none 仍会发起请求），
+ * 目的是让切主题时换 src 命中的是缓存而不是网络。 */
+.logo-preload {
+  display: none;
+}
+
 .switch-wrap {
   display: inline-flex;
 }
 
 /* inline-flex + gap：时间文案拆成多个 span 后，模板里的换行空白会被编译器折叠掉
- * （.text() 会变成「更新于15:20:36·下次刷新15:21:36」），间距改由 gap 保证 */
+ * （.text() 会变成「更新于15:20:36·下次刷新15:21:36」），间距改由 gap 保证。
+ *
+ * display 走变量：窄屏要把整块时间文案从导航里撤掉（改由内容区顶部的
+ * .app-status-compact 承担），而这条规则是 scoped 的（特异性 0-2-0），
+ * 全局样式表里的 @media 覆盖不了它 —— 值的唯一来源在 layout.css 第 5 节。 */
 .last-updated {
-  display: inline-flex;
+  display: var(--app-last-updated-display, inline-flex);
   align-items: baseline;
   gap: var(--td-size-2);
   font-size: var(--td-font-size-body-small);

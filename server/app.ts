@@ -221,10 +221,16 @@ function providerStatus(keyHints: string[]): {
  * 默认值必须保持一致）。
  */
 export interface SiteConfig {
-  /** 站点标题：导航栏品牌位 + 浏览器标签页。 */
+  /** 站点标题：导航栏品牌位 + 浏览器标签页。**可以为空串** —— 表示品牌位只显示 Logo，
+   *  此时标签页标题回落到 `DEFAULT_SITE_NAME`（标签页不能没有名字）。 */
   name: string
-  /** Logo 地址；未配置为 null（此时品牌位只显示文字）。 */
+  /** Logo 地址（明亮模式，也是暗黑模式的回落值）；未配置为 null（此时品牌位只显示文字）。 */
   logoUrl: string | null
+  /** 暗黑模式专用的 Logo 地址；未配置为 null。
+   *
+   *  **不做镜像**：不把 `logoUrl` 复制到这里，前端才能区分「用户配了同一张图」和
+   *  「用户没配暗色图」。回落逻辑放在前端 `pickLogoUrl()`（会顺带处理「暗色图挂了」）。 */
+  logoUrlDark: string | null
   /** favicon 地址；未配置为 null（此时保留 index.html 里的 /favicon.ico）。 */
   faviconUrl: string | null
   /** 前端自动刷新间隔（秒）。 */
@@ -258,11 +264,25 @@ function clampRefreshIntervalSeconds(value: string | undefined): number {
   )
 }
 
+/**
+ * 站点名：区分「**没配过**」与「**显式配成空**」两种情况。
+ *
+ * - 变量缺失（undefined）→ 默认名：说明用户根本没动过这个开关，应该看到开箱即用的名字；
+ * - 变量存在但为空 / 纯空白 → **空串**：用户明确要求品牌位不显示文字。
+ *
+ * 为什么必须区分：不少站点的 Logo 本身就是完整的字标（图形 + 品牌名），再跟一个站点名
+ * 会变成「两个品牌名并排」，所以「只显示 Logo」是真实需求，不能悄悄回落成默认名。
+ */
+function readSiteName(value: string | undefined): string {
+  return value === undefined ? DEFAULT_SITE_NAME : value.trim()
+}
+
 /** 站点自定义配置：任一变量缺失都回落到默认值，不抛错。 */
 export function readSiteConfig(env: EnvGetter): SiteConfig {
   return {
-    name: env('SITE_NAME')?.trim() || DEFAULT_SITE_NAME,
+    name: readSiteName(env('SITE_NAME')),
     logoUrl: optionalUrl(env('SITE_LOGO_URL')),
+    logoUrlDark: optionalUrl(env('SITE_LOGO_URL_DARK')),
     faviconUrl: optionalUrl(env('SITE_FAVICON_URL')),
     refreshIntervalSeconds: clampRefreshIntervalSeconds(env('REFRESH_INTERVAL_SECONDS')),
   }
@@ -796,7 +816,7 @@ export function createAppHandler(env: EnvGetter) {
       }
       return null
     } catch (error) {
-      console.error(`[app] ${request.method} ${url.pathname} failed:`, error)
+      console.error('[app] %s %s failed:', request.method, url.pathname, error)
       return errorResponse(
         500,
         'INTERNAL_ERROR',
