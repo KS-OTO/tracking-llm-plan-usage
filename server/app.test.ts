@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vite-plus/test'
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import { z } from 'zod'
 
 import {
@@ -10,6 +10,7 @@ import {
   REFRESH_INTERVAL_RANGE,
   runAccounts,
 } from './app.ts'
+import { clearQueryCache } from './cache.ts'
 import type { EnvGetter } from './multi.ts'
 
 /** 只提供显式给出的变量；其余一律 undefined（模拟平台面板里没配的样子）。 */
@@ -256,21 +257,59 @@ describe('INCOMPLETE_VARS', () => {
 })
 
 /**
- * 智谱子查询的独立容错（`/api/zhipu/packages`）。
+ * `/api/usage` 的**独立容错**（issue #23 的验收 3）。
  *
- * 上游的 Coding Plan 额度接口对**未订阅**的账号直接返回 `{"success":false,"code":500,
- * "msg":"内部服务器错误"}`，而同一个 Key 查余额、查资源包都是好的。三个子查询若共用一个
- * `Promise.all`，额度这一路失败就会把余额和资源包一起丢掉，卡片只剩一句不知所云的
- * "Internal service error"。这里钉住：额度失败只降级额度，其余照常返回。
- */
-/**
- * 账号体的最小契约。
+ * 两件事必须同时成立，测试分两层钉住：
+ * 1. **平台之间**互不牵连 —— 一家上游挂了，信封里其余 9 家照常带数据；
+ * 2. **平台内部**的子查询也互不牵连 —— 智谱的 Coding Plan 额度接口对**未订阅**的账号
+ *    直接返回 `{"success":false,"code":500,"msg":"内部服务器错误"}`，而同一个 Key
+ *    查余额、查资源包都是好的；不切片的话整卡只剩一句不知所云的 "Internal service error"。
  *
- * 切片是判别联合（`{data} | {error}`），而 zod 的 `z.unknown()` / `z.custom()` 会把键判成
- * 可选、union 于是塌成 `{}`，TS 侧拿不到字段。改用 record：既保留「对象」这个运行时校验，
- * 又能让索引签名把字段放出来。
+ * 注：切片是判别联合（`{data} | {error}`），而 zod 的 `z.unknown()` / `z.custom()` 会把键
+ * 判成可选、union 于是塌成 `{}`，TS 侧拿不到字段。改用 record：既保留「对象」这个运行时
+ * 校验，又能让索引签名把字段放出来。
  */
-const ZhipuBody = z.object({ accounts: z.array(z.record(z.string(), z.unknown())) })
+const UsageBody = z.object({ providers: z.record(z.string(), z.record(z.string(), z.unknown())) })
+const AccountsPayload = z.object({ accounts: z.array(z.record(z.string(), z.unknown())) })
+
+/** 打一次 `/api/usage`（可带查询串），返回原始响应。 */
+async function usageRequest(vars: Record<string, string>, search = ''): Promise<Response> {
+  const handler = createAppHandler(envOf(vars))
+  const res = await handler(new Request(`https://app.example.com/api/usage${search}`))
+  if (!res) {
+    throw new Error('/api/usage 必须返回响应')
+  }
+  return res
+}
+
+/** 打一次 `/api/usage`，取出整个 provider 信封。 */
+async function usageProvidersOf(
+  vars: Record<string, string>,
+  search = '',
+): Promise<Record<string, Record<string, unknown>>> {
+  return UsageBody.parse(await (await usageRequest(vars, search)).json()).providers
+}
+
+/** 打一次 `/api/usage`，取出某个 provider 的切片。 */
+async function usageSliceOf(
+  vars: Record<string, string>,
+  provider: string,
+): Promise<Record<string, unknown>> {
+  const slice = (await usageProvidersOf(vars))[provider]
+  if (!slice) {
+    throw new Error(`信封里缺少 provider: ${provider}`)
+  }
+  return slice
+}
+
+/** 从切片里取账号数组（断言它确实是成功切片）。 */
+function accountsOf(slice: Record<string, unknown>): Record<string, unknown>[] {
+  const parsed = AccountsPayload.safeParse(slice.data)
+  if (!parsed.success) {
+    throw new Error(`期望成功切片，实际是: ${JSON.stringify(slice).slice(0, 200)}`)
+  }
+  return parsed.data.accounts
+}
 
 /** 三个智谱子接口各自返回预设响应，按 URL 区分（额度 500，余额与资源包正常）。 */
 function stubZhipuFetch(): void {
@@ -300,22 +339,21 @@ function stubZhipuFetch(): void {
   })
 }
 
-describe('handleZhipu 子查询容错', () => {
-  async function zhipuAccountsOf(vars: Record<string, string>): Promise<Record<string, unknown>[]> {
-    const handler = createAppHandler(envOf(vars))
-    const res = await handler(new Request('https://app.example.com/api/zhipu/packages'))
-    if (!res) {
-      throw new Error('/api/zhipu/packages 必须返回响应')
-    }
-    return ZhipuBody.parse(await res.json()).accounts
-  }
+describe('/api/usage：平台之间与子查询之间的独立容错', () => {
+  /**
+   * 缓存是**模块级**的（这是边缘计费下唯一有意义的粒度），因此它会跨用例存活。
+   * 不在这里清掉的话，某个用例的桩响应会悄悄喂给下一个用例 ——
+   * 症状是「测试单独跑通过、一起跑失败」，而且看起来像是容错逻辑坏了。
+   */
+  beforeEach(() => {
+    clearQueryCache()
+  })
 
-  it('额度接口 500 时，余额与资源包仍然返回（不再整卡失败）', async () => {
+  it('智谱额度接口 500 时，余额与资源包仍然返回（不再整卡失败）', async () => {
     stubZhipuFetch()
     try {
-      const accounts = await zhipuAccountsOf({ ZHIPU_API_KEY: 'test.zhipu-key' })
-      expect(accounts).toHaveLength(1)
-      const account = accounts[0]
+      const slice = await usageSliceOf({ ZHIPU_API_KEY: 'test.zhipu-key' }, 'zhipu')
+      const account = accountsOf(slice)[0]
       expect(account?.codingPlan).toHaveProperty('error')
       expect(account?.balance).toHaveProperty('data')
       expect(account?.packages).toHaveProperty('data')
@@ -327,8 +365,8 @@ describe('handleZhipu 子查询容错', () => {
   it('额度失败的原因要给出可自查的中文提示，而不是上游英文原文', async () => {
     stubZhipuFetch()
     try {
-      const accounts = await zhipuAccountsOf({ ZHIPU_API_KEY: 'test.zhipu-key' })
-      const codingPlan = accounts[0]?.codingPlan
+      const slice = await usageSliceOf({ ZHIPU_API_KEY: 'test.zhipu-key' }, 'zhipu')
+      const codingPlan = accountsOf(slice)[0]?.codingPlan
       if (!codingPlan || typeof codingPlan !== 'object' || !('error' in codingPlan)) {
         throw new Error('额度查询应当以 error 切片的形式返回')
       }
@@ -336,6 +374,162 @@ describe('handleZhipu 子查询容错', () => {
       // 带上「未订阅」这条自查线索，否则用户只能看到一句「内部服务器错误」
       expect(reason).toContain('Coding Plan')
       expect(reason).toContain('未订阅')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('未配置的平台是 NOT_CONFIGURED 切片，且不影响已配置的平台', async () => {
+    stubZhipuFetch()
+    try {
+      const providers = await usageProvidersOf({ ZHIPU_API_KEY: 'test.zhipu-key' })
+
+      // 只配了智谱：其余 9 家全是「未配置」，而不是让整个请求 503
+      expect(providers.deepseek).toStrictEqual({
+        error: '未配置 DEEPSEEK_API_KEY 环境变量',
+        code: 'NOT_CONFIGURED',
+      })
+      expect(providers.zhipu).toHaveProperty('data')
+      // 信封里 10 个 provider 一个都不能少（少一格前端就会静默丢一张卡）
+      expect(Object.keys(providers).toSorted()).toStrictEqual([
+        'aliyun',
+        'baidu',
+        'deepseek',
+        'gitee',
+        'newapi',
+        'openrouter',
+        'plans',
+        'tokenPlan',
+        'volcPlan',
+        'zhipu',
+      ])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('一家上游挂了不影响另一家：智谱成功、DeepSeek 失败', async () => {
+    vi.stubGlobal('fetch', (input: unknown) => {
+      const url = String(input)
+      if (url.includes('api.deepseek.com')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: { message: 'boom' } }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )
+      }
+      const payload = url.includes('/api/monitor/usage/quota/limit')
+        ? { success: false, code: 500, msg: '内部服务器错误' }
+        : url.includes('tokenAccounts/list/my')
+          ? { code: 200, msg: '操作成功', total: 0, rows: [] }
+          : {
+              code: 200,
+              msg: '操作成功',
+              data: { balance: 56.7, availableBalance: 56.7, rechargeAmount: 0, giveAmount: 56.7 },
+            }
+      return Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    })
+    try {
+      const vars = { ZHIPU_API_KEY: 'test.zhipu-key', DEEPSEEK_API_KEY: 'sk-deepseek-key' }
+      const deepseek = await usageSliceOf(vars, 'deepseek')
+      const zhipu = await usageSliceOf(vars, 'zhipu')
+
+      // 容错是**两级**的，这里要同时锁住粒度：
+      // ① provider 级切片仍是成功（`runAccounts` 把账号级失败收敛进 accounts 数组），
+      //    所以一家的账号失败不会把这一格变成错误切片；
+      // ② 失败落在**账号**这一层 —— 前端照常出卡并显示「查询失败」横幅，卡片不会消失。
+      const deepseekAccount = accountsOf(deepseek)[0]
+      expect(typeof deepseekAccount?.error).toBe('string')
+      expect(deepseekAccount?.error).not.toBe('')
+      // 失败账号只带 keyHint/error，成功才有的数据字段一个都不该出现
+      expect(deepseekAccount).not.toHaveProperty('isAvailable')
+      // 隔壁智谱的三个子查询各答各的：这里只关心它没被 DeepSeek 连坐
+      expect(accountsOf(zhipu)[0]?.balance).toHaveProperty('data')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  /**
+   * TTL 缓存是 issue #23 里最直接的省钱杠杆：托管在按**节点生存时间**计费的边缘云上，
+   * 一次刷新只打一次上游墙钟，而不是每次刷新都重新等 10 家平台。
+   */
+  it('缓存命中时上游调用数为 0，手动刷新则绕过缓存', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', (input: unknown) => {
+      calls += 1
+      const payload = String(input).includes('api.deepseek.com')
+        ? {
+            is_available: true,
+            balance_infos: [
+              {
+                currency: 'CNY',
+                total_balance: 12.34,
+                granted_balance: 0,
+                topped_up_balance: 12.34,
+              },
+            ],
+          }
+        : {}
+      return Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    })
+    try {
+      const vars = { DEEPSEEK_API_KEY: 'sk-deepseek-key' }
+      await usageProvidersOf(vars)
+      const afterFirst = calls
+      expect(afterFirst).toBe(1)
+
+      // 第二次：命中缓存 → 一次上游都不打
+      const cached = await usageProvidersOf(vars)
+      expect(calls).toBe(afterFirst)
+      expect(accountsOf(cached.deepseek ?? {})[0]?.isAvailable).toBe(true)
+
+      // `?refresh=1`（手动点刷新）必须拿实时数据，因此绕过缓存读取
+      await usageProvidersOf(vars, '?refresh=1')
+      expect(calls).toBe(afterFirst + 1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  /**
+   * 未配置（provider 级抛出）**不进缓存**。
+   *
+   * 这条比「失败不缓存」更贴近用户：配好 Key 之后**立刻**就该看到数据，
+   * 而不是先吃 60 秒上一次留下的「未配置」空态。
+   */
+  it('未配置不进缓存：补上 Key 后立刻打上游，不用等 TTL 过期', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls += 1
+      return Promise.resolve(
+        new Response(JSON.stringify({ is_available: true, balance_infos: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    })
+    try {
+      // 一个 Key 都没配：`/api/usage` 照常 200，10 家全是 NOT_CONFIGURED，且**零上游调用**
+      const before = await usageSliceOf({}, 'deepseek')
+      expect(before).toHaveProperty('error')
+      expect(before.code).toBe('NOT_CONFIGURED')
+      expect(calls).toBe(0)
+
+      const after = await usageSliceOf({ DEEPSEEK_API_KEY: 'sk-deepseek-key' }, 'deepseek')
+      expect(after).toHaveProperty('data')
+      expect(calls).toBe(1)
     } finally {
       vi.unstubAllGlobals()
     }

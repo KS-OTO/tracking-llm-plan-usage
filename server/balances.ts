@@ -1,10 +1,11 @@
 /**
- * 多家平台的账户余额查询（实现参考开源项目 CC-Switch src-tauri/services/balance.rs）。
+ * OpenRouter 账户余额与密钥元数据（实现参考开源项目 CC-Switch src-tauri/services/balance.rs）。
  *
- * - StepFun:      GET https://api.stepfun.com/v1/accounts → { balance }（CNY）
- * - SiliconFlow:  GET https://api.siliconflow.cn/v1/user/info → { data.totalBalance }（CNY）
- * - OpenRouter:   GET https://openrouter.ai/api/v1/credits → { data: { total_credits, total_usage } }（USD）
- * - Novita AI:    GET https://api.novita.ai/v3/user/balance → { availableBalance }（单位 0.0001 USD）
+ * - `GET https://openrouter.ai/api/v1/credits` → { data: { total_credits, total_usage } }（USD）
+ * - `GET https://openrouter.ai/api/v1/key`     → { data: { label, limit, usage_* } }
+ *
+ * 这里**曾**同时支持 StepFun / SiliconFlow / Novita 三家余额，但它们的唯一入口是
+ * 已废弃的 `/api/extras`（前端从未调用），因此随该端点一并移除（issue #23）。
  */
 import { z } from 'zod'
 
@@ -63,23 +64,6 @@ async function balanceGet(url: string, apiKey: string, provider: string): Promis
   return json
 }
 
-/** StepFun：GET /v1/accounts → balance（CNY）。 */
-export async function fetchStepFunBalance(apiKey: string): Promise<BalanceInfo> {
-  return parseStepFunBalance(
-    await balanceGet('https://api.stepfun.com/v1/accounts', apiKey, 'StepFun'),
-  )
-}
-
-const StepFunBody = z.object({ balance: z.coerce.number().catch(0) })
-
-export function parseStepFunBalance(body: unknown): BalanceInfo {
-  return {
-    provider: 'StepFun 阶跃星辰',
-    balance: safeParse(StepFunBody, body).balance,
-    unit: 'CNY',
-  }
-}
-
 /** 解析失败 → 域错误（避免裸 ZodError 直接暴露给 UI）。 */
 function safeParse<T>(schema: z.ZodType<T>, body: unknown): T {
   const parsed = schema.safeParse(body)
@@ -87,32 +71,6 @@ function safeParse<T>(schema: z.ZodType<T>, body: unknown): T {
     throw new BalanceApiError('InvalidResponse', '响应结构无法解析')
   }
   return parsed.data
-}
-
-/** SiliconFlow：GET /v1/user/info → data.totalBalance（CNY）。 */
-export async function fetchSiliconFlowBalance(apiKey: string): Promise<BalanceInfo> {
-  return parseSiliconFlowBalance(
-    await balanceGet('https://api.siliconflow.cn/v1/user/info', apiKey, 'SiliconFlow'),
-  )
-}
-
-const SiliconFlowBody = z.object({
-  data: z.object({ totalBalance: z.coerce.number().catch(0) }).catch({ totalBalance: 0 }),
-})
-
-export function parseSiliconFlowBalance(body: unknown): BalanceInfo {
-  return {
-    provider: 'SiliconFlow 硅基流动',
-    balance: safeParse(SiliconFlowBody, body).data.totalBalance,
-    unit: 'CNY',
-  }
-}
-
-/** OpenRouter：GET /api/v1/credits → data.total_credits - total_usage（USD）。仅余额（extras 区块用）。 */
-export async function fetchOpenRouterBalance(apiKey: string): Promise<BalanceInfo> {
-  return parseOpenRouterBalance(
-    await balanceGet('https://openrouter.ai/api/v1/credits', apiKey, 'OpenRouter'),
-  )
 }
 
 /** OpenRouter 详细信息（credits + key 元数据合并）。 */
@@ -188,7 +146,33 @@ const OpenRouterBody = z.union([
   OpenRouterData,
 ])
 
+/**
+ * 响应长得像不像 credits（只看字段在不在，不看类型）。
+ *
+ * 字段级容错（每个字段 `.catch(0)`）让 `OpenRouterBody` **永不失败** ——
+ * 少了这道闸，任何合法 JSON（包括 `{"nope":true}`）都会被解析成「余额 0.00」，
+ * 用户看到的是「账户被清零」而不是「这份响应不认识」。
+ * 因此把「像不像 credits」与「个别字段缺不缺」分成两层：前者拒绝，后者兜底。
+ * 上游两个字段始终同时返回，所以这道闸不会误杀。
+ */
+function looksLikeCredits(body: unknown): boolean {
+  const AnyRecord = z.record(z.string(), z.unknown())
+  const flat = AnyRecord.safeParse(body)
+  if (!flat.success) {
+    return false
+  }
+  if ('total_credits' in flat.data || 'total_usage' in flat.data) {
+    return true
+  }
+  // 兼容形态：字段包在 `data` 里
+  const nested = AnyRecord.safeParse(flat.data.data)
+  return nested.success && ('total_credits' in nested.data || 'total_usage' in nested.data)
+}
+
 export function parseOpenRouterBalance(body: unknown): BalanceInfo {
+  if (!looksLikeCredits(body)) {
+    throw new BalanceApiError('InvalidResponse', '响应结构无法解析')
+  }
   const parsed = safeParse(OpenRouterBody, body)
   const data = 'data' in parsed ? parsed.data : parsed
   const total = data.total_credits
@@ -199,23 +183,5 @@ export function parseOpenRouterBalance(body: unknown): BalanceInfo {
     total,
     used,
     unit: 'USD',
-  }
-}
-
-/** Novita AI：GET /v3/user/balance → availableBalance，单位 0.0001 USD。 */
-export async function fetchNovitaBalance(apiKey: string): Promise<BalanceInfo> {
-  return parseNovitaBalance(
-    await balanceGet('https://api.novita.ai/v3/user/balance', apiKey, 'Novita'),
-  )
-}
-
-const NovitaBody = z.object({ availableBalance: z.coerce.number().catch(0) })
-
-export function parseNovitaBalance(body: unknown): BalanceInfo {
-  return {
-    provider: 'Novita AI',
-    balance: safeParse(NovitaBody, body).availableBalance / 10000,
-    unit: 'USD',
-    note: '金额单位 0.0001 USD，已换算',
   }
 }
