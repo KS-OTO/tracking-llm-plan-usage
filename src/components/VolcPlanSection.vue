@@ -20,15 +20,8 @@ import { computed } from 'vue'
 
 import type { InferenceRow, InferenceUsageResponse, VolcPlanResponse } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import {
-  formatDateTime,
-  formatReset,
-  formatTokens,
-  PLAN_WINDOW_LABELS,
-  progressPercentage,
-  progressStatus,
-  ratioOf,
-} from '../utils'
+import { formatCount, formatNumber, formatTokens, progressPercentage } from '../format'
+import { formatDateTime, formatReset, PLAN_WINDOW_LABELS, progressStatus, ratioOf } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -260,8 +253,8 @@ function inferenceOf(keyHint: string): InferenceView {
                     :label="false"
                   />
                   <t-space align="center" justify="space-between" class="window-meta">
-                    <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
-                    <span class="num">{{ window.percent.toFixed(1) }}%</span>
+                    <span class="muted">已用 {{ formatNumber(window.percent) }}%</span>
+                    <span class="num">{{ formatNumber(window.percent) }}%</span>
                   </t-space>
                   <div class="muted window-foot">
                     重置于 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}
@@ -320,6 +313,7 @@ function inferenceOf(keyHint: string): InferenceView {
                     title="请求数"
                     :value="inferenceOf(account.keyHint).totals.requests"
                     separator=","
+                    :decimal-places="0"
                   />
                 </div>
                 <t-input
@@ -340,9 +334,7 @@ function inferenceOf(keyHint: string): InferenceView {
                   <template #inputTokens="{ row }">{{ formatTokens(row.inputTokens) }}</template>
                   <template #outputTokens="{ row }">{{ formatTokens(row.outputTokens) }}</template>
                   <template #totalTokens="{ row }">{{ formatTokens(row.totalTokens) }}</template>
-                  <template #requests="{ row }">{{
-                    row.requests.toLocaleString('zh-CN')
-                  }}</template>
+                  <template #requests="{ row }">{{ formatCount(row.requests) }}</template>
                 </t-table>
                 <t-empty
                   v-if="inferenceOf(account.keyHint).rows.length === 0"
@@ -383,7 +375,9 @@ function inferenceOf(keyHint: string): InferenceView {
                 <span class="num-strong"
                   >{{ formatTokens(window.used) }} / {{ formatTokens(window.quota) }}</span
                 >
-                <span class="num-strong">{{ ratioOf(window.used, window.quota).toFixed(1) }}%</span>
+                <span class="num-strong"
+                  >{{ formatNumber(ratioOf(window.used, window.quota)) }}%</span
+                >
               </t-space>
               <div class="muted window-foot">
                 重置 {{ window.resetTime > 0 ? formatDateTime(window.resetTime) : '—' }}

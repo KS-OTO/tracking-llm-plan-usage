@@ -6,7 +6,7 @@
  */
 import type { BaiduQianfanResponse } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatTokens } from '../utils'
+import { formatCount, formatTokens } from '../format'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -129,7 +129,7 @@ function formatTime(iso: string): string {
                 >
                   <template #model="{ row }">{{ row.model }}</template>
                   <template #tpm="{ row }">
-                    <span class="num">{{ row.tpm.toLocaleString('zh-CN') }}</span>
+                    <span class="num">{{ formatCount(row.tpm) }}</span>
                   </template>
                   <template #paymentTiming="{ row }">
                     {{ row.paymentTiming === 'Postpaid' ? '后付费' : row.paymentTiming }}
@@ -155,10 +155,16 @@ function formatTime(iso: string): string {
           <div v-else class="grid-metrics grid-metrics--pair">
             <t-statistic
               title="量包（近 7 天用量）"
-              :value="formatTokens(account.usage.totalTokens)"
+              :value="account.usage.totalTokens"
+              :format="formatTokens"
             />
-            <t-statistic title="调用次数" :value="account.usage.totalCalls" separator="," />
-            <t-statistic title="活跃服务" :value="account.usage.serviceCount" />
+            <t-statistic
+              title="调用次数"
+              :value="account.usage.totalCalls"
+              separator=","
+              :decimal-places="0"
+            />
+            <t-statistic title="活跃服务" :value="account.usage.serviceCount" :decimal-places="0" />
           </div>
         </div>
       </div>

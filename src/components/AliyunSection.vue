@@ -5,6 +5,7 @@
  * 卡片只留实例计数读数；资源包明细表（总量/剩余/有效期/状态）收进「详情」弹窗。
  */
 import type { AliyunPackagesResponse } from '../types'
+import { roundCount } from '../format'
 import { accountTitle, isFailedAccount } from '../types'
 
 import AccountSection from './AccountSection.vue'
@@ -130,8 +131,16 @@ function availableCount(account: NonNullable<AliyunPackagesResponse['accounts']>
             :max-line="5"
           />
           <div v-else class="grid-metrics grid-metrics--pair">
-            <t-statistic title="资源包实例" :value="account.totalCount ?? 0" />
-            <t-statistic title="可用实例" :value="availableCount(account)" />
+            <t-statistic
+              title="资源包实例"
+              :value="roundCount(account.totalCount ?? 0)"
+              :decimal-places="0"
+            />
+            <t-statistic
+              title="可用实例"
+              :value="roundCount(availableCount(account))"
+              :decimal-places="0"
+            />
           </div>
         </div>
       </div>

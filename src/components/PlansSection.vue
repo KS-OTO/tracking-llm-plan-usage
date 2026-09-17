@@ -14,7 +14,8 @@
  */
 import type { ExtrasPlan, ExtrasPlanGroup } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatDateTime, formatReset, progressPercentage, progressStatus } from '../utils'
+import { formatNumber, progressPercentage } from '../format'
+import { formatDateTime, formatReset, progressStatus } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -104,7 +105,7 @@ function windowRows(account: ExtrasPlan) {
                 {{ WINDOW_LABELS[row.window] ?? row.window }}
               </template>
               <template #percent="{ row }">
-                <span class="num">{{ row.percent.toFixed(1) }}%</span>
+                <span class="num">{{ formatNumber(row.percent) }}%</span>
               </template>
               <template #status="{ row }">
                 <t-tag v-if="row.status" size="small" theme="warning" variant="light-outline">
@@ -149,8 +150,8 @@ function windowRows(account: ExtrasPlan) {
                 :label="false"
               />
               <t-space align="center" justify="space-between" class="window-meta">
-                <span class="muted">已用 {{ window.percent.toFixed(1) }}%</span>
-                <span class="num-strong">{{ window.percent.toFixed(1) }}%</span>
+                <span class="muted">已用 {{ formatNumber(window.percent) }}%</span>
+                <span class="num-strong">{{ formatNumber(window.percent) }}%</span>
               </t-space>
               <div v-if="window.status" class="muted window-foot">
                 {{ windowStatusNote(window.status) }}
