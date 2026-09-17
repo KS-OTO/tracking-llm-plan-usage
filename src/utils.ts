@@ -78,6 +78,68 @@ export function windowContainerClass(count: number): string {
 }
 
 /**
+ * 状态串 → 标签配色（#20）。
+ *
+ * 收敛的理由：改之前 4 个组件各写一份 `statusTheme()`，词表还互不相同
+ * （Baidu 认 Active/Running，TokenPlan 只认 NORMAL，Aliyun 只认 Available）——
+ * 同一个 `Expired` 在百度那里是 warning、在模力方舟那里没被收录，于是显示成灰色。
+ *
+ * 这里维护**一份共享词表**：认得的健康词给 success、停用词给 warning、
+ * 不认识的给 default（中性灰）。不认识的**不猜** —— 把没见过的状态染成红色
+ * 等于编造故障信号，而灰色只是「暂未归类」。
+ */
+const HEALTHY_STATUS = new Set([
+  'AVAILABLE',
+  'ACTIVE',
+  'RUNNING',
+  'NORMAL',
+  'EFFECTIVE',
+  'ENABLE',
+  'ENABLED',
+  'OK',
+  'SUCCESS',
+  'USING',
+  '可用',
+  '正常',
+  '使用中',
+  '运行中',
+  '已开通',
+  '生效中',
+  '套餐内',
+])
+
+const INACTIVE_STATUS = new Set([
+  'EXPIRED',
+  'EXHAUSTED',
+  'STOPPED',
+  'DISABLED',
+  'DISABLE',
+  'NOT_OPEN',
+  'NOTUSED',
+  'DELETED',
+  'FAILED',
+  'ERROR',
+  '已过期',
+  '已用尽',
+  '已停止',
+  '已关闭',
+  '未开通',
+  '套餐外',
+  '上游限流中',
+])
+
+export function statusTheme(status: string): 'success' | 'warning' | 'default' {
+  const key = status.trim().toUpperCase()
+  if (HEALTHY_STATUS.has(key)) {
+    return 'success'
+  }
+  if (INACTIVE_STATUS.has(key)) {
+    return 'warning'
+  }
+  return 'default'
+}
+
+/**
  * 平台名 → 锚点 slug（跨组件共享，保证「跳转方」与「落点方」用同一套命名）。
  *
  * 订阅套餐按平台拆卡后，每张卡一个锚点：`anchor-plans-<slug>`。

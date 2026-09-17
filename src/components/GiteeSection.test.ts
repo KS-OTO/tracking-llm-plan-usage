@@ -68,7 +68,9 @@ describe('GiteeSection', () => {
       props: { data: fixture, loading: false, error: null },
     })
     const detail = await openDetail(wrapper)
-    expect(detail).toContain('代金券（demo-ns）')
+    // 分节标题由 DetailSection 统一拼计数（`代金券 · demo-ns（1）`）：
+    // 命名空间用 `·` 而不是再套一层括号，否则会变成「（demo-ns）（1）」两个括号叠着
+    expect(detail).toContain('代金券 · demo-ns（1）')
     expect(detail).toContain('现金代金券余额')
     expect(detail).toContain('333.13')
     expect(detail).toContain('黑客松奖品券')

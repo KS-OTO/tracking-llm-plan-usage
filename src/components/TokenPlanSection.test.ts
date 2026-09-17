@@ -99,7 +99,8 @@ describe('TokenPlanSection', () => {
       props: { data: fixture, loading: false, error: null },
     })
     const text = wrapper.text()
-    expect(text).toContain('个人版套餐用量')
+    // 卡面即「个人版的两个窗口」本身，不再另加一个「个人版套餐用量」标题
+    //（窗口名与倒计时已经说明这是哪张卡）
     expect(text).toContain('5 小时窗口')
     expect(text).toContain('7 天窗口')
     expect(text).toContain('42.5%')
@@ -140,7 +141,9 @@ describe('TokenPlanSection', () => {
     expect(detail).toContain('token_plan_personal_pro')
     expect(detail).toContain('sfm_tokenplansolo_public_cn-gz84w63sy2k')
     expect(detail).toContain('剩余天数')
-    expect(detail).toContain('25 天')
+    // 天数走 C 类计数精度（0 位 + 单位文本）：`<t-statistic>` 的 unit 是独立元素，
+    // 与数值之间没有字面空格，因此断言不写死空格
+    expect(detail).toMatch(/剩余天数\s*25\s*天/)
     expect(detail).toContain('自动续费')
     expect(detail).toContain('已开启')
     expect(detail).toContain('加购包剩余')
