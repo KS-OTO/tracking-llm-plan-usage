@@ -12,7 +12,7 @@
  *
  * 卡片只保留高优先级信息：窗口进度条 + 上游异常状态；账号身份与窗口明细收进「详情」弹窗。
  */
-import type { ExtrasPlan, ExtrasPlanGroup } from '../types'
+import type { PlanAccountUsage, PlanGroup } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
 import { formatNumber, progressPercentage } from '../format'
 import { formatDateTime, formatReset, progressStatus } from '../utils'
@@ -22,7 +22,7 @@ import DetailDialog from './DetailDialog.vue'
 
 defineProps<{
   /** 单个平台的账号分组（App.vue 按平台展开，一个平台一个网格单元）。 */
-  group: ExtrasPlanGroup
+  group: PlanGroup
 }>()
 
 const WINDOW_LABELS: Record<string, string> = {
@@ -65,7 +65,7 @@ const windowColumns = [
   { colKey: 'resetAt', title: '重置时间', width: 180, cell: 'resetAt' },
 ]
 
-function windowRows(account: ExtrasPlan) {
+function windowRows(account: PlanAccountUsage) {
   return account.windows.map((window) => Object.assign({}, window, { _key: window.window }))
 }
 </script>

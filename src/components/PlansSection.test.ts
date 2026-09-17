@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vite-plus/test'
 import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
 import PlansSection from './PlansSection.vue'
-import type { ExtrasPlanGroup } from '../types'
+import type { PlanGroup } from '../types'
 
-const openCode: ExtrasPlanGroup = {
+const openCode: PlanGroup = {
   provider: 'OpenCode Go',
   accounts: [
     {
@@ -175,7 +175,7 @@ describe('PlansSection', () => {
 
   it('wraps the stacked windows in .window-list so parallel accounts line up', () => {
     // 两个账号各 3 个窗口：其中一个多一行「上游限流」说明
-    const group: ExtrasPlanGroup = {
+    const group: PlanGroup = {
       provider: 'OpenCode Go',
       accounts: [
         {
