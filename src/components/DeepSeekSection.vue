@@ -10,7 +10,8 @@
  */
 import type { DeepSeekBalanceResponse } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { currencySymbol, formatMoney, truncateMoney } from '../format'
+import { currencySymbol, formatCurrency, truncateMoney } from '../format'
+import { metricGridClass } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -69,21 +70,21 @@ defineProps<{
                   :key="`total-${entry.currency}`"
                   :label="`${entry.currency} 总余额`"
                 >
-                  {{ formatMoney(entry.total, entry.currency) }}
+                  {{ formatCurrency(entry.total, entry.currency) }}
                 </t-descriptions-item>
                 <t-descriptions-item
                   v-for="entry in account.balances"
                   :key="`topup-${entry.currency}`"
                   :label="`${entry.currency} 充值`"
                 >
-                  {{ formatMoney(entry.toppedUp, entry.currency) }}
+                  {{ formatCurrency(entry.toppedUp, entry.currency) }}
                 </t-descriptions-item>
                 <t-descriptions-item
                   v-for="entry in account.balances"
                   :key="`granted-${entry.currency}`"
                   :label="`${entry.currency} 赠金`"
                 >
-                  {{ formatMoney(entry.granted, entry.currency) }}
+                  {{ formatCurrency(entry.granted, entry.currency) }}
                 </t-descriptions-item>
               </t-descriptions>
             </DetailDialog>
@@ -96,11 +97,11 @@ defineProps<{
             :message="account.error"
             :max-line="5"
           />
-          <div v-else class="grid-metrics grid-metrics--pair">
+          <div v-else :class="metricGridClass(account.balances.length)">
             <t-statistic
               v-for="entry in account.balances"
               :key="entry.currency"
-              :title="`${entry.currency} 总余额`"
+              title="总余额"
               :value="truncateMoney(entry.total)"
               :decimal-places="2"
               :unit="currencySymbol(entry.currency)"

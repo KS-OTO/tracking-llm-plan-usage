@@ -11,7 +11,8 @@ import type {
   GiteeVoucherSlice,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatMoney, formatTokens, truncateMoney } from '../format'
+import { currencySymbol, formatCurrency, formatTokens, truncateMoney } from '../format'
+import { metricGridClass } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -22,6 +23,9 @@ defineProps<{
   error: string | null
   notConfigured?: boolean
 }>()
+
+/** 模力方舟的读数一律 CNY，卡面按统一规则只显示**符号**（#19）。 */
+const UNIT = currencySymbol('CNY')
 
 const columns = [
   { colKey: 'name', title: '资源包', width: 160, cell: 'name' },
@@ -101,8 +105,8 @@ function formatDate(ms: number): string {
                 size="small"
               >
                 <template #name="{ row }">{{ row.name || row.ident || '未命名资源包' }}</template>
-                <template #amount="{ row }">{{ formatMoney(row.amount, 'CNY') }}</template>
-                <template #balance="{ row }">{{ formatMoney(row.balance, 'CNY') }}</template>
+                <template #amount="{ row }">{{ formatCurrency(row.amount, 'CNY') }}</template>
+                <template #balance="{ row }">{{ formatCurrency(row.balance, 'CNY') }}</template>
               </t-table>
               <t-empty v-else description="没有资源包" />
 
@@ -123,17 +127,18 @@ function formatDate(ms: number): string {
                   :max-line="5"
                 />
                 <template v-else-if="voucherOk(account.voucher)">
-                  <div class="grid-metrics detail-block">
+                  <div class="detail-block" :class="metricGridClass(2)">
                     <t-statistic
                       title="现金代金券余额"
                       :value="truncateMoney(account.voucher.data.couponCashBalance)"
                       :decimal-places="2"
-                      unit="CNY"
+                      :unit="UNIT"
                     />
                     <t-statistic
                       title="算力代金券余额"
                       :value="account.voucher.data.couponComputeBalance"
                       :format="formatTokens"
+                      unit="token"
                     />
                   </div>
 
@@ -149,8 +154,8 @@ function formatDate(ms: number): string {
                       <div>{{ row.catalog }}</div>
                       <div class="muted text-narrow">{{ row.serviceTypes.join(' / ') }}</div>
                     </template>
-                    <template #amount="{ row }">{{ formatMoney(row.amount, 'CNY') }}</template>
-                    <template #balance="{ row }">{{ formatMoney(row.balance, 'CNY') }}</template>
+                    <template #amount="{ row }">{{ formatCurrency(row.amount, 'CNY') }}</template>
+                    <template #balance="{ row }">{{ formatCurrency(row.balance, 'CNY') }}</template>
                     <template #expiredAt="{ row }">{{ formatDate(row.expiredAt) }}</template>
                     <template #status="{ row }">
                       <t-tag size="small" variant="light-outline" :theme="voucherStatus(row).theme">
@@ -171,24 +176,24 @@ function formatDate(ms: number): string {
             :message="account.error"
             :max-line="5"
           />
-          <div v-else class="grid-metrics grid-metrics--pair">
+          <div v-else :class="metricGridClass(3)">
             <t-statistic
               title="剩余余额"
               :value="truncateMoney(account.balance)"
               :decimal-places="2"
-              unit="¥"
+              :unit="UNIT"
             />
             <t-statistic
               title="已使用"
               :value="truncateMoney(account.usedAmount)"
               :decimal-places="2"
-              unit="¥"
+              :unit="UNIT"
             />
             <t-statistic
               title="总金额"
               :value="truncateMoney(account.totalAmount)"
               :decimal-places="2"
-              unit="¥"
+              :unit="UNIT"
             />
           </div>
         </div>

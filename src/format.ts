@@ -15,16 +15,18 @@
  * 它会原样输出 0–20 位小数）。
  */
 
-/** 数值语义类别。 */
-export type MetricKind = 'money' | 'number' | 'count'
+import type { Metric, MetricKind } from './types'
 
-/** 带语义的数值。精度在这里声明一次，渲染层只读 `formatMetric` 的结果。 */
-export interface Metric {
-  kind: MetricKind
-  value: number | null | undefined
-  /** 展示用单位（货币符号 / 「次」/ 「tokens」…）；为空则只输出数值。 */
-  unit?: string | undefined
-}
+/** 数值语义类别。定义在 `types.ts` 的统一模型里，这里只重导出，**不另立一份**。 */
+export type { MetricKind }
+
+/**
+ * 格式化器接受的读数：只关心「怎么格式化」这三项。
+ *
+ * 用 `Pick` 而不是 `Metric` 全量：`key` / `label` 是展示层的事，与精度无关，
+ * 单测与表格单元格这类只取值文本的场合不必为此凑齐字段。
+ */
+export type FormattableMetric = Pick<Metric, 'kind' | 'value' | 'unit'>
 
 /** 数值缺位时的中性占位。 */
 export const EMPTY_VALUE = '—'
@@ -116,14 +118,37 @@ export function formatTokens(value: number): string {
   return String(value)
 }
 
+/**
+ * 按语义取出**数值文本**（不含单位）。
+ *
+ * 单位是**独立元素**（#19）：数值与单位拆成两个节点，数值仍是纯数字 ——
+ * 可以整段复制、也可以被断言，不会和单位粘成一个字符串。
+ * 需要「值 + 单位」一整个字符串的场合（表格单元格、`hint` 文案）用 `formatMetric`。
+ */
+export function metricValueText(metric: Pick<Metric, 'kind' | 'value'>): string {
+  const { kind, value } = metric
+  if (kind === 'text' || kind === 'duration') {
+    return typeof value === 'string' && value !== '' ? value : EMPTY_VALUE
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return EMPTY_VALUE
+  }
+  if (kind === 'money') {
+    return formatMoney(value)
+  }
+  if (kind === 'tokens') {
+    return formatTokens(value)
+  }
+  if (kind === 'count') {
+    return formatCount(value)
+  }
+  // percent：比率类一律 1 位四舍五入
+  return formatNumber(value)
+}
+
 /** 按语义格式化，`unit` 拼在数值后（渲染层不再碰数字）。 */
-export function formatMetric(metric: Metric): string {
-  const text =
-    metric.kind === 'money'
-      ? formatMoney(metric.value)
-      : metric.kind === 'count'
-        ? formatCount(metric.value)
-        : formatNumber(metric.value)
+export function formatMetric(metric: FormattableMetric): string {
+  const text = metricValueText(metric)
   if (text === EMPTY_VALUE) {
     return EMPTY_VALUE
   }

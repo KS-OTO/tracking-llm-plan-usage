@@ -36,9 +36,45 @@ export function formatDateTime(ms: number): string {
 
 export const PLAN_WINDOW_LABELS: Record<string, string> = {
   fiveHour: '5 小时窗口',
-  daily: '每日',
-  weekly: '每周',
-  monthly: '每月',
+  daily: '每日窗口',
+  weekly: '每周窗口',
+  monthly: '每月窗口',
+}
+
+/**
+ * 上游窗口状态的展示文案；未收录的状态**原样回退**显示，不隐藏信息。
+ *
+ * 放在这里而不是组件里：`.window-head` 上的状态标签由统一用量条渲染，
+ * 谁能给出状态、谁能翻译状态必须是同一份映射，否则加了新平台又要在两处各写一遍。
+ */
+const WINDOW_STATUS_LABELS: Record<string, string> = {
+  'rate-limited': '上游限流中',
+}
+
+export function windowStatusLabel(status: string): string {
+  return WINDOW_STATUS_LABELS[status] ?? status
+}
+
+/** 状态标签的解释文案（脚注行用）；与 `windowStatusLabel` 成对维护。 */
+export function windowStatusNote(status: string): string {
+  return status === 'rate-limited'
+    ? '该窗口已被上游限流，期间的请求可能被拒绝；百分比仍为已用额度'
+    : `上游返回的窗口状态：${status}`
+}
+
+/**
+ * 窗口区容器：由**窗口个数**决定，不由平台决定（#18）。
+ *
+ * | 窗口数 | 容器                | 理由                     |
+ * | ------ | ------------------- | ------------------------ |
+ * | 1–2 个 | `.grid-metrics(--2)` | 并排等宽，读数好对比     |
+ * | ≥3 个  | `.window-list`       | 纵向等分，跨账号逐行对齐 |
+ *
+ * 这条规则同时消灭了「同一张卡里混用两种容器」——历史上 `NewApiSection` 就是
+ * 一张卡里用了一半 `.window-list`、一半 `.window-block` 网格，两处节奏不同。
+ */
+export function windowContainerClass(count: number): string {
+  return count >= 3 ? 'window-list' : metricGridClass(count)
 }
 
 /**
@@ -55,6 +91,27 @@ export function providerSlug(provider: string): string {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'unknown'
   )
+}
+
+/**
+ * 读数个数 → 读数网格的变体 class（#19）。
+ *
+ * 列数由**读数个数**声明，不由容器宽度偶然决定。改之前 `.grid-metrics--pair` 是按容器宽度
+ * auto-fit 的，于是同一对读数（可用余额 / 账户余额）在半宽卡里 2 列、换到整行卡就变 3 列 ——
+ * 列数没有语义依据，用户看到的是「有些一行 2 个、有些一行 3 个」。
+ *
+ * 做成函数而不是让模板各自挑 class：变体名只在这里出现一次，加一个新变体不必 grep 十个组件。
+ * 与 CSS 的对应关系见 `layout.css` 第 2 节。
+ */
+export function metricGridClass(count: number): string {
+  if (count === 2) {
+    return 'grid-metrics grid-metrics--2'
+  }
+  if (count === 3) {
+    return 'grid-metrics grid-metrics--3'
+  }
+  // 1 个、4 个及以上：数量不定，交给 auto-fit 按可用宽度铺满
+  return 'grid-metrics'
 }
 
 /**
