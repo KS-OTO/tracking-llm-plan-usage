@@ -14,7 +14,7 @@
  */
 import type { ExtrasPlan, ExtrasPlanGroup } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatDateTime, formatReset, progressStatus } from '../utils'
+import { formatDateTime, formatReset, progressPercentage, progressStatus } from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -144,7 +144,7 @@ function windowRows(account: ExtrasPlan) {
                 <span class="muted">{{ formatReset(window.resetTime) }}</span>
               </t-space>
               <t-progress
-                :percentage="Math.round(Math.min(100, window.percent))"
+                :percentage="progressPercentage(window.percent)"
                 :status="progressStatus(window.percent)"
                 :label="false"
               />

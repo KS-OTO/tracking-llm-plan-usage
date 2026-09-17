@@ -10,6 +10,26 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import { createAppHandler } from './server/app.ts'
 
 /**
+ * 开发模式下服务端读到的环境变量：本机 `.env` 打底，`process.env` 覆盖。
+ *
+ * `SKIP_DOTENV=1` 时**完全跳过** `.env` 文件，只认 `process.env` —— E2E 密封环境用
+ * （见 playwright.config.ts 的 hermeticEnv）。
+ *
+ * 密封环境为什么必须绕过 `.env`，而不是像以前那样「把变量逐个置空」：
+ * 站点自定义里**空串是有含义的** —— `SITE_NAME=` 表示「品牌位只显示 Logo」，
+ * 于是「置空」这个动作同时表达了两件互斥的事：测试想说的是「没配过」，
+ * 服务端读到的是「显式留空」。结果 E2E 里断言默认站点名会莫名其妙地找不到元素
+ * （`LLM 用量监控` 从未渲染），而报错位置离这里很远。跳过文件后，
+ * 「没配」才真的等于 `undefined`。
+ */
+function resolveServerEnv(): Record<string, string | undefined> {
+  if (process.env.SKIP_DOTENV === '1') {
+    return { ...process.env }
+  }
+  return { ...loadEnv(process.cwd(), '', ''), ...process.env }
+}
+
+/**
  * 开发模式内置 API 服务：把 server/app.ts 挂进 Vite dev server，
  * `vp dev` 单进程即可同时提供前端与 /api/*，无需另开后端。
  */
@@ -17,7 +37,7 @@ function apiMiddleware(): Plugin {
   return {
     name: 'llm-usage-api',
     configureServer(server) {
-      const env = { ...loadEnv(process.cwd(), '', ''), ...process.env }
+      const env = resolveServerEnv()
       const handler = createAppHandler((key) => env[key])
       server.middlewares.use((req, res, next) => {
         if (!req.url || !req.url.startsWith('/api/')) {

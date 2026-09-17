@@ -5,7 +5,9 @@ import {
   formatReset,
   formatTokens,
   maskKey,
+  pickLogoUrl,
   platformInitial,
+  progressPercentage,
   progressStatus,
   ratioOf,
   sortPlatformSections,
@@ -98,6 +100,51 @@ describe('progressStatus', () => {
   it('maps critical usage to error (desktop Progress has no danger)', () => {
     expect(progressStatus(90)).toBe('error')
     expect(progressStatus(100)).toBe('error')
+  })
+})
+
+describe('progressPercentage', () => {
+  it('rounds the raw ratio so <t-progress> does not print raw decimals', () => {
+    // New API 的订阅窗口算出来是 34.0101024，直接喂给 <t-progress> 会渲染成
+    // "34.0101024%" —— 这是实测报上来的症状
+    expect(progressPercentage(34.0101024)).toBe(34)
+    expect(progressPercentage(0.4)).toBe(0)
+    expect(progressPercentage(99.5)).toBe(100)
+  })
+
+  it('clamps into 0-100 in both directions', () => {
+    expect(progressPercentage(140)).toBe(100)
+    expect(progressPercentage(-3)).toBe(0)
+  })
+})
+
+describe('pickLogoUrl', () => {
+  const both = {
+    logoUrl: 'https://cdn.example.com/light.png',
+    logoUrlDark: 'https://cdn.example.com/dark.png',
+  }
+  const lightOnly = { logoUrl: both.logoUrl, logoUrlDark: null }
+  const none = { logoUrl: null, logoUrlDark: null }
+
+  it('picks the image that matches the theme', () => {
+    expect(pickLogoUrl(both, false, new Set())).toBe(both.logoUrl)
+    expect(pickLogoUrl(both, true, new Set())).toBe(both.logoUrlDark)
+  })
+
+  it('falls back to the light logo when no dark logo is configured', () => {
+    // 服务端不做镜像（logoUrlDark 缺失就是 null），回落由这里负责
+    expect(pickLogoUrl(lightOnly, true, new Set())).toBe(both.logoUrl)
+  })
+
+  it('falls back to the other one when the preferred image failed to load', () => {
+    expect(pickLogoUrl(both, true, new Set([both.logoUrlDark]))).toBe(both.logoUrl)
+    expect(pickLogoUrl(both, false, new Set([both.logoUrl]))).toBe(both.logoUrlDark)
+  })
+
+  it('returns null only when neither candidate is usable', () => {
+    expect(pickLogoUrl(none, false, new Set())).toBeNull()
+    expect(pickLogoUrl(none, true, new Set())).toBeNull()
+    expect(pickLogoUrl(both, true, new Set([both.logoUrl, both.logoUrlDark]))).toBeNull()
   })
 })
 

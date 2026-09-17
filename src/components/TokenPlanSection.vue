@@ -14,7 +14,13 @@ import type {
   TokenPlanSharedPackage,
 } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatDateTime, formatReset, formatTokens, progressStatus } from '../utils'
+import {
+  formatDateTime,
+  formatReset,
+  formatTokens,
+  progressPercentage,
+  progressStatus,
+} from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -315,7 +321,7 @@ function packageRows(packages: TokenPlanSharedPackage[] | null) {
                   <span class="muted">{{ formatReset(item.resetTime) }}</span>
                 </t-space>
                 <t-progress
-                  :percentage="Math.round(Math.min(100, item.percent))"
+                  :percentage="progressPercentage(item.percent)"
                   :status="progressStatus(item.percent)"
                   :label="false"
                 />

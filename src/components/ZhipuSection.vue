@@ -9,7 +9,13 @@
 import { computed } from 'vue'
 import type { ZhipuPackagesResponse } from '../types'
 import { accountTitle, isFailedAccount } from '../types'
-import { formatDateTime, formatReset, formatTokens, progressStatus } from '../utils'
+import {
+  formatDateTime,
+  formatReset,
+  formatTokens,
+  progressPercentage,
+  progressStatus,
+} from '../utils'
 
 import AccountSection from './AccountSection.vue'
 import DetailDialog from './DetailDialog.vue'
@@ -208,7 +214,7 @@ const packageRowsByHint = computed(() => {
                   <span class="muted">{{ formatReset(window.nextResetTime) }}</span>
                 </t-space>
                 <t-progress
-                  :percentage="Math.round(Math.min(100, window.percentage))"
+                  :percentage="progressPercentage(window.percentage)"
                   :status="progressStatus(window.percentage)"
                   :label="false"
                 />
