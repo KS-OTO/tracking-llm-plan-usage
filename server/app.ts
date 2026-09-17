@@ -380,6 +380,10 @@ export function createAppHandler(env: EnvGetter) {
     ...readIncompletePairs('VOLC_ACCESS_KEY_ID', 'VOLC_SECRET_KEY', env),
     ...readIncompletePairs('ALIYUN_ACCESS_KEY_ID', 'ALIYUN_SECRET_KEY', env),
     ...readIncompletePairs('BAIDU_ACCESS_KEY_ID', 'BAIDU_SECRET_KEY', env),
+    // New API 也必须进来：只配站点地址、忘了配令牌时，这张卡是**整个消失**的
+    // （`readKeyPairs` 遇到不成对就整对丢弃），页面上既没有错误也没有空状态，
+    // 用户能看到的只有「少了一张卡」。实测本机就因为变量改过名而踩过一次。
+    ...readIncompletePairs('NEWAPI_BASE_URL', 'NEWAPI_TOKEN', env),
   ]
 
   // ---------------------------------------------------------------------------

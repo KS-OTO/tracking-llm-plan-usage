@@ -217,6 +217,12 @@ describe('shouldFallbackToBilling', () => {
     expect(shouldFallbackToBilling(new NewApiError('x', 'y', 500))).toBe(false)
     expect(shouldFallbackToBilling(new Error('boom'))).toBe(false)
   })
+
+  it('账号被停用的 401 不回落：令牌是被认出来的，落下去只会换个更含糊的结论', () => {
+    expect(
+      shouldFallbackToBilling(new NewApiError('AUTH_USER_DISABLED', 'User has been banned', 401)),
+    ).toBe(false)
+  })
 })
 
 describe('fetchNewApi', () => {
@@ -381,6 +387,30 @@ describe('fetchNewApi', () => {
     expect(result.wallet).toMatchObject({ total: 50, used: 12.345 })
     expect(result.wallet?.remain).toBeCloseTo(37.655, 6)
     expect(calls.some((url) => url.includes('/v1/dashboard/billing/'))).toBe(true)
+  })
+
+  it('账号被停用时直说原因，而不是透出账单接口那句 Invalid token', async () => {
+    const calls: string[] = []
+    stubFetch(
+      {
+        '/api/user/self': () =>
+          jsonResponse(
+            { code: 'AUTH_USER_DISABLED', message: 'User has been banned', success: false },
+            401,
+          ),
+        // 若误回落，这里会返回一句没有信息量的 Invalid token 把真因盖掉
+        'billing/subscription': () =>
+          jsonResponse({ error: { message: 'Invalid token', type: 'new_api_error' } }, 401),
+        'billing/usage': () => jsonResponse({ total_usage: 0 }),
+      },
+      calls,
+    )
+
+    await expect(
+      fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' }),
+    ).rejects.toThrow(/账号被禁用/)
+
+    expect(calls.some((url) => url.includes('billing'))).toBe(false)
   })
 
   it('网络异常直接抛出，不静默降级', async () => {
