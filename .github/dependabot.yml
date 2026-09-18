@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # 前端与工具链依赖
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      # 一起升级、一起跑门禁，避免十几个 PR 互相踩
+      dev-dependencies:
+        dependency-type: development
+      tdesign:
+        patterns:
+          - 'tdesign-*'
+      vue:
+        patterns:
+          - 'vue'
+          - 'vue-router'
+          - 'pinia'
+          - '@vue/*'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'chore(ci)'
