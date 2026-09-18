@@ -18,13 +18,29 @@ updates:
     groups:
       # 一起升级、一起跑门禁，避免十几个 PR 互相踩。
       #
-      # 但**只组 minor + patch**：把 major 也塞进来会得到一个没法审的巨型 PR。
-      # 实测过一次：dev-dependencies 组一口气带了 typescript 6→7、@types/node 24→26、
-      # jsdom 29→30、vite-plus 0.2.7→0.3.2 共 12 项，CI 直接报
-      # 「Cannot find native binding」（vite-plus 的原生绑定没解析上）。
-      # major 走单独 PR，才能一个一个看、一个一个升。
+      # 但**只组语义同质的升级**，两类必须排除在外：
+      #
+      # ① major：塞进来会得到一个没法审的巨型 PR。
+      # ② 「工具链 + 原生绑定」捆绑包：`vite-plus` 实测栽过两次（PR #32 / #37）。
+      #    它 0.2.7→0.3.2 在 semver 里算 minor，但 0.x 的 minor 实际就是 breaking ——
+      #    升上去后 `vp test` 起不来，CI 报「Cannot find native binding」
+      #    （原生绑定没解析上），红在**第一道**门禁。
+      #    它跟一堆 patch 混在一起时，既定位不到、也没法单独回滚，
+      #    还会连累同一组里另外 7 个本来能过的升级。
+      #
+      # 做法：先把 `vite-plus` 从兜底组里 exclude，再给它单开一组。
+      # 只靠「组顺序」区分并不可靠，显式 exclude 才没有歧义。
       minor-and-patch:
         # 不分 dependency-type：生产依赖的补丁升级同样值得合进来
+        update-types:
+          - minor
+          - patch
+        exclude-patterns:
+          - 'vite-plus'
+      # 工具链 + 原生绑定捆绑包：单独成组 = 单独评审、单独回滚。
+      toolchain:
+        patterns:
+          - 'vite-plus'
         update-types:
           - minor
           - patch
@@ -43,6 +59,12 @@ updates:
         update-types:
           - minor
           - patch
+
+    # 已知阻塞（2026-09-18 记）：`typescript` 7.x 目前升不了。
+    # `vue-tsc` 内部要 require `typescript/lib/tsc`，而 TS 7（Go 版）不再导出该子路径，
+    # 门禁第二道 `type-check` 直接报 ERR_PACKAGE_PATH_NOT_EXPORTED（见已关闭的 PR #39）。
+    # 这里**故意不加 ignore**：让后续的 7.x 再开一个 PR，当作「vue-tsc 跟上了吗」的提醒。
+    # 真要升级，先确认 vue-tsc 已支持 TS 7。
 
   - package-ecosystem: github-actions
     directory: /
