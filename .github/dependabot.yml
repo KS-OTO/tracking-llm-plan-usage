@@ -16,18 +16,33 @@ updates:
     commit-message:
       prefix: 'chore(deps)'
     groups:
-      # 一起升级、一起跑门禁，避免十几个 PR 互相踩
-      dev-dependencies:
-        dependency-type: development
+      # 一起升级、一起跑门禁，避免十几个 PR 互相踩。
+      #
+      # 但**只组 minor + patch**：把 major 也塞进来会得到一个没法审的巨型 PR。
+      # 实测过一次：dev-dependencies 组一口气带了 typescript 6→7、@types/node 24→26、
+      # jsdom 29→30、vite-plus 0.2.7→0.3.2 共 12 项，CI 直接报
+      # 「Cannot find native binding」（vite-plus 的原生绑定没解析上）。
+      # major 走单独 PR，才能一个一个看、一个一个升。
+      minor-and-patch:
+        # 不分 dependency-type：生产依赖的补丁升级同样值得合进来
+        update-types:
+          - minor
+          - patch
       tdesign:
         patterns:
           - 'tdesign-*'
+        update-types:
+          - minor
+          - patch
       vue:
         patterns:
           - 'vue'
           - 'vue-router'
           - 'pinia'
           - '@vue/*'
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
