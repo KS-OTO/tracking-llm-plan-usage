@@ -1,11 +1,31 @@
 # LLM 用量监控（tracking-llm-plan-usage）
 
+[![CI](https://github.com/KS-OTO/tracking-llm-plan-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/KS-OTO/tracking-llm-plan-usage/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Bun](https://img.shields.io/badge/Bun-1.2%2B-black?logo=bun)](https://bun.sh)
+[![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org)
+[![TDesign Vue Next](https://img.shields.io/badge/TDesign-Vue%20Next-0052d9)](https://tdesign.tencent.com/vue-next/)
+[![Node](https://img.shields.io/badge/Node-%5E22.18%20%7C%7C%20%3E%3D24.12-339933?logo=node.js&logoColor=white)](package.json)
+
 开源网页工具：在一个页面集中查看 DeepSeek、火山方舟、智谱、阿里云、模力方舟、百度千帆、OpenRouter、New API（自托管网关）及订阅套餐（Kimi / MiniMax / OpenCode Go）的余额与用量。
 只需在环境变量中配置各家 API Key / Access Key，无需任何其他操作。
 
 技术栈：Bun + Vue 3 + Vite（Vite+ 工具链：Oxfmt / Oxlint / tsgolint 严格类型检查 / Vitest / Rolldown 构建），
 状态管理 Pinia，数据校验 Zod（前后端 JSON 边界统一 schema 校验）。
 UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应式 Grid 多列布局；适老化字号基线）。
+
+![套餐订阅：窗口用量条与多 Key 并列](docs/images/plans-dark.png)
+
+<sub>上图与实际界面一致，**数据是截图中注入的假数据**（`docs/images/` 由脚本用 mock 负载渲染，不含任何真实账号信息）。
+同一屏的浅色主题见 [`plans-light.png`](docs/images/plans-light.png)，「余额账户」Tab 见 [`accounts-dark.png`](docs/images/accounts-dark.png)。</sub>
+
+## 目录
+
+- [功能](#功能) · [对外接口只有 3 个](#对外接口只有-3-个) · [快速开始](#快速开始)
+- [部署](#部署到-cloudflare-workers)：[Cloudflare Workers](#部署到-cloudflare-workers) / [EdgeOne Makers](#部署到-edgeone-makers) / [其他平台](#部署到其他平台vercel-等)
+- [环境变量](#环境变量) · [多账号支持](#多账号支持) · [站点自定义](#站点自定义站点名--logo--favicon--刷新间隔)
+- [常用命令](#常用命令) · [目录结构](#目录结构) · [参考文档](#参考文档)
+- [安全](#安全) · [贡献](#贡献) · [许可证](#许可证)
 
 ## 功能
 
@@ -479,11 +499,31 @@ bun -e 'console.log(decodeURIComponent(process.env.GITEE_AI_SESSION_COOKIE ?? ""
 ## 常用命令
 
 ```bash
-vp check            # 格式 + lint + 类型检查（Oxfmt/Oxlint/tsgolint，0 error / 0 warning）
-vp test             # Vitest 单元测试（签名向量/多账号读取/各平台 zod 解析/组件契约）
-bun run test:e2e    # Playwright E2E 冒烟（空态/响应式/暗色/回到顶部，自动拉起 vp dev）
-vp build            # 生产构建（含 vue-tsc 严格类型检查）
+bun run dev            # 单进程开发：前端 5173 + 内置 API（读取 .env）
+bun run dev:all        # 前端与后端分开跑（后端 8787）
+bun run server         # 只跑生产用的 Bun 服务（同端口提供 API + dist/ 静态页）
 ```
+
+**提交前请按顺序跑完四道门禁**（CI 也是这个顺序，见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)）：
+
+```bash
+bun run test:unit      # 1. Vitest：签名向量 / 多账号读取 / 各平台 zod 解析 / 组件契约
+bun run build          # 2. vue-tsc 严格类型检查 + Rolldown 构建
+bun run test:e2e       # 3. Playwright 冒烟：空态 / 响应式 / 暗色 / 回到顶部（自动拉起 vp dev）
+bunx vp check          # 4. Oxfmt + Oxlint + tsgolint —— 必须最后跑
+```
+
+一条命令跑完（顺序已固定，任一步失败即中断）：
+
+```bash
+bun run check
+```
+
+`vp check` 放最后是有原因的：它连 **Markdown 表格对齐**都管，会让前面刚改过的文件再动一次。
+报格式问题时用 `bunx vp check --fix`，然后**再跑一遍**确认 0 error / 0 warning。
+
+> 改了任意 `.vue` 文件，`build` 这道**必须**跑 —— `vp check` 不做模板类型检查，
+> 只靠它会把类型错误放进仓库。详见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 ## 目录结构
 
@@ -508,12 +548,17 @@ server/           平台无关 API 核心 + Bun 入口
 src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
   api.ts          前端 API 客户端（错误信封 zod 校验）
   stores/         Pinia stores（dashboard 数据编排 / theme 暗色主题）
-  types.ts        共享类型（多账号 AccountEnvelope 判别联合）
-  utils.ts        展示格式化工具 + 平台卡排序（sortPlatformSections：Key 数降序 → 首字母）
+  types.ts        共享类型（多账号 AccountEnvelope 判别联合 + AccountDetail 统一详情模型）
+  detail.ts       详情模型的构件库（field/metric/table/notice/link/windowQuota/cardsOf …）
+  utils.ts        展示格式化工具 + 列策略谓词（shouldSpanFullRow / isCompactAccounts /
+                  metricGridClass / windowContainerClass）+ 平台卡排序
   modelDocs.ts    平台名 → 官方「可用模型」文档地址（卡片标题旁的外链，按关键词匹配）
-  components/     各平台区块组件（AccountSection 统一外壳 + DetailDialog 详情弹窗）
+  components/     各平台区块组件（AccountSection 统一外壳）
                   套餐订阅 Tab：PlansSection 一平台一卡（Kimi / MiniMax / OpenCode Go）
                   余额账户 Tab：NewApiSection（New API 站点；订阅与钱包读数可并存，外链按站点拼接）
+    ui/           共享渲染骨架（AccountCard / AccountCardBody / AccountDetailPanel /
+                  DetailSection / DetailFields / DetailTable / MetricTile / UsageBar）
+    *Detail.ts    每个平台一个适配器：平台原始响应 → AccountDetail（Section 只做映射，不认字段）
   assets/layout.css 全站唯一布局层（语义化网格原语 + 断点；组件不写断点、不重复定义）
                   导航：≤767px 收成两行（品牌+操作 / 三个 Tab 等分），--app-menu-h 与锚点避让量同步
                   「逐层铺满」契约：区块卡 → 账号卡 → 窗口块，每层都吃掉上一层剩余高度
@@ -522,9 +567,54 @@ src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
 e2e/              Playwright E2E 冒烟
 worker/           Cloudflare Workers 入口（复用 server/app.ts）
 cloud-functions/  EdgeOne Makers 云函数（/api/* 全捕获 + /api/diag 自诊断）
+docs/design-baseline.md  设计系统规格（token 纪律 / 精度模型 / 列策略 / AccountDetail 模型）
 docs/reviews/     七角色红蓝对抗审查报告
-docs/             调研文档（阿里云 Token Plan / CC-Switch 用量查询全景）
+docs/images/      README 截图（由 mock 负载渲染，不含真实账号信息）
+docs/             调研文档（阿里云 Token Plan / 模力方舟代金券 / CC-Switch 用量查询全景）
+.github/          CI（四道门禁）+ issue / PR 模板 + Dependabot
 ```
+
+根目录另有 [`LICENSE`](LICENSE) / [`SECURITY.md`](SECURITY.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md) /
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)，以及两份环境变量模板 `.env.example` 与 `.dev.vars.example`。
+
+## 安全
+
+### ⚠️ 本项目没有内建的用户体系与访问控制
+
+部署到公网后，**任何知道地址的人都能看到你所有账号的余额与用量**。生产使用时请在反向代理层
+加认证（Cloudflare Access / Basic Auth / IP 白名单），或者干脆只在内网部署。
+
+### 凭据只存在于服务端
+
+前端是纯静态页面，第三方 Key / Cookie / Token 只从服务端环境变量读取，**从不下发到浏览器**
+（页面只展示掩码）。请使用 README 里推荐的最小权限方式：火山用 IAM 子用户、阿里云用 RAM 子用户，
+不要把主账号密钥填进来。
+
+### 报告漏洞
+
+**不要**开公开 issue。请走 GitHub 私密渠道：
+
+> **Security → Advisories → [Report a vulnerability](https://github.com/KS-OTO/tracking-llm-plan-usage/security/advisories/new)**
+
+威胁模型（哪些算漏洞、哪些不算）、响应时限、以及本仓库自身的凭据纪律，全部写在
+[`SECURITY.md`](SECURITY.md) 里。
+
+如果你在本仓库的**任何位置（包括历史提交）**里发现真实凭据，同样按凭据泄漏处理 ——
+历史泄漏也是泄漏。
+
+## 贡献
+
+欢迎 issue 与 PR。动手前请读 [`CONTRIBUTING.md`](CONTRIBUTING.md)，重点是：
+
+- **环境**：Bun 1.2+ 与 Node `^22.18.0 || >=24.12.0`
+- **四道门禁**：`test:unit` → `build` → `test:e2e` → `vp check`，顺序固定且必须全绿
+- **代码铁律**：只用 TDesign 原生 token（禁 `--ui-*` 平行层）；布局只走
+  `src/assets/layout.css` 的语义化原语（组件不写断点、禁 `t-row`/`t-col`）；
+  列策略由 `App.vue` 按「个数」统一施加；`<t-statistic>` 只允许出现在 `MetricTile.vue`
+- **凭据纪律**：绝不把真实 Key / Cookie / Token 粘进任何入库文件，测试夹具一律用占位值
+
+commit message 用中文，格式 `<type>: <结论>`，正文讲**为什么**。设计决策请写进
+[`docs/design-baseline.md`](docs/design-baseline.md)，不要只留在 PR 描述里。
 
 ## 参考文档
 
@@ -544,3 +634,19 @@ docs/             调研文档（阿里云 Token Plan / CC-Switch 用量查询�
 - New API 源码（订阅 / 钱包字段定义来源）：https://github.com/QuantumNous/new-api
 - OpenCode Go 用量参考实现（cc-switch PR #6547）：https://github.com/farion1231/cc-switch/pull/6547
 - OpenCode Go 用量端点与字段语义（`GET /zen/go/v1/usage`，窗口 `status`/`percent`/`resetsAt`）：https://github.com/looplj/axonhub/pull/2204
+
+## 许可证
+
+[MIT](LICENSE) © 2026 KS-OTO
+
+## 致谢
+
+- UI 组件库：[TDesign Vue Next](https://tdesign.tencent.com/vue-next/)
+- 工具链：[Vite+](https://viteplus.dev/)（Oxfmt / Oxlint / tsgolint / Vitest / Rolldown）、[Bun](https://bun.sh)
+- 火山引擎签名实现参考：[字节跳动官方文档](https://www.volcengine.com/docs/6369/67269)
+- 阿里云百炼 Token Plan 用量实现参考：[modelstudioai/cli](https://github.com/modelstudioai/cli)
+- OpenCode Go 用量语义参考：[cc-switch PR #6547](https://github.com/farion1231/cc-switch/pull/6547)、[axonhub PR #2204](https://github.com/looplj/axonhub/pull/2204)
+- New API 订阅 / 钱包字段定义：[QuantumNous/new-api](https://github.com/QuantumNous/new-api)
+
+本项目与上述任何平台均无隶属或背书关系。各平台的接口、字段与条款可能随时变化，
+本项目只做只读查询，不代管你的账号。
