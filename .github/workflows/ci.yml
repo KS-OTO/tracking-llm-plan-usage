@@ -27,7 +27,7 @@ jobs:
           bun-version: latest
 
       # Playwright 需要 Node；Bun 只负责装包与跑脚本。
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
