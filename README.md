@@ -1,14 +1,27 @@
 # LLM 用量监控（tracking-llm-plan-usage）
 
+**简体中文** | [English](README.en.md)
+
 [![CI](https://github.com/KS-OTO/tracking-llm-plan-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/KS-OTO/tracking-llm-plan-usage/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-1.2%2B-black?logo=bun)](https://bun.sh)
 [![Vue 3](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org)
 [![TDesign Vue Next](https://img.shields.io/badge/TDesign-Vue%20Next-0052d9)](https://tdesign.tencent.com/vue-next/)
 [![Node](https://img.shields.io/badge/Node-%5E22.18%20%7C%7C%20%3E%3D24.12-339933?logo=node.js&logoColor=white)](package.json)
+[![Demo](https://img.shields.io/badge/Demo-cp--ai101.18bit.cn-2ea44f)](https://cp-ai101.18bit.cn/)
+
+## 简介
 
 开源网页工具：在一个页面集中查看 DeepSeek、火山方舟、智谱、阿里云、模力方舟、百度千帆、OpenRouter、New API（自托管网关）及订阅套餐（Kimi / MiniMax / OpenCode Go）的余额与用量。
 只需在环境变量中配置各家 API Key / Access Key，无需任何其他操作。
+
+**在线演示：<https://cp-ai101.18bit.cn/>**
+
+它要解决的问题很具体：这些平台的余额和额度窗口散落在各自的控制台里，有的连 API 都不提供
+（只能靠控制台会话 Cookie），想知道「这个月还够不够用」得逐个登录。本项目把这件事收敛成
+**一次请求、一个页面**，且在服务端完成全部凭据交互 —— 浏览器侧拿不到任何 Key。
+
+它**不是**代理网关，不转发模型请求，不记录你的对话内容；只做「读余额、读用量」这一件事。
 
 技术栈：Bun + Vue 3 + Vite（Vite+ 工具链：Oxfmt / Oxlint / tsgolint 严格类型检查 / Vitest / Rolldown 构建），
 状态管理 Pinia，数据校验 Zod（前后端 JSON 边界统一 schema 校验）。
@@ -16,16 +29,16 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
 
 ![套餐订阅：窗口用量条与多 Key 并列](docs/images/plans-dark.png)
 
-<sub>上图与实际界面一致，**数据是截图中注入的假数据**（`docs/images/` 由脚本用 mock 负载渲染，不含任何真实账号信息）。
-同一屏的浅色主题见 [`plans-light.png`](docs/images/plans-light.png)，「余额账户」Tab 见 [`accounts-dark.png`](docs/images/accounts-dark.png)。</sub>
+<sub>截图为「套餐订阅」Tab。同一屏的浅色主题见 [`plans-light.png`](docs/images/plans-light.png)，
+「余额账户」Tab 见 [`accounts-dark.png`](docs/images/accounts-dark.png)。</sub>
 
 ## 目录
 
-- [功能](#功能) · [对外接口只有 3 个](#对外接口只有-3-个) · [快速开始](#快速开始)
+- [简介](#简介) · [功能](#功能) · [对外接口只有 3 个](#对外接口只有-3-个) · [快速开始](#快速开始)
 - [部署](#部署到-cloudflare-workers)：[Cloudflare Workers](#部署到-cloudflare-workers) / [EdgeOne Makers](#部署到-edgeone-makers) / [其他平台](#部署到其他平台vercel-等)
 - [环境变量](#环境变量) · [多账号支持](#多账号支持) · [站点自定义](#站点自定义站点名--logo--favicon--刷新间隔)
 - [常用命令](#常用命令) · [目录结构](#目录结构) · [参考文档](#参考文档)
-- [安全](#安全) · [贡献](#贡献) · [许可证](#许可证)
+- [安全](#安全) · [贡献](#贡献) · [许可证](#许可证) · [English](README.en.md)
 
 ## 功能
 
@@ -568,14 +581,14 @@ e2e/              Playwright E2E 冒烟
 worker/           Cloudflare Workers 入口（复用 server/app.ts）
 cloud-functions/  EdgeOne Makers 云函数（/api/* 全捕获 + /api/diag 自诊断）
 docs/design-baseline.md  设计系统规格（token 纪律 / 精度模型 / 列策略 / AccountDetail 模型）
-docs/reviews/     七角色红蓝对抗审查报告
-docs/images/      README 截图（由 mock 负载渲染，不含真实账号信息）
-docs/             调研文档（阿里云 Token Plan / 模力方舟代金券 / CC-Switch 用量查询全景）
+docs/images/      README 截图
+docs/             供应商接口调研（阿里云 Token Plan / 模力方舟代金券 / CC-Switch 用量查询全景）
 .github/          CI（四道门禁）+ issue / PR 模板 + Dependabot
 ```
 
 根目录另有 [`LICENSE`](LICENSE) / [`SECURITY.md`](SECURITY.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md) /
-[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)，以及两份环境变量模板 `.env.example` 与 `.dev.vars.example`。
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)，以及英文版 [`README.en.md`](README.en.md)
+与两份环境变量模板 `.env.example` / `.dev.vars.example`。
 
 ## 安全
 

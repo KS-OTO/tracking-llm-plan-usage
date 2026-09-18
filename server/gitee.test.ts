@@ -4,9 +4,9 @@ import { ZodError } from 'zod'
 import { normalizeSessionCookie, parseGiteeVoucher } from './gitee.ts'
 
 /**
- * 响应样本取自控制台抓包（原样存档见 `docs/参考资料.md`）。
+ * 响应样本依照控制台抓包的**字段结构**构造，不含任何真实值。
  *
- * 其中的账号标识（id / namespace / 用户名 / 代金券码）**已全部替换为占位值**，
+ * 其中的账号标识（id / namespace / 用户名 / 代金券码）**全部是占位值**，
  * 只保留字段名与类型——仓库公开后请不要把真实抓包粘回来。
  */
 const userinfoJson = {
