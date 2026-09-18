@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: 四道门禁
+    runs-on: ubuntu-latest
+    env:
+      # 密封环境：不读本机 .env。CI 里本来也没有 .env，写死是为了与本地口径一致。
+      SKIP_DOTENV: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Playwright 需要 Node；Bun 只负责装包与跑脚本。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装依赖
+        run: bun install --frozen-lockfile
+
+      # 四道门禁，顺序固定：单测 → 类型检查+构建 → E2E → vp check。
+      # vp check 必须最后：它连 Markdown 表格对齐都管，会让前面刚改过的文件再动一次。
+      - name: 1/4 · 单元测试
+        run: bun run test:unit
+
+      - name: 2/4 · 类型检查 + 构建
+        run: bun run build
+
+      - name: 安装 Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: 3/4 · 端到端测试
+        run: bun run test:e2e
+
+      - name: 4/4 · vp check（oxlint + oxfmt + tsgolint）
+        run: bunx vp check
+
+      - name: 上传 Playwright 报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

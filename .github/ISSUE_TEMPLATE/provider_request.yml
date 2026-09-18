@@ -1,0 +1,85 @@
+name: ✨ 新增平台接入
+description: 请求支持一家新的 LLM 平台 / 套餐
+labels: ['enhancement', 'provider']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        接入一个新平台需要三样东西：**能用的查询接口**、**稳定的鉴权方式**、**可以放进卡片的最小读数集合**。
+        这个模板帮你把这三件事一次说清楚，省掉一轮来回。
+
+  - type: input
+    id: platform
+    attributes:
+      label: 平台名称
+      placeholder: 某某 AI 开放平台
+    validations:
+      required: true
+
+  - type: input
+    id: docs
+    attributes:
+      label: 官方接口文档地址
+      placeholder: https://platform.example.com/docs/api
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 归到哪一类
+      description: 决定卡片出现在哪个 Tab
+      options:
+        - 余额账户（余额 / 充值 / 赠金）
+        - 套餐订阅（周期性额度窗口）
+        - 两者都有（按语义拆成两张卡）
+        - 我也不确定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: auth
+    attributes:
+      label: 鉴权方式
+      options:
+        - 单一 API Key（Bearer / 自定义 Header）
+        - AK/SK 签名（厂商自定义签名算法）
+        - 控制台会话 Cookie（**不推荐**，见下）
+        - 其他（请在下方说明）
+    validations:
+      required: true
+
+  - type: textarea
+    id: endpoints
+    attributes:
+      label: 可用端点与字段
+      description: |
+        列出查询余额 / 用量的端点，以及返回里的关键字段名。
+        如果响应里带货币、单位或配额周期，请一并说明 —— 这决定卡片上数字怎么格式化。
+      placeholder: |
+        GET /v1/balance   Header: Authorization: Bearer <key>
+        → { "currency": "CNY", "total": "100.00", "used": "12.34" }
+
+        GET /v1/quota     → { "window": "5h", "limit": 120, "used": 34 }
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-cookie
+    attributes:
+      label: 若只能靠控制台 Cookie 才能拿到数据
+      description: |
+        请说明**有没有官方接口**能拿到同样的数据。
+        本项目倾向于「不抓 Cookie」—— Cookie 会过期、要手工复制、且是真实账号凭据，
+        本项目历史上就因此在 git 历史里泄过一次令牌。
+        只有在完全没有官方接口时，才会考虑把它做成可选的实验性能力。
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认正文（含示例响应）里没有任何真实凭据或账号 id
+          required: true

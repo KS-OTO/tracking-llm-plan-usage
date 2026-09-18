@@ -3,7 +3,12 @@ import { ZodError } from 'zod'
 
 import { normalizeSessionCookie, parseGiteeVoucher } from './gitee.ts'
 
-/** 响应样本取自 docs/参考资料.md（真实控制台抓包）。 */
+/**
+ * 响应样本取自控制台抓包（原样存档见 `docs/参考资料.md`）。
+ *
+ * 其中的账号标识（id / namespace / 用户名 / 代金券码）**已全部替换为占位值**，
+ * 只保留字段名与类型——仓库公开后请不要把真实抓包粘回来。
+ */
 const userinfoJson = {
   id: 10000001,
   username: 'example-ns',
@@ -47,7 +52,7 @@ describe('parseGiteeVoucher', () => {
         id: 10000003,
         catalog: '示例活动奖品',
         type: 'cash',
-        amount: 200,
+        amount: 100,
         balance: 0,
         expiredAt: 1800028800000,
         status: 1,

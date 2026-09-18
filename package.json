@@ -2,6 +2,34 @@
   "name": "tracking-llm-plan-usage",
   "version": "0.0.0",
   "private": true,
+  "description": "一个页面集中查看 DeepSeek / 火山方舟 / 智谱 / 阿里云百炼 / 模力方舟 / 百度千帆 / OpenRouter / New API 及订阅套餐（Kimi / MiniMax / OpenCode Go）的余额与用量。自托管，凭据只存在服务端。",
+  "license": "MIT",
+  "author": "KS-OTO",
+  "homepage": "https://github.com/KS-OTO/tracking-llm-plan-usage#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KS-OTO/tracking-llm-plan-usage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/KS-OTO/tracking-llm-plan-usage/issues"
+  },
+  "keywords": [
+    "llm",
+    "usage",
+    "quota",
+    "dashboard",
+    "deepseek",
+    "volcengine",
+    "zhipu",
+    "aliyun-bailian",
+    "openrouter",
+    "new-api",
+    "vue3",
+    "tdesign",
+    "bun",
+    "cloudflare-workers",
+    "edgeone"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vp dev",
@@ -12,6 +40,7 @@
     "preview": "vp preview",
     "test:e2e": "playwright test",
     "test:unit": "vp test",
+    "check": "bun run test:unit && bun run build && bun run test:e2e && vp check",
     "build-only": "vp build",
     "type-check": "vue-tsc --build",
     "lint": "vp lint . --fix",
