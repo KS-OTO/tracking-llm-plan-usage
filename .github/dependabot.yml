@@ -1,7 +1,13 @@
 version: 2
 updates:
-  # 前端与工具链依赖
-  - package-ecosystem: npm
+  # 前端与工具链依赖。
+  #
+  # 生态必须是 `bun` 而不是 `npm`：本项目用 Bun 装包，锁文件是文本格式的 `bun.lock`。
+  # 用 `npm` 时 Dependabot 只改 `package.json`、**不碰 `bun.lock`**，
+  # 于是 CI 里的 `bun install --frozen-lockfile` 立刻报
+  # 「lockfile had changes, but lockfile is frozen」—— 每个依赖 PR 都必然失败。
+  # 换成 `bun` 后它才会连锁文件一起更新（要求 Bun >= 1.1.39 且用文本锁文件）。
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
