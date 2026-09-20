@@ -554,20 +554,17 @@ describe('volcDateRange', () => {
   })
 
   it('把超过 31 天的请求夹到 31 天（上游在这个点位上会 400）', () => {
-    expect(spanDays(volcDateRange('32'))).toBe(31)
-    expect(spanDays(volcDateRange('60'))).toBe(31)
-    expect(spanDays(volcDateRange('90'))).toBe(31)
+    expect(['32', '60', '90'].map((days) => spanDays(volcDateRange(days)))).toStrictEqual([
+      31, 31, 31,
+    ])
   })
 
   it('31 天以内原样保留', () => {
-    expect(spanDays(volcDateRange('14'))).toBe(14)
-    expect(spanDays(volcDateRange('31'))).toBe(31)
+    expect(['14', '31'].map((days) => spanDays(volcDateRange(days)))).toStrictEqual([14, 31])
   })
 
   it('非法输入走默认值，越界输入不产生零天或负区间', () => {
-    expect(spanDays(volcDateRange('abc'))).toBe(7)
-    expect(spanDays(volcDateRange('0'))).toBe(7)
-    expect(spanDays(volcDateRange('-5'))).toBe(1)
+    expect(['abc', '0', '-5'].map((days) => spanDays(volcDateRange(days)))).toStrictEqual([7, 7, 1])
   })
 })
 

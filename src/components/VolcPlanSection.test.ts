@@ -3,7 +3,22 @@ import { nextTick } from 'vue'
 import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
 import VolcPlanSection from './VolcPlanSection.vue'
-import type { InferenceUsageResponse, VolcPlanData, VolcPlanResponse } from '../types'
+import type {
+  InferenceUsageResponse,
+  PlanWindowName,
+  VolcPlanData,
+  VolcPlanResponse,
+} from '../types'
+
+/** Agent Plan 的一个 AFP 窗口（上游单位 AFP、时间戳毫秒）。 */
+function afpWindow(
+  window: PlanWindowName,
+  quota: number,
+  used: number,
+  resetInMs: number,
+): VolcPlanData['windows'][number] {
+  return { window, quota, used, subscribeTime: 0, resetTime: Date.now() + resetInMs }
+}
 
 /** 一个成功账号；`overrides` 用来构造「未订阅」「缺窗口」这类变体。 */
 function volcAccount(overrides: Partial<VolcPlanData> = {}) {
@@ -17,29 +32,12 @@ function volcAccount(overrides: Partial<VolcPlanData> = {}) {
       endTime: '2026-10-06T15:59:59Z',
       autoRenew: true,
     },
+    // daily = 模型日额度（仅图片/视频/语音与 Harness 计入），只跑文本时 used 恒为 0
     windows: [
-      {
-        window: 'fiveHour',
-        quota: 1000,
-        used: 500,
-        subscribeTime: 0,
-        resetTime: Date.now() + 3_600_000,
-      },
-      {
-        window: 'daily',
-        quota: 50_000,
-        used: 0,
-        subscribeTime: 0,
-        resetTime: Date.now() + 9_000_000,
-      },
-      {
-        window: 'weekly',
-        quota: 10_000,
-        used: 9_800,
-        subscribeTime: 0,
-        resetTime: Date.now() + 86_400_000,
-      },
-    ] as VolcPlanData['windows'],
+      afpWindow('fiveHour', 1000, 500, 3_600_000),
+      afpWindow('daily', 50_000, 0, 9_000_000),
+      afpWindow('weekly', 10_000, 9_800, 86_400_000),
+    ],
     details: [
       {
         time: 1_700_000_000_000,
