@@ -126,6 +126,15 @@ describe('roundNumber / roundCount（喂给只吃数值的展示组件）', () =
     expect(roundNumber(raw).toFixed(1)).toBe(formatNumber(raw))
     expect(roundCount(1234.5).toLocaleString('zh-CN')).toBe(formatCount(1234.5))
   })
+
+  it('负零归一为零（-0 会渲染成 "-0" / "-0.0"）', () => {
+    // 与 truncateMoney 同一条理由：真实上游会给 -0.04 这种净值，
+    // Math.round 之后是 -0，直接格式化就是 "-0" 这种看着像 bug 的文本。
+    expect(Object.is(roundNumber(-0.04), 0)).toBe(true)
+    expect(Object.is(roundCount(-0.2), 0)).toBe(true)
+    expect(formatNumber(-0.04)).toBe('0.0')
+    expect(formatCount(-0.2)).toBe('0')
+  })
 })
 
 describe('formatMetric', () => {
@@ -189,15 +198,26 @@ describe('formatCurrency', () => {
 })
 
 describe('formatTokens（计数类的量级缩写变体）', () => {
-  it('小数值原样输出，不补小数位', () => {
+  it('不足 1K 时没有量级可缩写，退回计数精度', () => {
     expect(formatTokens(0)).toBe('0')
     expect(formatTokens(999)).toBe('999')
+    expect(formatTokens(347)).toBe('347')
+    // 唯一会「给精确值加误差」的一档，但浮点尾巴本来就不是信息：
+    // 实测火山 Agent Plan 每周窗口 35000 - 34793.6528 === 206.34719999999652
+    expect(formatTokens(206.34719999999652)).toBe('206')
+    expect(formatTokens(206.5)).toBe('207')
+    expect(formatTokens(0.4)).toBe('0')
   })
 
   it('按量级压缩：K 档 1 位、M/B 档 2 位', () => {
     expect(formatTokens(12_500)).toBe('12.5K')
     expect(formatTokens(1_200_000)).toBe('1.20M')
     expect(formatTokens(3_400_000_000)).toBe('3.40B')
+  })
+
+  it('缺值 / 非有限数给中性占位，不漏 NaN 或 InfinityB', () => {
+    expect(formatTokens(Number.NaN)).toBe(EMPTY_VALUE)
+    expect(formatTokens(Number.POSITIVE_INFINITY)).toBe(EMPTY_VALUE)
   })
 })
 

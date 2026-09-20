@@ -117,15 +117,44 @@ describe('VolcPlanSection', () => {
     expect(text).not.toContain('总 Token')
   })
 
-  it('labels AFPDaily as the model daily quota and says which models it applies to', () => {
+  it('keeps the model daily quota off the card, with the caveat inside the dialog', async () => {
     const wrapper = mountWithTDesign(VolcPlanSection, { props: baseProps() })
+    const card = wrapper.text()
+    // AFPDaily 是**模型日额度**：只有图片/视频/语音与 Harness 计入，文本与向量化模型
+    // 不受它约束。放卡面上就是一条永远「已用 0」的空进度条，且最容易被读成数据坏了。
+    expect(card).not.toContain('模型日额度')
+    expect(card).not.toContain('0 / 50.0K AFP')
+    expect(card).not.toContain('每日窗口')
+
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('模型日额度')
+    expect(detail).toContain('仅图片生成 / 视频生成 / 语音模型与 Harness 计入')
+    expect(detail).toContain('0 / 50.0K AFP')
+  })
+
+  it('cleans the float tail off a remaining quota', async () => {
+    // 实测报上来的症状：每周窗口 35000 - 34793.6528 === 206.34719999999652，
+    // 卡面原样印成「剩余 206.34719999999652 AFP」。浮点尾巴属于渲染前必须收掉的东西，
+    // 且收口只允许在 src/format.ts 一处 —— 组件层自己 Math.round 会被守卫挡住。
+    const wrapper = mountWithTDesign(VolcPlanSection, {
+      props: {
+        ...baseProps(),
+        data: {
+          accounts: [
+            volcAccount({
+              windows: [
+                afpWindow('fiveHour', 10_000, 9_995.6863, 3_600_000),
+                afpWindow('weekly', 35_000, 34_793.6528, 86_400_000),
+              ],
+            }),
+          ],
+        },
+      },
+    })
     const text = wrapper.text()
-    // AFPDaily 不是文本模型的「每日窗口」：上游口径是模型日额度，
-    // 仅图片/视频/语音与 Harness 计入。只跑文本时它恒为 0，不该被读成数据坏了。
-    expect(text).not.toContain('每日窗口')
-    expect(text).toContain('模型日额度')
-    expect(text).toContain('仅图片生成 / 视频生成 / 语音模型与 Harness 计入')
-    expect(text).toContain('0 / 50.0K AFP')
+    expect(text).toContain('剩余 206 AFP')
+    expect(text).not.toContain('206.34719999999652')
+    expect(text).not.toContain('.3471')
   })
 
   it('moves plan type, detail range and usage table into the detail dialog', async () => {

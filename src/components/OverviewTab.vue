@@ -154,6 +154,12 @@ const earliestReset = computed(() => {
     }
     const name = accountTitle(account)
     for (const window of account.windows) {
+      // 模型日额度不进「最近重置」：它只对图片/视频/语音与 Harness 生效，
+      // 卡面也已经按同一条口径把它收进弹窗（见 VolcPlanDetail 的 agentWindows）。
+      // 留着的话，夜里它会成为「最近重置」的头条，而卡上根本找不到这个窗口。
+      if (window.window === 'daily') {
+        continue
+      }
       consider('火山方舟', name, window.window, window.resetTime)
     }
     for (const window of account.codingPlan?.windows ?? []) {
