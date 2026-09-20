@@ -9,6 +9,7 @@ import {
   readSiteConfig,
   REFRESH_INTERVAL_RANGE,
   runAccounts,
+  volcDateRange,
 } from './app.ts'
 import { clearQueryCache } from './cache.ts'
 import type { EnvGetter } from './multi.ts'
@@ -533,6 +534,40 @@ describe('/api/usage：平台之间与子查询之间的独立容错', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+/** 区间天数（含首尾）。用 UTC 解析，避免本地时区把算出来的天数挪一天。 */
+function spanDays(range: { start: string; end: string }): number {
+  const ms = Date.parse(`${range.end}T00:00:00Z`) - Date.parse(`${range.start}T00:00:00Z`)
+  return Math.round(ms / 86_400_000) + 1
+}
+
+/**
+ * 火山两条查询接口（`GetUsageDetails` / `GetInferenceUsage`）都是 31 天封顶，
+ * 超了直接 400 `InvalidParameter.TimeRange`。`dateRange` 本身允许到 90 天
+ * （别的平台能接受），所以火山路径必须自己收口 —— 否则 `?days=90` 会让整张卡变红。
+ */
+describe('volcDateRange', () => {
+  it('没给天数时用套餐明细的默认 7 天', () => {
+    expect(spanDays(volcDateRange(null))).toBe(7)
+  })
+
+  it('把超过 31 天的请求夹到 31 天（上游在这个点位上会 400）', () => {
+    expect(spanDays(volcDateRange('32'))).toBe(31)
+    expect(spanDays(volcDateRange('60'))).toBe(31)
+    expect(spanDays(volcDateRange('90'))).toBe(31)
+  })
+
+  it('31 天以内原样保留', () => {
+    expect(spanDays(volcDateRange('14'))).toBe(14)
+    expect(spanDays(volcDateRange('31'))).toBe(31)
+  })
+
+  it('非法输入走默认值，越界输入不产生零天或负区间', () => {
+    expect(spanDays(volcDateRange('abc'))).toBe(7)
+    expect(spanDays(volcDateRange('0'))).toBe(7)
+    expect(spanDays(volcDateRange('-5'))).toBe(1)
   })
 })
 

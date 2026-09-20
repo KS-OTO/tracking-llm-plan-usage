@@ -435,8 +435,23 @@ export interface UsageDetail {
   billingType: BillingType
 }
 
+/**
+ * 个人版套餐（`GetPersonalPlan`）。
+ *
+ * `null` = 未订阅或已回收 —— 上游用 404 `ResourceNotFound.Plan` 表达，
+ * 服务端已把它收敛成 null，因此这里不必区分「没买」和「查不到」。
+ */
+export interface VolcPersonalPlan {
+  planType: string
+  status: string
+  startTime: string
+  endTime: string
+  autoRenew: boolean
+}
+
 export interface VolcPlanData {
   planType?: string
+  personalPlan: VolcPersonalPlan | null
   windows: PlanWindow[]
   details: UsageDetail[]
   detailsStart: string

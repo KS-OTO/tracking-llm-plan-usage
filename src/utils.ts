@@ -34,9 +34,19 @@ export function formatDateTime(ms: number): string {
   return new Date(ms).toLocaleString('zh-CN', { hour12: false })
 }
 
+/**
+ * 通用窗口名。**平台专属语义走调用方的覆盖表**（见 `PlansDetail` 的
+ * `PROVIDER_WINDOW_LABELS`：OpenCode Go 的 rolling 30 天不叫「每月窗口」）。
+ *
+ * `daily` 目前只有火山 Agent Plan 一个生产者，而它的 `AFPDaily` 是
+ * **模型日额度** —— 仅图片生成 / 视频生成 / 语音模型与 Harness 计入，
+ * 文本与向量化模型根本不受这个限额约束（文档 82379/2366394）。
+ * 叫「每日窗口」会让人以为它是文本模型的日限额，进而把「只跑文本 → 已用恒为 0」
+ * 误读成「每日限额已被取消」。所以这里直接按上游口径命名。
+ */
 export const PLAN_WINDOW_LABELS: Record<string, string> = {
   fiveHour: '5 小时窗口',
-  daily: '每日窗口',
+  daily: '模型日额度',
   weekly: '每周窗口',
   monthly: '每月窗口',
 }
