@@ -58,8 +58,9 @@ function shortWindow(window: string): string {
   if (window === 'monthly') {
     return '月'
   }
+  // 火山的 AFPDaily 是「模型日额度」（仅图片/视频/语音与 Harness 计入），见 utils 的同名说明
   if (window === 'daily') {
-    return '日'
+    return '日额度'
   }
   return window
 }
@@ -459,7 +460,7 @@ function describeWindow(window: string): string {
     return '30 天窗口'
   }
   if (window === 'daily') {
-    return '每日'
+    return '模型日额度'
   }
   return window
 }

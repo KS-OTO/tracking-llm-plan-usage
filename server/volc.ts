@@ -1,9 +1,15 @@
 /**
  * Volcengine Ark control-plane clients.
  *
- * - GetAFPUsage / GetUsageDetails / GetCodingPlanUsage / GetInferenceUsage
+ * - GetPersonalPlan / GetAFPUsage / GetUsageDetails / GetCodingPlanUsage / GetInferenceUsage
  * - 签名走 sign.ts（火山 v4，Web Crypto）
  * - 响应结构经 zod schema 在边界统一解析
+ *
+ * 官方文档（Agent Plan 管控面，均只支持 Access Key 鉴权）：
+ * - 查询个人版套餐   https://console.volcengine.com/ark/region:cn-beijing/docs/ark/get-personal-plan-api
+ * - 获取套餐 AFP 额度 https://console.volcengine.com/ark/region:cn-beijing/docs/ark/get-afp-usage-api
+ * - 获取套餐用量详情 https://console.volcengine.com/ark/region:cn-beijing/docs/ark/get-usage-details-api
+ * - 套餐额度口径说明 https://www.volcengine.com/docs/82379/2366394
  */
 import { z } from 'zod'
 
@@ -126,9 +132,95 @@ const ArkGatewayError = z.object({
 })
 
 // ---------------------------------------------------------------------------
-// GetAFPUsage - Agent Plan 五小时/每日/每周/每月 AFP 额度
+// GetPersonalPlan - 个人版套餐（档位 / 状态 / 生效与到期 / 自动续费）
 // ---------------------------------------------------------------------------
 
+export type PersonalPlanName = 'AgentPlan' | 'CodingPlan'
+
+export interface PersonalPlan {
+  planType: string
+  status: string
+  startTime: string
+  endTime: string
+  autoRenew: boolean
+}
+
+/**
+ * 未订阅 / 已回收 —— 这是「没有这个套餐」，**不是故障**。
+ *
+ * 文档明确：未购买或套餐已回收时返回该错误码。因此它必须转成 `null`，
+ * 否则「没买 Coding Plan」会被渲染成一张红色错误卡。
+ */
+export const PLAN_NOT_FOUND_CODE = 'ResourceNotFound.Plan'
+
+const PersonalPlanResult = z
+  .object({
+    PlanType: z.string().catch(''),
+    Status: z.string().catch(''),
+    StartTime: z.string().catch(''),
+    EndTime: z.string().catch(''),
+    // 不能写 z.coerce.boolean()：字符串 'false' 会被强制转成 true。
+    AutoRenew: z.boolean().catch(false),
+  })
+  .nullable()
+  .catch(null)
+
+/**
+ * `Plan` 只接受 `AgentPlan` / `CodingPlan`（乱填 → 400 `InvalidParameter.Plan`）。
+ * 实测 `{ "Plan": "CodingPlan" }` 在只有 Agent Plan 的账号上返回 404 `ResourceNotFound.Plan`。
+ */
+export async function getPersonalPlan(
+  creds: VolcCredentials,
+  plan: PersonalPlanName,
+): Promise<PersonalPlan | null> {
+  let response: z.infer<typeof ArkResponse>
+  try {
+    response = await arkCall(creds, ARK_PLAN_HOST, 'GetPersonalPlan', { Plan: plan })
+  } catch (error) {
+    if (error instanceof VolcApiError && error.code === PLAN_NOT_FOUND_CODE) {
+      return null
+    }
+    throw error
+  }
+  const parsed = PersonalPlanResult.safeParse(response.Result)
+  if (!parsed.success) {
+    warnSchemaFallback('GetPersonalPlan', response.Result)
+    return null
+  }
+  const result = parsed.data
+  // 档位与状态都取不到 → 当作「没有套餐」，而不是渲染一整行「—」：
+  // zod 的 object 会静默丢掉未知键，所以「结构漂移」和「空响应」到这里是同一个形状。
+  if (!result || (!result.PlanType && !result.Status)) {
+    return null
+  }
+  return {
+    planType: result.PlanType,
+    status: result.Status,
+    startTime: result.StartTime,
+    endTime: result.EndTime,
+    autoRenew: result.AutoRenew,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GetAFPUsage - Agent Plan 五小时/日/周/月 AFP 额度
+// ---------------------------------------------------------------------------
+
+/**
+ * 单位是 AFP，时间戳是 epoch 毫秒。
+ *
+ * **四个窗口不是同一套限额**（文档 82379/2366394「用量说明」）：
+ *
+ * - 文本生成、向量化模型 → 受「5 小时 / 周 / 月」三个限额约束；
+ * - 图片生成、视频生成、语音模型、Harness → **没有 5 小时与周限额**，
+ *   只受「模型日额度」与月限额约束。
+ *
+ * 所以 `AFPDaily` 是**模型日额度**（每日 00:00 重置，**仅上述非文本模型计入**），
+ * 只跑文本模型时它恒为 `Used: 0`。这是预期行为 —— 既不是「每日限额已被取消」，
+ * 也不是接口故障。实测已对上：日额度 = 月额度 ÷ 2（Medium 50,000 = 100,000 / 2），
+ * 而 5 小时窗口已用到 9,995.69 / 10,000 时 `AFPDaily.Used` 仍是 0
+ * （5 小时窗口完全落在日窗口区间内，两个计数来自不同模型集合，因此并不矛盾）。
+ */
 export type PlanWindowName = 'fiveHour' | 'daily' | 'weekly' | 'monthly'
 
 export interface PlanWindow {
@@ -230,6 +322,18 @@ const UsageDetailsResult = z
   .nullable()
   .catch(null)
 
+/**
+ * 实测契约（2026-09-20，真实凭据 + API 反推）：
+ *
+ * - `QueryInterval` 与 `Filter` 都是**必选**：少任一个直接 400
+ *   （`MissingParameter.QueryInterval` / `MissingParameter.Filter`）。
+ * - `Filter.StartTime` / `Filter.EndTime` 是**真过滤**（传单日只回单日）。
+ * - `Filter` **没有 `ObjectName` 字段** —— 传了报 400 `InvalidParameter.Filter.ObjectName`。
+ *   所以「按模型过滤」只能在客户端做（Section 的模型输入框就是这么做的）。
+ * - **区间上限 31 天**：超了 400 `InvalidParameter.StartTime/EndTime: date range must not exceed 31 days`
+ *   （实测 32 天可过、90 天 400）。调用方必须自己收口，见 `app.ts` 的 `VOLC_MAX_RANGE_DAYS`。
+ * - `QueryInterval: 'Hour'` 可用，此时 `Time` 落在整点小时桶上。
+ */
 export async function getUsageDetails(
   creds: VolcCredentials,
   startDate: string,
@@ -364,6 +468,18 @@ const InferenceResult = z
   .nullable()
   .catch(null)
 
+/**
+ * 实测契约（2026-09-20）：
+ *
+ * - `QueryInterval` 必选；**区间上限 31 天**（90 天 → 400 `InvalidParameter.TimeRange:
+ *   time range must be less than 31 days`；32 天可过）。
+ * - `Fields` 是**动态列**：`ModelName` 只在带了 `Filters: [{key:'ModelName', …}]` 时出现，
+ *   不带过滤时压根没有这一列（所以未过滤视图下 `model` 恒为 `undefined`，属正常）。
+ *   `ModelEndpoint` 即便按 ModelName 过滤也不出现。
+ * - `Filters` 的 key **乱填会 500 `InternalError`**（不是 400）—— 过滤值由用户输入驱动时
+ *   要留意这一点。
+ * - 未被建模的列：`CacheTokensHit`（缓存命中 token）、`InputImageCount`、`Hour`。
+ */
 export async function getInferenceUsage(
   creds: VolcCredentials,
   startDate: string,

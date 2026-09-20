@@ -32,6 +32,7 @@ import {
   getCodingPlanUsage,
   getUsageDetails,
   getInferenceUsage,
+  getPersonalPlan,
   type VolcCredentials,
 } from './volc.ts'
 
@@ -197,6 +198,22 @@ async function usageSliceOf<T>(load: Promise<T>): Promise<UsageSliceResult<T>> {
 
 /** 火山「套餐用量明细」的统计区间（天）。常量而非用户输入，故并入 `/api/usage`。 */
 const VOLC_PLAN_DAYS = 7
+
+/**
+ * 火山管控面查询接口的**区间上限**（天）。
+ *
+ * `GetUsageDetails` 与 `GetInferenceUsage` 都是 31 天封顶，超了直接 400
+ * （实测：32 天可过，90 天回 `InvalidParameter.TimeRange: time range must be less than
+ * 31 days`）。而 `dateRange` 允许到 90 天（其他平台能接受），所以火山这两条路径
+ * 必须自己收口 —— 否则 `?days=60` 会让整张火山卡变成红色错误卡。
+ */
+const VOLC_MAX_RANGE_DAYS = 31
+
+/** 火山专用区间：先夹到 31 天，再交给 `dateRange`。 */
+export function volcDateRange(daysParam: string | null): { start: string; end: string } {
+  const requested = Number(daysParam ?? VOLC_PLAN_DAYS) || VOLC_PLAN_DAYS
+  return dateRange(String(Math.min(Math.max(1, requested), VOLC_MAX_RANGE_DAYS)))
+}
 
 /** 火山推理用量的缓存 TTL（秒）：它是按天聚合的表，1 分钟内不会变。 */
 const INFERENCE_TTL_SECONDS = 60
@@ -622,19 +639,24 @@ export function createAppHandler(env: EnvGetter) {
     if (volcCredentialsList.length === 0) {
       throw new NotConfiguredError('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY 环境变量')
     }
-    const { start, end } = dateRange(String(VOLC_PLAN_DAYS))
+    const { start, end } = volcDateRange(String(VOLC_PLAN_DAYS))
     const accounts = await runAccounts(
       volcCredentialsList.map((creds) => ({
         keyHint: maskKey(creds.accessKey),
         label: labelOf('volc', creds.accessKey),
         run: async () => {
-          const [afp, details, codingPlan] = await Promise.all([
+          const [afp, details, codingPlan, personalPlan] = await Promise.all([
             getAfpUsage(creds),
             getUsageDetails(creds, start, end),
             getCodingPlanUsage(creds),
+            // 未订阅时返回 null（不是异常）；GetPersonalPlan 只接受 AgentPlan / CodingPlan
+            getPersonalPlan(creds, 'AgentPlan'),
           ])
           return {
-            planType: afp.planType,
+            // 档位优先取 GetPersonalPlan（规范大小写的 `Medium`）；
+            // GetAFPUsage 的小写 `medium` 只作为它不可用时的回落
+            planType: personalPlan?.planType ?? afp.planType,
+            personalPlan,
             windows: afp.windows,
             details,
             detailsStart: start,
@@ -762,7 +784,7 @@ export function createAppHandler(env: EnvGetter) {
     if (volcCredentialsList.length === 0) {
       throw new NotConfiguredError('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY 环境变量')
     }
-    const { start, end } = dateRange(filters.days)
+    const { start, end } = volcDateRange(filters.days)
 
     const apiFilters: Array<{ key: string; values: string[] }> = []
     if (filters.model) {

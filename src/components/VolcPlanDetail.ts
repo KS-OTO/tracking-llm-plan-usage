@@ -130,6 +130,11 @@ function codingWindowLabel(level: string): string {
  * Agent Plan 窗口：上游给 `quota`（总量）与 `used`，百分比自己算。
  * 比值只在这里算一次，卡面与弹窗里的进度条读同一个 `percent`。
  * `remaining` 显式钳到 0 —— 超额使用时「剩余 -1.2K」是负数噪声。
+ *
+ * **单位是 AFP**（文档 82379/2366394）：不写单位的话，`0 / 50.0K` 会被读成 token 或次数。
+ *
+ * `daily` 单独加脚注：它是**模型日额度**，只有图片生成 / 视频生成 / 语音模型与 Harness
+ * 计入，文本与向量化模型不受它约束。不加这句，只跑文本时「已用 0」看起来就像数据坏了。
  */
 function agentWindows(account: VolcAccount): WindowQuota[] {
   return account.windows.map((window) =>
@@ -141,8 +146,19 @@ function agentWindows(account: VolcAccount): WindowQuota[] {
       total: window.quota,
       remaining: Math.max(0, window.quota - window.used),
       resetAt: window.resetTime,
+      unit: 'AFP',
+      ...(window.window === 'daily' ? { note: DAILY_WINDOW_NOTE } : {}),
     }),
   )
+}
+
+/** 与 `server/volc.ts` 的 `AFPDaily` 说明同源（上游口径见文档 82379/2366394）。 */
+const DAILY_WINDOW_NOTE = '仅图片生成 / 视频生成 / 语音模型与 Harness 计入'
+
+/** ISO 时刻（`2026-10-06T15:59:59Z`）→ 本地可读；解析不出来就原样回退，不吞信息。 */
+function isoText(value: string): string {
+  const ms = Date.parse(value)
+  return Number.isNaN(ms) ? value : formatDateTime(ms)
 }
 
 /**
@@ -215,6 +231,7 @@ function inferenceTable(inference: InferenceView): DataTable {
 }
 
 export function toVolcPlanDetail(account: VolcAccount, inference: InferenceView): AccountDetail {
+  const plan = account.personalPlan
   return {
     identity: identityFields(account, 'VOLC_LABEL / VOLC_LABEL_N'),
     windows: [...agentWindows(account), ...codingWindows(account)],
@@ -223,6 +240,11 @@ export function toVolcPlanDetail(account: VolcAccount, inference: InferenceView)
     tables: [detailsTable(account), ...(inference.ok ? [inferenceTable(inference)] : [])],
     meta: [
       field('套餐类型', account.planType ?? '未知'),
+      // 以下四项来自 GetPersonalPlan；未订阅/已回收时它整块为 null，字段自然落成 —
+      field('套餐状态', plan?.status ?? null),
+      field('生效时间', plan ? isoText(plan.startTime) : null),
+      field('到期时间', plan ? isoText(plan.endTime) : null),
+      field('自动续费', plan ? (plan.autoRenew ? '已开启' : '未开启') : null),
       field('明细区间', `${account.detailsStart} ~ ${account.detailsEnd}`),
       field('Coding Plan 状态', account.codingPlan.status || null),
       field('调用明细合计', totalUsage(account)),
