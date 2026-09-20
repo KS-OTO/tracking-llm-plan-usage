@@ -157,7 +157,7 @@ export interface Field {
  * 读数的语义类别 —— 决定精度，不由调用点决定（见基线第 5 节）。
  *
  * - `money` 2 位截断（货币）· `count` 0 位+千分位（次数/总量）· `percent` 1 位（比率）
- * - `tokens` 量级缩写（12.5K / 1.20M）
+ * - `tokens` 量级缩写（12.5K / 1.20M）；不足 1K 退回 `count` 的 0 位精度
  * - `text` / `duration` 原样文本（枚举、日期、倒计时文案）
  */
 export type MetricKind = 'money' | 'tokens' | 'count' | 'percent' | 'text' | 'duration'
@@ -220,8 +220,13 @@ export interface WindowQuota {
   status?: string
   /**
    * 是否出现在卡片读数带上（默认 true）。与 `Metric.cardFace` 同一约定，
-   * 但这里更常用：火山 Coding Plan 与 Agent Plan 共用一对 AK/SK、归属不同订阅，
-   * CodePlan 的窗口只在弹窗里展示 —— 否则卡面上会出现两个「5 小时窗口」。
+   * 但这里更常用，目前两种情形：
+   *
+   * ① 同一账号下的**另一个订阅**：火山 Coding Plan 与 Agent Plan 共用一对 AK/SK，
+   *    Coding Plan 的窗口只在弹窗里展示 —— 否则卡面上会出现两个「5 小时窗口」。
+   * ② **只对部分模型生效的限额**：火山 Agent Plan 的模型日额度只对图片生成 /
+   *    视频生成 / 语音模型与 Harness 生效（文档 82379/2366394），只跑文本时它恒为 0，
+   *    放卡面上就是一条永远空着的进度条，还容易被读成数据坏了。
    */
   cardFace?: boolean
   /**

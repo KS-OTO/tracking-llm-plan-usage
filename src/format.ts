@@ -74,12 +74,15 @@ export function formatMoney(value: number | null | undefined, unit?: string): st
  * 产出文本请用 `formatNumber`。
  */
 export function roundNumber(value: number): number {
-  return Math.round(value * 10) / 10
+  // `+ 0` 把 -0 归一成 0（与 `truncateMoney` 同一理由）：`Math.round(-0.04 * 10) / 10`
+  // 恰好是 -0，`(-0).toFixed(1)` 会渲染成 "-0.0"。
+  return Math.round(value * 10) / 10 + 0
 }
 
 /** 计数取整到 0 位（四舍五入），**返回 number**。产出文本请用 `formatCount`。 */
 export function roundCount(value: number): number {
-  return Math.round(value)
+  // `+ 0` 同 `roundNumber`：`(-0).toLocaleString()` 会渲染成 "-0"。
+  return Math.round(value) + 0
 }
 
 /** 数值 → 文本（1 位四舍五入）。百分比、比率用这个。 */
@@ -99,13 +102,26 @@ export function formatCount(value: number | null | undefined): string {
 }
 
 /**
- * Token / CREDITS 总量压缩展示：12.5K / 1.20M / 3.40B。
+ * Token / CREDITS / AFP 总量压缩展示：12.5K / 1.20M / 3.40B。
  *
  * 属于计数类的**量级缩写变体**：小数位由量级决定（K 档 1 位、M/B 档 2 位），
  * 不套用 `formatCount` 的「0 位 + 千分位」——缩写本就是压缩展示，再补千分位没有意义。
  * 需要精确整数计数时用 `formatCount`。
+ *
+ * **不足 1K 时没有可缩写的量级，退回 `formatCount` 的计数精度**（0 位四舍五入）：
+ * 这一档曾经直接 `String(value)`，于是**原始浮点从这里原样漏到渲染层** ——
+ * 实测火山 Agent Plan 的每周窗口 `35000 - 34793.6528` 算出来是 `206.34719999999652`，
+ * 卡面印成「剩余 206.34719999999652 AFP」（2026-09-20 报上来的症状）。
+ * 上游给 4 位小数的 AFP 用量是正常的，差值本来就带浮点尾巴，只能在渲染前收掉。
+ *
+ * 非有限数给中性占位：以前只有上三档有 `toFixed`，`NaN` / `Infinity` 会走成
+ * `"NaN"` / `"InfinityB"` 这种既不像数值也不像占位的文本，与 `formatMoney` /
+ * `formatNumber` / `formatCount` 的口径也不一致。
  */
 export function formatTokens(value: number): string {
+  if (!Number.isFinite(value)) {
+    return EMPTY_VALUE
+  }
   if (value >= 1e9) {
     return `${(value / 1e9).toFixed(2)}B`
   }
@@ -115,7 +131,8 @@ export function formatTokens(value: number): string {
   if (value >= 1e3) {
     return `${(value / 1e3).toFixed(1)}K`
   }
-  return String(value)
+  // 负数走同一条（量级缩写对负数无意义），因此不做 `Math.abs` 分支
+  return formatCount(value)
 }
 
 /**

@@ -2,8 +2,9 @@
 /**
  * 火山方舟 Agent Plan。
  *
- * 卡面只保留高优先级读数——Agent Plan 各窗口的额度进度；Coding Plan 窗口、
- * 模型调用明细、推理用量全部进「详情」弹窗（四段骨架，见 `ui/AccountDetailPanel`）。
+ * 卡面只保留高优先级读数——约束文本模型的三个 Agent Plan 窗口（5 小时 / 周 / 月）的额度进度；
+ * 模型日额度（只对图片/视频/语音与 Harness 生效，见 `VolcPlanDetail` 的 `agentWindows`）、
+ * Coding Plan 窗口、模型调用明细、推理用量全部进「详情」弹窗（四段骨架，见 `ui/AccountDetailPanel`）。
  *
  * 为什么推理用量也并进来：它和 Agent Plan / Coding Plan 用的是**同一对 AK/SK**、
  * 归属同一个火山方舟账号，单独占一张区块卡只会让「套餐订阅」Tab 多一个只放一行的卡片；

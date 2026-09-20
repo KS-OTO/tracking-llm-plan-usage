@@ -130,11 +130,17 @@ function codingWindowLabel(level: string): string {
  * Agent Plan 窗口：上游给 `quota`（总量）与 `used`，百分比自己算。
  * 比值只在这里算一次，卡面与弹窗里的进度条读同一个 `percent`。
  * `remaining` 显式钳到 0 —— 超额使用时「剩余 -1.2K」是负数噪声。
+ * 浮点尾巴不在这里处理：`quota - used` 会算出 `206.34719999999652` 这种值
+ * （实测每周窗口），精度统一由 `formatTokens` 收口。
  *
  * **单位是 AFP**（文档 82379/2366394）：不写单位的话，`0 / 50.0K` 会被读成 token 或次数。
  *
- * `daily` 单独加脚注：它是**模型日额度**，只有图片生成 / 视频生成 / 语音模型与 Harness
- * 计入，文本与向量化模型不受它约束。不加这句，只跑文本时「已用 0」看起来就像数据坏了。
+ * `daily` 是**模型日额度**，走 `cardFace: false`（只进弹窗），两个理由：
+ * ① 只有图片生成 / 视频生成 / 语音模型与 Harness 计入，文本与向量化模型不受它约束 ——
+ *    对只跑文本的账号，卡面上它就是一条永远「已用 0」的空进度条，白占四分之一窗口区；
+ * ② 它的「已用 0」最容易被误读成数据坏了，而弹窗里能随窗口带脚注解释清楚。
+ * 卡面只留真正约束文本模型的三个窗口（5 小时 / 周 / 月）。
+ * 真用上图片 / 视频模型的话，把这里的 `false` 改回 `true` 即可（就这一个开关）。
  */
 function agentWindows(account: VolcAccount): WindowQuota[] {
   return account.windows.map((window) =>
@@ -147,7 +153,7 @@ function agentWindows(account: VolcAccount): WindowQuota[] {
       remaining: Math.max(0, window.quota - window.used),
       resetAt: window.resetTime,
       unit: 'AFP',
-      ...(window.window === 'daily' ? { note: DAILY_WINDOW_NOTE } : {}),
+      ...(window.window === 'daily' ? { cardFace: false, note: DAILY_WINDOW_NOTE } : {}),
     }),
   )
 }
