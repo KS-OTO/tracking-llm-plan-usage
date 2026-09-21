@@ -25,8 +25,9 @@
 
 技术栈：Bun + Vue 3 + Vite（Vite+ 工具链：Oxfmt / Oxlint / tsgolint 严格类型检查 / Vitest / Rolldown 构建），
 状态管理 Pinia；上游响应校验用 Zod（**只在服务端** —— 前端只校验错误信封，不把 Zod 打进客户端）。
-UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应式 Grid 多列布局；适老化字号基线；
-**按需注册**，见 `src/tdesign.ts`）。
+UI 组件库：TDesign Vue Next（桌面端；**按需注册**，见 `src/tdesign.ts`；响应式 Grid 多列布局；
+适老化字号基线）。亮/暗两套**品牌主题**在 `src/assets/theme.css` 里覆盖 TDesign 的设计变量
+（`--td-*`）实现，组件侧零硬编码颜色 —— 换配色只动那一个文件。
 
 ![套餐订阅：窗口用量条与多 Key 并列](docs/images/plans-dark.png)
 
@@ -66,7 +67,10 @@ UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应
   关掉自动刷新或页面切到后台时后者显示「已暂停」——不给一个根本不会到来的时间。
 - **站点可自建品牌**：站点名 / Logo / favicon 都能用环境变量替换，见「站点自定义」。
 - **暗色模式**：一键切换并持久化（localStorage），默认跟随系统 `prefers-color-scheme`。
-- **可访问性**：语义化地标（header/main/footer）、键盘可达、aria 标注、对比度对齐 TDesign 官方 token。
+- **可访问性**：语义化地标（header/main/footer）、键盘可达、aria 标注；文字五档（含链接色）
+  在亮/暗两套下全部按 WCAG AA（≥4.5:1）校验过，取值见 `src/assets/theme.css`。最淡那档没有
+  沿用 TDesign 官方值 —— 那是给输入框提示用的，这里是真实正文；链接色走**文字档**而非
+  TDesign 的 `--td-brand-color`（后者是填充档，压到暗色底上只有 2.15:1）。
 - **骨架屏 / 错误告警 / 空状态**：统一由 TDesign Skeleton / Alert / Empty 承载。
 - **卡片只放高优先级读数**：卡片上只有窗口用量 / 余额 / 状态这类每天要看的数字；
   账号身份、订阅元数据、明细表、次级指标全部收进卡片右上角的「详情」弹窗，需要时才展开。
@@ -579,6 +583,9 @@ src/              Vue 3 前端（TDesign Vue Next + Pinia）
                   「逐层铺满」契约：区块卡 → 账号卡 → 窗口块，每层都吃掉上一层剩余高度
                   弹窗几何：placement="center" 决定屏幕居中（TDesign 默认 top = 视口 20vh 顶距），
                   宽度/高度兜底与正文内部滚动在同文件第 5 节
+  assets/theme.css   品牌主题层：覆盖 TDesign 的 --td-* 设计变量（亮/暗各一套）
+                     唯一的配色入口 —— 组件里不写颜色；取值来自 18Bit 现网站点的实测计算样式
+                     圆角/字体/底色阶梯/文字三档/发丝线边框都在这里，规格见 design-baseline.md 0.1
 e2e/              Playwright E2E 冒烟
 worker/           Cloudflare Workers 入口（复用 server/app.ts）
 cloud-functions/  EdgeOne Makers 云函数（/api/* 全捕获 + /api/diag 自诊断）
@@ -623,7 +630,8 @@ docs/             供应商接口调研（阿里云 Token Plan / 模力方舟代
 
 - **环境**：Bun 1.2+ 与 Node `^22.18.0 || >=24.12.0`
 - **四道门禁**：`test:unit` → `build` → `test:e2e` → `vp check`，顺序固定且必须全绿
-- **代码铁律**：只用 TDesign 原生 token（禁 `--ui-*` 平行层）；布局只走
+- **代码铁律**：只用 TDesign 原生 token（禁 `--ui-*` 平行层），**品牌值一律改
+  `src/assets/theme.css`**（组件里不写颜色，那是全站唯一的配色入口）；布局只走
   `src/assets/layout.css` 的语义化原语（组件不写断点、禁 `t-row`/`t-col`）；
   列策略由 `App.vue` 按「个数」统一施加；`<t-statistic>` 只允许出现在 `MetricTile.vue`；
   组件只从 `src/tdesign.ts` 的注册表来（禁 `app.use(TDesign)` 整库导入，它不可摇树）

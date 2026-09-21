@@ -270,11 +270,13 @@
 }
 
 /* 「可用模型」外链：降一级字号，不与平台名抢视觉重心；
- * 下划线只在 hover / 键盘聚焦时出现，避免标题行常驻两条横线。 */
+ * 下划线只在 hover / 键盘聚焦时出现，避免标题行常驻两条横线。
+ * 用 `--td-text-color-brand` 而不是 `--td-brand-color` —— 后者是**填充档**，
+ * 暗色下当文字用只有 2.15:1（详见 `theme.css` 文件头）。 */
 .models-link {
   font-size: var(--td-font-size-body-small);
   font-weight: 400;
-  color: var(--td-brand-color);
+  color: var(--td-text-color-brand);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -451,8 +453,9 @@
   font-size: var(--td-font-size-body-small);
 }
 
+/* 详情弹窗里的外链：同 `.models-link`，走文字档而非填充档（暗色弹窗底是卡片面） */
 .detail-links a {
-  color: var(--td-brand-color);
+  color: var(--td-text-color-brand);
   text-decoration: none;
 }
 

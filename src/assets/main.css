@@ -32,9 +32,9 @@ body {
   min-height: 100vh;
   background: var(--td-bg-color-page);
   color: var(--td-text-color-primary);
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', Roboto, sans-serif;
+  /* 字体只有一个来源：theme.css 里的 --td-font-family（与参考站同一套系统栈）。
+   * 这里再写一份字面量就是第二次维护，正是第 0 节要避免的漂移。 */
+  font-family: var(--td-font-family);
   line-height: 1.6;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
