@@ -24,6 +24,13 @@
    `--app-brand-gap` / `--app-last-updated-display` / `--app-anchor-offset`）
    与 `--card-min` / `--grid-cols`；**新增一个就得在那里写清理由**。
 3. 若某个视觉需求 `--td-*` 表达不了 → **先提 issue 讨论是否改设计**，不要自建平行层。
+4. **组件只从 `src/tdesign.ts` 的注册表注册**，不许 `app.use(TDesign)` 整库导入。
+   整库默认导出的 `install` 就是「遍历 77 个组件逐个 `app.use`」，没有摇树余地 —— 只换这一处
+   导入，入口 JS+CSS 的 gzip 从 **253.1 KB 涨到 443.9 KB**（+75%），JS 侧 raw 1.46 MB。它还会把
+   77 套组件样式一起拖进来（各组件样式由各自的 `style/css.mjs` 随 JS 模块引入），所以
+   「按需引入 TDesign 样式」这件事被一并解决，`main.ts` 里的 `es/style/index.css` 不用动。
+   漏注册的症状是**静默**的（Vue 把解析不到的标签当自定义元素渲染，没内容也没报错），
+   因此 `src/tdesign.test.ts` 扫全部模板逐条断言，且测试挂载器与生产**共用同一份注册表**。
 
 ### 视觉细节的收敛口径：TDesign 默认 + 项目多数派
 

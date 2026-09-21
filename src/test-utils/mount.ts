@@ -1,11 +1,15 @@
 import { mount, type ComponentMountingOptions, type VueWrapper } from '@vue/test-utils'
 import { nextTick, type Component } from 'vue'
-import TDesign from 'tdesign-vue-next'
 import { expect } from 'vite-plus/test'
 
+import { TDesignComponents } from '../tdesign'
+
 /**
- * 组件契约测试的统一挂载器：注册 TDesign 全局组件，
- * 与生产入口 main.ts 的 createApp(App).use(TDesign) 保持一致。
+ * 组件契约测试的统一挂载器。
+ *
+ * 注册的是**生产同一份** `TDesignComponents`（`src/tdesign.ts`）—— 不是整库插件。
+ * 这一点是有意的：注册表漏掉某个组件时，生产上 Vue 只会把它当未解析的自定义元素
+ * 静默渲染（无内容、无报错），而这里会立刻让用例失败。用整库插件挂载就盖不出这个洞。
  */
 export function mountWithTDesign<T extends Component>(
   component: T,
@@ -14,7 +18,7 @@ export function mountWithTDesign<T extends Component>(
   return mount(component, {
     ...options,
     global: {
-      plugins: [TDesign],
+      plugins: [TDesignComponents],
       ...options.global,
     },
   })
