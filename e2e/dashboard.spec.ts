@@ -148,6 +148,21 @@ test.describe('dashboard smoke', () => {
       { timeout: 30_000 },
     )
   })
+  /**
+   * 页脚的仓库外链是新用户唯一的「找源码」出口。
+   * 锁三点：地址、`target="_blank"`（否则从仪表盘点走就回不来了）、
+   * 以及 `rel` 里的 noreferrer（少了它，被打开的页面能通过 window.opener
+   * 反向操纵本站，而本站页面上正摆着余额读数）。
+   */
+  test('footer links to the GitHub repository in a new tab', async ({ page }) => {
+    await page.goto('/')
+    const repo = page.locator('.app-footer a[href^="https://github.com/"]')
+    await expect(repo).toBeVisible()
+    await expect(repo).toHaveAttribute('href', 'https://github.com/KS-OTO/tracking-llm-plan-usage')
+    await expect(repo).toHaveAttribute('target', '_blank')
+    await expect(repo).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
   test('tab switching exposes balance sections', async ({ page }) => {
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '余额账户' }).click()

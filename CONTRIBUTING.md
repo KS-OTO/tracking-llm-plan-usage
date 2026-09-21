@@ -125,6 +125,12 @@ bun run check
 - **README 有两份**：`README.md`（中文，**权威版本**）与 `README.en.md`（英文）。改动功能 /
   环境变量 / 部署步骤时**两份一起改**；英文版只做翻译，不引入中文版没有的内容。
   两份不一致时以中文版为准。`README.en.md` 里已注明这一点。
+- **用户手册在 [Wiki](https://github.com/KS-OTO/tracking-llm-plan-usage/wiki)**：
+  README 只负责「进门」（简介 → 快速开始 → 部署 → 配置 → 功能 → 文档导航），
+  深度内容（凭据细节、部署步骤、平台字段、排查）归 Wiki。
+  但 **Wiki 不随仓库版本走、也不进 CI**，因此分工是硬的：
+  **会随代码漂移的规格一律留在仓库里**（`docs/design-baseline.md` / `SECURITY.md` / 本文件），
+  Wiki 只放面向使用者的操作手册。改了操作步骤请**在同一个 PR 里同步 Wiki** —— 它没有门禁兜底。
 
 ## 行为准则
 
