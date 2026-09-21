@@ -1,9 +1,9 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { dirname, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
 
 import { describe, expect, it } from 'vite-plus/test'
 
+import { SRC_DIR, vueFiles } from './test-utils/src-files'
 import {
   currencySymbol,
   EMPTY_VALUE,
@@ -20,15 +20,6 @@ import {
   roundNumber,
   truncateMoney,
 } from './format'
-
-/**
- * `src/` 目录。
- *
- * ⚠️ 不要写成 `new URL(\`../${name}\`, import.meta.url)`：Vite 对
- * `new URL(<相对路径>, import.meta.url)` 这个形状有专门的 asset 重写逻辑，
- * 参数是非字面量时会被改坏。先把 `import.meta.url` 转成路径再 `resolve`。
- */
-const SRC_DIR = dirname(fileURLToPath(import.meta.url))
 
 describe('truncateMoney', () => {
   it('真截断：不四舍五入', () => {
@@ -245,20 +236,6 @@ describe('hasValue', () => {
     expect(hasValue(Number.NaN)).toBe(false)
   })
 })
-
-/** `src/` 下全部 `.vue` 文件（递归）。 */
-function vueFiles(dir: string): string[] {
-  const found: string[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = resolve(dir, entry.name)
-    if (entry.isDirectory()) {
-      found.push(...vueFiles(full))
-    } else if (entry.name.endsWith('.vue')) {
-      found.push(full)
-    }
-  }
-  return found
-}
 
 /**
  * 为什么用测试来管数值精度：这两类问题**不会让任何测试失败**，只会在肉眼看卡时才暴露 ——

@@ -5,11 +5,12 @@ import './assets/layout.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import TDesign from 'tdesign-vue-next'
 import App from './App.vue'
+import { TDesignComponents } from './tdesign'
 
 const app = createApp(App)
 app.use(createPinia())
-app.use(TDesign)
+// 只注册用到的组件（见 src/tdesign.ts）：整库默认导出不可摇树，实测多 287 KB gzip
+app.use(TDesignComponents)
 
 app.mount('#app')

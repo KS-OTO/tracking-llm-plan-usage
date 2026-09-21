@@ -24,8 +24,9 @@
 它**不是**代理网关，不转发模型请求，不记录你的对话内容；只做「读余额、读用量」这一件事。
 
 技术栈：Bun + Vue 3 + Vite（Vite+ 工具链：Oxfmt / Oxlint / tsgolint 严格类型检查 / Vitest / Rolldown 构建），
-状态管理 Pinia，数据校验 Zod（前后端 JSON 边界统一 schema 校验）。
-UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应式 Grid 多列布局；适老化字号基线）。
+状态管理 Pinia；上游响应校验用 Zod（**只在服务端** —— 前端只校验错误信封，不把 Zod 打进客户端）。
+UI 组件库：TDesign Vue Next（桌面端；官方亮/暗主题 token；响应式 Grid 多列布局；适老化字号基线；
+**按需注册**，见 `src/tdesign.ts`）。
 
 ![套餐订阅：窗口用量条与多 Key 并列](docs/images/plans-dark.png)
 
@@ -558,8 +559,9 @@ server/           平台无关 API 核心 + Bun 入口
   newapi.ts       New API（自托管网关）客户端：管理接口优先、账单接口回落，订阅/钱包模式判定
   balances.ts     OpenRouter 余额客户端
   plans.ts        Kimi / MiniMax Token Plan 客户端
-src/              Vue 3 前端（TDesign Vue Next + Pinia + Zod）
-  api.ts          前端 API 客户端（错误信封 zod 校验）
+src/              Vue 3 前端（TDesign Vue Next + Pinia）
+  api.ts          前端 API 客户端（错误信封手写收窄；不引 Zod —— 它整库进客户端，换不来什么）
+  tdesign.ts      TDesign 组件显式注册表（整库默认导出不可摇树，实测多 43% 体积；守卫见 tdesign.test.ts）
   stores/         Pinia stores（dashboard 数据编排 / theme 暗色主题）
   types.ts        共享类型（多账号 AccountEnvelope 判别联合 + AccountDetail 统一详情模型）
   detail.ts       详情模型的构件库（field/metric/table/notice/link/windowQuota/cardsOf …）
@@ -623,7 +625,8 @@ docs/             供应商接口调研（阿里云 Token Plan / 模力方舟代
 - **四道门禁**：`test:unit` → `build` → `test:e2e` → `vp check`，顺序固定且必须全绿
 - **代码铁律**：只用 TDesign 原生 token（禁 `--ui-*` 平行层）；布局只走
   `src/assets/layout.css` 的语义化原语（组件不写断点、禁 `t-row`/`t-col`）；
-  列策略由 `App.vue` 按「个数」统一施加；`<t-statistic>` 只允许出现在 `MetricTile.vue`
+  列策略由 `App.vue` 按「个数」统一施加；`<t-statistic>` 只允许出现在 `MetricTile.vue`；
+  组件只从 `src/tdesign.ts` 的注册表来（禁 `app.use(TDesign)` 整库导入，它不可摇树）
 - **凭据纪律**：绝不把真实 Key / Cookie / Token 粘进任何入库文件，测试夹具一律用占位值
 
 commit message 用中文，格式 `<type>: <结论>`，正文讲**为什么**。设计决策请写进

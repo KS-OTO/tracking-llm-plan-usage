@@ -673,8 +673,11 @@ server/           platform-agnostic API core + Bun entry point
   newapi.ts       New API (self-hosted gateway) client: management API first, billing API fallback, subscription/wallet mode detection
   balances.ts     OpenRouter balance client
   plans.ts        Kimi / MiniMax Token Plan client
-src/              Vue 3 frontend (TDesign Vue Next + Pinia + Zod)
-  api.ts          frontend API client (zod validation of the error envelope)
+src/              Vue 3 frontend (TDesign Vue Next + Pinia)
+  api.ts          frontend API client (error envelope narrowed by hand; no Zod — it ships the whole
+                  library to the client for almost nothing)
+  tdesign.ts      explicit TDesign component registry (the default export is not tree-shakeable —
+                  +43% bundle size; guard test in tdesign.test.ts)
   stores/         Pinia stores (dashboard data orchestration / theme dark mode)
   types.ts        shared types (multi-account AccountEnvelope discriminated union + the unified AccountDetail model)
   detail.ts       building blocks of the detail model (field/metric/table/notice/link/windowQuota/cardsOf …)
@@ -743,7 +746,8 @@ the essentials are:
 - **Code ground rules**: use TDesign's native tokens only (no parallel `--ui-*` layer); layout only
   through the semantic primitives in `src/assets/layout.css` (components declare no breakpoints and
   never use `t-row`/`t-col`); column strategy is applied centrally by `App.vue` based on item
-  counts; `<t-statistic>` may only appear in `MetricTile.vue`
+  counts; `<t-statistic>` may only appear in `MetricTile.vue`; components are registered only from
+  the registry in `src/tdesign.ts` (never `app.use(TDesign)` — it is not tree-shakeable)
 - **Credential discipline**: never paste a real key, cookie or token into any committed file; test
   fixtures always use placeholder values
 

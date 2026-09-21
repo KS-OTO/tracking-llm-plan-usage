@@ -1,5 +1,3 @@
-import { z } from 'zod'
-
 import type { InferenceUsageResponse, StatusResponse, UsageResponse } from './types'
 
 export class ApiError extends Error {
@@ -11,21 +9,40 @@ export class ApiError extends Error {
   }
 }
 
-/** 后端错误信封（createAppHandler 的 errorResponse 契约）。 */
-const ApiErrorEnvelope = z.object({
-  error: z.object({ code: z.string(), message: z.string() }).optional(),
-})
+/**
+ * 后端错误信封（`createAppHandler` 的 `errorResponse` 契约）：`{ error?: { code, message } }`。
+ *
+ * 手写收窄，与 `z.object({ error: z.object({ code: z.string(), message: z.string() }).optional() })`
+ * **逐分支等价**：`error` 缺失 / 不是对象 / 是数组 / `code`、`message` 有一个不是字符串
+ * → 一律视为「没有信封」，调用方回落到 HTTP 状态码。
+ *
+ * 之所以不上 zod：这是前端唯一的运行时校验点，而 zod 的默认导出会把整库带进客户端
+ * （实测 +79.4 KB / gzip +24.1 KB），换来的却只是读两个字符串字段。
+ */
+function readErrorEnvelope(json: unknown): { code: string; message: string } | undefined {
+  if (typeof json !== 'object' || json === null || Array.isArray(json)) {
+    return undefined
+  }
+  const { error } = json as { error?: unknown }
+  if (typeof error !== 'object' || error === null || Array.isArray(error)) {
+    return undefined
+  }
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  if (typeof code !== 'string' || typeof message !== 'string') {
+    return undefined
+  }
+  return { code, message }
+}
 
 /**
- * 同源后端（本仓库 server/app.ts）的响应负载 schema：
- * 错误契约运行时校验；业务字段与共享 types.ts 同构，组件侧防御性渲染兜底，
- * 因此负载本身声明为可信直通（z.custom）。
+ * 同源后端（本仓库 server/app.ts）的读取。
+ *
+ * **业务负载不做运行时校验**：它与 `types.ts` 同构（同一仓库的同一份契约），
+ * 且组件侧一律按「字段恒存在的扁平对象」做防御性渲染兜底（缺字段取中性空值）。
+ * 只有错误信封要校验，因为它的形状决定用户看到的是上游失败原因还是「HTTP 500」。
+ * 负载本身声明为可信直通。
  */
-async function get<T>(
-  path: string,
-  schema: z.ZodType<T>,
-  params?: Record<string, string | number>,
-): Promise<T> {
+async function get<T>(path: string, params?: Record<string, string | number>): Promise<T> {
   const url = new URL(path, window.location.origin)
   for (const [key, value] of Object.entries(params ?? {})) {
     url.searchParams.set(key, String(value))
@@ -54,14 +71,18 @@ async function get<T>(
   }
 
   if (!res.ok) {
-    const envelope = ApiErrorEnvelope.safeParse(json)
-    const error = envelope.success ? envelope.data.error : undefined
+    const error = readErrorEnvelope(json)
     throw new ApiError(
       error?.code ?? `HTTP_${res.status}`,
       error?.message ?? `请求失败 (${res.status})`,
     )
   }
-  return schema.parse(json)
+  // 读取负载时的类型不安全点（全仓唯一一处，与 server/cache.ts 同一手法）。
+  // 不变量：同源后端（server/app.ts）与 src/types.ts 是同一份契约，「负载形状 = T」
+  // 由同一个仓库保证；组件侧另有一层「字段恒存在的扁平对象」兜底，缺字段取中性空值。
+  // 因此这里不做运行时校验 —— 校验保留给错误信封，只有它的形状决定用户看到什么。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 见上方说明
+  return json as T
 }
 
 /**
@@ -72,7 +93,7 @@ async function get<T>(
  */
 export const api = {
   /** 首屏：品牌 / favicon / 刷新节奏 / 半配置提示。0 次上游调用。 */
-  status: () => get('/api/status', z.custom<StatusResponse>()),
+  status: () => get<StatusResponse>('/api/status'),
   /**
    * 每刷新一次：9 家平台的读数一次返回（每格仍是独立容错切片）。
    *
@@ -80,7 +101,7 @@ export const api = {
    * 自动刷新则吃缓存以省下上游墙钟。
    */
   usage: (refresh = false) =>
-    get('/api/usage', z.custom<UsageResponse>(), refresh ? { refresh: 1 } : undefined),
+    get<UsageResponse>('/api/usage', refresh ? { refresh: 1 } : undefined),
   /**
    * 火山推理用量：**唯一的按需端点**。
    *
@@ -88,7 +109,7 @@ export const api = {
    * 「换一个模型」退化成「全量重拉 9 家平台」。
    */
   volcInference: (days: number, model?: string, refresh = false) =>
-    get('/api/volc/inference-usage', z.custom<InferenceUsageResponse>(), {
+    get<InferenceUsageResponse>('/api/volc/inference-usage', {
       days,
       ...(model ? { model } : {}),
       ...(refresh ? { refresh: 1 } : {}),
