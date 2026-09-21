@@ -660,6 +660,20 @@ watch(
           数据来源：DeepSeek · 火山方舟 · 智谱 · 阿里云 · 模力方舟 · 百度千帆 · OpenRouter ·
           订阅套餐
         </span>
+        <!-- 仓库地址是「有意公开」的信息，因此写死在模板里而非做成环境变量
+             （自建实例的部署者改的是站点名/Logo，不是源码出处）。
+             `rel` 不能省：少了 noreferrer，被打开的页面能通过 window.opener 反向操纵本站
+             （tabnabbing），而本站页面上带着余额读数。 -->
+        <span>
+          <a
+            href="https://github.com/KS-OTO/tracking-llm-plan-usage"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub 开源仓库（新窗口打开）"
+          >
+            GitHub 开源仓库 ↗
+          </a>
+        </span>
       </footer>
     </main>
 
