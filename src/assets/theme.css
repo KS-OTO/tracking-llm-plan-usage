@@ -1,5 +1,5 @@
 /**
- * 品牌主题层 —— 把 18Bit（18bit.cn）的视觉语言套到 TDesign 上
+ * 品牌主题层 —— 把 18Bit 的视觉语言套到 TDesign 上
  *
  * 这个文件是**唯一**做品牌化的地方，而且只做一件事：覆盖 TDesign 的设计变量
  * （`--td-*`）。不新增 `--ui-*` 平行层、不改任何组件、不写组件选择器。
@@ -11,93 +11,189 @@
  * 全部经 `var(--td-*)` / `var(--app-*)` 取值。所以改这一层就等于重刷全站，
  * 组件侧一行不用动，也不可能出现「改了一半」的中间态。
  *
- * ## 取值来源：实测，不是估的
+ * ## 取值来源：`https://help-dev.18bit.cn/result` 的计算样式，不是估的
  *
- * 三个参考站（`go.18bit.cn` / `help-dev.18bit.cn` / `go.18bit.cn/help-docs/…`）
- * 用 Playwright 取**计算后样式**得到（原始数据留在 `.workbuddy/ref/`）：
+ * 上一版拿三个营销页当依据，但真正要对齐的是**工具页**：`/result`（DNS 检测结果页）
+ * 才是与本项目同类的「密集读数面板」。重测后本文件按它重写，实测值表：
  *
- * | 角色           | 实测值                        | 本文件落点                    |
- * | -------------- | ----------------------------- | ----------------------------- |
- * | 页面底色       | `#16171b`                     | 暗色 `--td-bg-color-page`     |
- * | 卡片表面       | `#292b32`                     | 暗色 `bg-color-container`     |
- * | 次级按钮/控件  | `#3e4a60`（hover `#4678f9`）  | 暗色 `bg-color-component-hover` |
- * | 主色           | `#0d51d9`                     | 品牌阶 anchor（亮 -7 / 暗 -8）|
- * | 标题文字       | `#f9faff`                     | 暗色 `text-color-primary`     |
- * | 正文次要       | `#959cb1`                     | 暗色 `text-color-secondary`   |
- * | 更淡一档       | `#6a6f82`                     | 亮色 `text-color-placeholder` |
- * | 浅底（亮色）   | `#f9faff` / `#e5e9ff`         | 亮色 page / hover             |
- * | 深字（亮色）   | `#292b32`                     | 亮色 `text-color-primary`     |
- * | 成功           | `#1ec198`                     | 成功阶 anchor（暗 -8）        |
- * | 边框           | `rgba(106,111,130,0.32)`      | `component-border` / `stroke` |
- * | 圆角           | 卡片 0px、按钮 2px            | 全部收到 2px（见下）          |
- * | 阴影           | **无**（三个站一个 shadow 都没有）| 收紧到贴边投影，不删（见下）  |
- * | 字体           | `system-ui, -apple-system, …` | `--td-font-family`            |
+ * | 角色             | 实测值                          | 本文件落点                          |
+ * | ---------------- | ------------------------------- | ----------------------------------- |
+ * | 页面底色         | `body { #16171b }`              | 暗色 `bg-color-page`                |
+ * | 内容面板（卡）   | `#000000`（**比页面更深**）     | **没有照抄**，改用 `#1c1d22`，见下偏离第 1 条 |
+ * | 内部元素 / 分块  | `#1c1d22`（**比页面浅**）       | 暗色 `bg-color-container`           |
+ * | 抬起的控件/分隔  | `#292b32`（全站 56 处）         | 暗色 `secondarycontainer` / `component` |
+ * | 次级按钮 / hover | `#3e4a60` / `#30323a`           | 暗色 `secondarycomponent` / `-container-hover` |
+ * | 主色（按钮底）   | `#0d51d9`，hover `#4678f9`      | 品牌阶 anchor（亮 -7 = `#0d51d9` / 暗 -8 = `#4e7ef9`，见下「暗色为什么换蓝」）|
+ * | **强调绿**       | `#21e786`（8 档 alpha 成套）    | 成功阶 anchor（**亮暗都在 -5**，见下「锚点落在消费级」）|
+ * | 警告琥珀         | `#ffc55a`                       | 警告阶 anchor（亮色压深到 `#8c6c32`，暗色原值）|
+ * | 危险粉           | `#ff5fa0`                       | 危险阶 anchor（**-6**）              |
+ * | 交互蓝（文字）   | `#6991fa`                       | 暗色 `text-color-brand` / `-link`   |
+ * | 标题 / 次要 / 更淡 | `#f9faff` / `#959cb1` / `#6a6f82` | 对应三档文字                     |
+ * | 卡片描边         | 卡片 `1px solid #ffffff`        | **没有照抄**，降到 24% 白，见下偏离第 2 条 |
+ * | 圆角             | **20 / 12 / 10 / 8 / 6 / 2**    | 尺度的五档（见下「圆角是阶梯」）    |
+ * | 阴影             | `0 20px 48px #16171bcc`、`0 24px 64px #16171ba3`、`0 4px 10px #0000004d` | 三个 shadow token |
+ * | 字体             | `system-ui, -apple-system, …`   | `--td-font-family`                  |
  *
- * 字体那条有实据：`style.css` 头部那行在线字体的 `@import` 已被注释掉（注释里写着
- * 「放弃下方在线字体」），且实测 `document.fonts` 为空 —— 所以 `Fira Sans` /
- * `Heebo` 从未加载，实际渲染就是系统字体栈。照抄系统栈才是「一致」。
+ * `#21e786` 在 `/result` 里是一套**完整的 alpha 阶梯**，不是零星点缀，这是本次改版
+ * 最重要的发现：`08`(0.03) 容器底 / `0d`(0.05) 元素底 / `1a`(0.10) 提示条 /
+ * `26`(0.15) 激活底与表头 / `33`(0.20) hover / `4d`(0.30) hover 边框 /
+ * `80`(0.50) 激活边框 / `ff`(1.0) 徽标底与边框。所以它是**语义色**，不是插画色。
+ *
+ * ## 上一版有三处偏差，这一版是修它们
+ *
+ * 1. **圆角被一刀切成 2px**。实测 `/result` 是**阶梯**：大卡 20px、弹窗与 info-list
+ *    12px、徽标与 info-box 10px、行项与表格 8px、小按钮 6px、主按钮 2px。全站压成
+ *    2px 会把「品牌是圆的」这条读反 —— 大卡与按钮的对比本来就是它的特征。
+ *    现在按 TDesign 各自的消费方落到五档（见 `:root` 一节的映射表）。
+ * 2. **没有绿**。成功色原本用 `#1ec198`（全站工具类 `.sm` 的绿），但 `/result` 的
+ *    主角是更亮的 `#21e786`。更要紧的是用户点名「条状图尽量用亮色」—— 而进度条的
+ *    填充色**就是** `--td-{success,warning,error}-color`（实测 `.t-progress__inner`），
+ *    所以这条诉求与「对齐品牌绿」是同一件事。**上一版其实把绿钉错了级**，
+ *    机制见下面「锚点落在消费级」—— 那才是条状图发闷的根因。
+ * 3. **阴影方向反了**。上一版把阴影「收紧成贴边投影」，理由是「参考站没有阴影」。
+ *    重测发现它有，而且是三个大而软的 `#16171b` 投影（上面表里那三行）——
+ *    我上次只看了营销页，没看工具页的浮层。
+ *
+ * ## 锚点落在「消费级」上（条状图发闷的根因）
+ *
+ * TDesign 的语义 token 不是独立值，而是**指到某个色阶级别**的别名。实测
+ * `es/style/index.css`，亮暗两套映射**完全相同**：
+ *
+ * | 别名                     | 指向          | 谁在用                                     |
+ * | ------------------------ | ------------- | ------------------------------------------ |
+ * | `--td-brand-color`       | -7 / -8（亮/暗）| 主按钮底、`t-tag--primary`、进度条         |
+ * | `--td-success-color`     | **-5**        | `.t-progress__inner`（成功进度条填充）等   |
+ * | `--td-warning-color`     | **-5**        | 同上                                        |
+ * | `--td-error-color`       | **-6**        | 同上                                        |
+ * | `--td-{g}-color-light`   | -1            | `variant="light"` 徽标 / alert / 菜单激活底 |
+ * | `--td-{g}-color-hover`   | -4            | 同色系的 hover                              |
+ * | `--td-{g}-color-active`  | -6            | 同色系的 active                             |
+ *
+ * 所以要「条状图用亮色」，亮色必须落在 **-5 / -5 / -6**，不是随便哪一级。
+ * 上一版把 `#21e786` 钉在成功阶的 `-8`，而别名读的是 `-5` → 进度条实际拿到 `#1c8b57`，
+ * 一个发闷的中绿。**值不暗，是钉错了级。**
+ *
+ * 另一件事：暗色的低端（-1..消费级前一档）**不能按「混向页底」造** —— 官方暗色阶的
+ * 低端比页面还亮（是「深色调」不是「页面色」），混页底会做出比官方更深的 -1，
+ * 而 -1 正是 `--td-brand-color-light`（**被消费 27 次，四个 light token 里最多**）。
+ * 现在暗色低端一律从官方自己的 `-1` 线性插值到锚点，锚在官方已经调好的那一点上。
+ *
+ * ## 暗色为什么换了个蓝（唯一一处亮暗不同色）
+ *
+ * TDesign 把 `--td-brand-color` **同时**当填充和文字：
+ *
+ * - `.t-button--variant-base.theme-primary` → `background`（白字压上去）
+ * - `.t-button--variant-text.theme-primary` → `color`（本项目的「详情」按钮，每张账号卡都有）
+ * - `.t-menu__item.t-is-active`             → `color` on `--td-brand-color-light`
+ *
+ * 同一个色两头都要 4.5:1 是**算术上无解**的：白字压它要求亮度 ≤0.183，它当字压卡片面
+ * 要求亮度 ≥0.231。参考站的 `#0d51d9` 亮度只有 0.110，压卡片面只有 2.15:1 —— 当字读不出来。
+ *
+ * 所以暗色往亮侧挪到 `#4e7ef9`：它是参考站自己两个实测蓝（`#4678f9` 按钮 hover /
+ * `#6991fa` 链接 hover）之间刚过 4.5:1 的那一点，作文字 4.55:1、导航激活项 3.61:1
+ * （TDesign 官方同位置 3.56）、白字压它当填充 3.70:1（官方暗色 3.76 同档）。
+ *
+ * **亮色侧不需要这招**：亮色的 -1 是浅底，深蓝压浅底 6.4:1、白字压它 6.57:1，一路达标。
+ *
+ * 顺带一处不能动的：`--td-text-color-anti` 必须保持**白**。它不只用于彩色填充上的字，
+ * 还是 `.t-tooltip--default .t-popup__content` 的字 —— 那个 tooltip 的底是
+ * `--td-gray-color-13`（暗色下 `#242424`）。把它改成深色，tooltip 会直接看不见。
+ * 代价是「白字压亮色填充」在本项目里到不了 4.5（成功绿 1.64、琥珀 1.06），
+ * 但本项目**没有**任何 `theme="success|warning"` 的实心按钮，所以这条没被触发；
+ * 已用的实心按钮只有 `theme="primary"`（白字压 #4e7ef9 = 3.70），
+ * `theme="danger"` 一律带 `variant="outline"`（只有边框与字，压在卡片面上 5.93:1）。
  *
  * ## 三处刻意的偏离（都有理由）
  *
- * 1. **圆角统一 2px（卡片实测 0px）**：0 与 2 在 24px 内边距的卡片上肉眼无差，
- *    而统一取 2px 能与按钮（实测 2px）同一语言。**`--td-radius-round` 保持 999px**
- *    —— 那里是进度条与开关，压成直角是坏了，不是锐利。
- * 2. **阴影保留但收紧**：参考站靠「底色差 + 发丝线」分层，完全没有阴影。但 TDesign 的
- *    shadow token 并非只服务弹窗 —— 实测真正在用的是卡片 / 表格 / 开关圆钮 / 下拉浮层 /
- *    回到顶部（`--td-shadow-1` 与 `-2` 的大头），而**模态弹窗根本不吃 shadow**
- *    （`--td-shadow-3` 只给「无模式弹窗」用，实测对话框 `box-shadow` 就是 `none`，
- *    它靠遮罩分层）。这些位置压成 0 会让开关圆钮和下拉浮层失去唯一的层次线索，
- *    所以改成一圈贴边深投影（比 TDesign 默认更平），而不是 none。
- * 3. **亮色模式是推导出来的，不是抄的**：三个参考站**只有暗色**
- *    （亮/暗两次截图逐字节相同，CSS 里没有 `prefers-color-scheme`）。
- *    亮色取自 `style.css` 里同一套调色板的亮色成员（`#f9faff` 底、`#292b32` 字、
- *    `#6a6f82` 次字），角色对得上，但**需要人眼过一遍**。
- *
- * ## 最淡那档文字被刻意抬高了一级
- *
- * `--td-text-color-placeholder` 在本项目里不是输入框提示，而是 `.muted` /
- * `.last-updated` / `.app-footer` 的**真实正文**（`layout.css` 第 3、5 节）。
- * 品牌在亮色的最淡档是 `#959cb1`，在页面底色 `#f9faff` 上只有 **2.63:1**（纯白 2.74:1）
- * —— 参考站拿它做装饰性说明无所谓，这里印页脚和时间戳就太虚了。所以取同一色阶里
- * 仍能读的那一级：亮色 `#6a6f82`（纯白 4.99:1）、暗色 `#8b92a6`（卡片面 4.55:1），
- * 三档全部过 AA。
- *
- * **校验基准固定为「最差背景」**：亮色取最亮的 `#ffffff`，暗色取卡片面 `#292b32`
- * （不是更深的页面底色 —— 卡片上的字才是正文）。下面注释里每个比例都按这个基准算，
- * 所以同一个色在页面底色上会显示更高的数字，那不是矛盾。全量数字由
- * `.workbuddy/ref/verify-contrast.mjs` 生成（本地草稿，不入库），**入库的断言在
- * `src/theme.test.ts`**。
+ * 1. **卡片比页面浅**（与参考站相反）。实测参考站的**内容面板全是纯黑**：`.dns-check` /
+ *    `.browser-info` / `.device-info` / `.network-info .info-box` / `.dns-modal-content`
+ *    都是 `background:#000000`，压在 `body { #16171b }` 上 —— 那是它「内嵌深色面板」的招牌
+ *    观感（实测这对底色是 1.17:1）。我没有照抄，理由有两条：
+ *    (a) TDesign 把 `--td-bg-color-container` **同时**给了 `.t-card` / `.t-dialog` /
+ *        `.t-popup__content` / `.t-table` / `.t-checkbox__input` / `.t-radio__input` /
+ *        `.t-head-menu`（实测 dist 里 93 条规则），纯黑会把它们全部拖黑 —— 弹窗坐在
+ *        `rgba(0,0,0,.72)` 遮罩上会失去边界，未选中的勾选框/单选框也会只剩一圈描边；
+ *    (b) 参考站一屏只有 3–4 张大面板，本项目一屏十几张小卡 —— 同一招在密集网格里会变成
+ *        「巧克力板」。这与描边那条偏离是同一个判断（见下面第 2 条）。
+ *    所以取 `#1c1d22`（**参考站自己的色**，实测 `.r .td` / `.r .no` 等内部元素用它，
+ *    是它比页面浅的那一档）。代价只有一个：**「页面 → 大卡」这一级是往上抬的**，
+ *    而不是像参考站那样往下沉。再往里不受影响 —— `layout.css` 里 `.account-group` 用
+ *    `secondarycontainer`、`.window-block` 又用回 `container`，所以渲染出来是
+ *    `#16171b → #1c1d22 → #292b32 → #1c1d22`，**交替读感在后三级仍然成立**。
+ *    **这是本文件唯一一处结构性偏离。想要参考站的原味，把 `--td-bg-color-container`
+ *    改成 `#000000` 并复跑一遍对比度与截图即可。**
+ * 2. **描边不是纯白**：参考站的卡片是 `1px solid #ffffff` —— 它一屏只有 3 张大卡，
+ *    白描边是刻意的强调。本项目一屏十几张小卡，同样的白会变成噪音，故降到 24% 白
+ *    （合成后 `#3d3d3d`，与卡片底 1.93:1 —— 看得见，不刺眼）。
+ * 3. **亮色模式是推导的**：参考站**只有暗色**（亮/暗两次截图逐字节相同、CSS 里没有
+ *    `prefers-color-scheme`；`.r` 类经过注入实测只改 2 个属性，不是亮色开关）。
+ *    亮色取自 `#16171b` 与同一调色板的亮色成员，并且**每个语义色都朝黑压到白底
+ *    ≥4.85:1**（绿 `#12814b`、琥珀 `#8c6c32`、粉 `#bd4676`）—— 因为 TDesign 把这三个
+ *    token 主要当**文字**用（实测 dist：`color` 40/37/47 处，`background` 仅 1–4 处），
+ *    照抄那个亮到发光的色当文字是读不出来的。**改动后必须人眼过一遍。**
  *
  * ## 文字色不许取「填充色」token
  *
  * `--td-brand-color` 是**填充档**（按钮底、进度条、开关），TDesign 给它配的暗色值
- * 是 `-8`（`#0d51d9`）。把它当文字色用，亮色下侥幸可读（`#0d51d9` on `#ffffff` =
- * 6.57:1），**暗色下会掉到 2.15:1** —— 因为它是给「上面压白字的色块」选的，不是给
- * 「压在深色底上的字」选的。
+ * 是 `-8`，默认就是 `#0d51d9`。把它当文字色用，亮色下侥幸可读（`#0d51d9` on
+ * `#ffffff` = 6.57:1），**换成 TDesign 的默认暗色就会掉到 2.15:1** —— 因为它是给
+ * 「上面压白字的色块」选的，不是给「压在深色底上的字」选的。
+ *
+ * 注意本文件对暗色 `-8` 做了替换（→ `#4e7ef9`，理由见「暗色为什么换了个蓝」），
+ * 所以**这个坑在本项目内部已被填掉**；但「文字档必须与填充档分列」这条约束不变
+ * —— 两者共用同一个色是算术上无解的，现在只是把那组解选好了。
  *
  * 本项目一共有**三处**踩了这个坑，而且**是静态守卫抓出来的、不是人眼**：`layout.css` 的
  * `.models-link` 与 `.detail-links a`，以及 `main.css` 里那条全局 `a { color: … }`
  * （影响面最大 —— 元素选择器，管所有没有更具体规则的链接）。三处都已改指
  * `--td-text-color-brand` / `-link`，并由 `src/theme.test.ts` 的「前景色属性不得直接
- * 引用填充档 token」锁住。
+ * 引用填充档 token」锁住（含 `outline`）。
  *
- * 对应取值：亮色仍是 `-7`（与填充档同值，故**亮色视觉零变化**），暗色取 `#749be9`
- * —— 色阶最亮的 `-10`（`#6490e7`）在卡片面上只有 4.50:1（差 0.0004 不达标），
- * 故再朝白混 10%，得 5.12:1。字与填充在暗色下**必然不同值**，这很正常。
+ * 对应取值：亮色仍是 `-7`（与填充档同值，故**亮色视觉零变化**），暗色取实测的
+ * `#6991fa`（黑卡面上 7.03:1、深块上 5.63:1）。
+ *
+ * ## 圆角是阶梯，不是单值（`--td-radius-medium` 服务三层嵌套）
+ *
+ * TDesign 的圆角 token 与它实际的消费方（实测 dist/tdesign.css）：
+ *
+ * | token                  | 谁在用                                   | 本文件 |
+ * | ---------------------- | ---------------------------------------- | ------ |
+ * | `--td-radius-small`    | 小控件内部（radio 内点、range 轨）       | 4px    |
+ * | `--td-radius-default`  | `t-button` / `t-input` / `t-select`       | 2px（实测主按钮）|
+ * | `--td-radius-medium`   | **`t-card` / `t-tooltip`** 与卡内两层    | 20px（实测大卡）|
+ * | `--td-radius-large`    | `t-dialog`                                | 12px（实测弹窗）|
+ * | `--td-radius-extraLarge`| `t-tag`                                  | 10px（实测徽标）|
+ *
+ * 麻烦在于 `--td-radius-medium` **同时**服务「区块大卡」「账号卡」「窗口块」三层嵌套，
+ * 而参考站这三层是 20 / 12 / 8。所以卡内两层不走 token，改走 `layout.css` 的语义变量
+ * （`--app-radius-group` / `--app-radius-block`，值在那边、理由在那边）——
+ * 这是本项目既有的「变量过桥」约定：值只声明一处，组件与全局样式都只引用。
+ *
+ * ## 校验基准固定为「最差背景」
+ *
+ * 亮色取最亮的 `#ffffff`，暗色取**卡片面**（本轮是 `#1c1d22`，不是更深的页面底色 ——
+ * 卡片上的字才是正文）。下面注释里每个比例都按这个基准算，所以同一个色在页面底色上
+ * 会显示更高的数字，那不是矛盾。全量数字由 `.workbuddy/ref/verify-contrast.mjs` 生成
+ * （本地草稿，不入库），**入库的断言在 `src/theme.test.ts`**。
  *
  * ## 重新测量（换配色时照这个做）
  *
  * ```bash
- * node .workbuddy/ref/shoot.cjs       # 三站的桌面/移动/暗色截图 + 计算样式
- * node .workbuddy/ref/surfaces.cjs    # 表面/边框/圆角的实际渲染值
- * node .workbuddy/ref/final-ramps.mjs # 由 anchor 生成 10 级色阶 + 对比度自检
- * node .workbuddy/ref/verify-contrast.mjs # 对本文件实际选用的色跑全量对比度
+ * node .workbuddy/ref/probe-result.cjs  # /result 的截图 + 全量计算样式 + 内联变量
+ * node .workbuddy/ref/zoom.cjs          # 关键组件的 4x 放大图（看边框/圆角/发光）
+ * node .workbuddy/ref/result-ramps.mjs  # 由 anchor 生成 10 级色阶 + 全量对比度自检
+ *                                       #   （会直接吐出可粘贴的 CSS，并写出 out-*.css）
  * ```
+ *
+ * 变量与取色的**事实核查**脚本（一次性的，但结论都写进了上面）：`probe-alias.py`
+ * （别名指向哪一级）、`probe-layers.py`（谁比谁深）、`probe-container.py`
+ * （`bg-color-container` 被谁消费）、`probe-button.py` / `probe-anti.py`
+ * （按钮各 variant 取哪个 token、anti 能不能改深）、`calibrate-thresholds.mjs`
+ * （把「我觉得该多少」换成「TDesign 官方是多少」）。
  *
  * 这几个脚本是**本地测量草稿，不入库**（`.workbuddy/` 在 `.gitignore` 里），所以上面的
  * 路径在 clone 出来的仓库里不存在 —— 它们记的是「方法」，不是可执行入口。真正的
- * **可复现部分在 `src/theme.test.ts`**（随 `bun run test:unit` 跑）：正文档位在亮暗两套下
- * 必须过 AA、字面颜色不得外流、本文件必须在 `main.ts` 最后导入。改配色先跑它。
+ * **可复现部分在 `src/theme.test.ts`**（随 `bun run test:unit` 跑）。
  *
  * ## 选择器特异性的坑
  *
@@ -111,18 +207,19 @@
  * 尺度：与亮暗无关
  * ============================================================ */
 :root {
-  /* 圆角：品牌是「近乎直角」（卡片 0px / 按钮 2px）。整阶收到 2px。
-   * round / circle 显式写回原值 —— 进度条、开关、头像靠它们保持圆形，
+  /* 圆角阶梯 —— 映射表见文件头。这里唯一要防的是「又被一刀切成同一个值」：
+   * `src/theme.test.ts` 断言 medium 至少是 default 的 3 倍，即大卡必须是圆的。 */
+  --td-radius-small: 4px;
+  --td-radius-default: 2px; /* t-button / t-input —— 参考站主按钮实测 2px */
+  --td-radius-medium: 20px; /* t-card / t-tooltip —— 参考站大卡实测 20px */
+  --td-radius-large: 12px; /* t-dialog —— 参考站弹窗实测 12px */
+  --td-radius-extraLarge: 10px; /* t-tag —— 参考站徽标实测 10px */
+  /* round / circle 显式写回原值 —— 进度条、开关、头像靠它们保持圆形，
    * 被顺手改成 2px 会变成坏掉，不是锐利。 */
-  --td-radius-small: 2px;
-  --td-radius-default: 2px;
-  --td-radius-medium: 2px;
-  --td-radius-large: 2px;
-  --td-radius-extraLarge: 2px;
   --td-radius-round: 999px;
   --td-radius-circle: 50%;
 
-  /* 字体：与参考站逐字一致的系统栈（在线字体那边已放弃，见文件头）。 */
+  /* 字体：与参考站逐字一致的系统栈（它头部那行在线字体的 @import 已被注释掉）。 */
   --td-font-family:
     system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
@@ -134,35 +231,68 @@
 /* ============================================================
  * 亮色
  *
- * 参考站没有亮色模式，这一套是从同一调色板的亮色成员推出来的（见文件头第 3 条）。
+ * 参考站没有亮色模式，这一套是从同一调色板推出来的（见文件头第 3 条）。
  * ============================================================ */
 :root,
 :root[theme-mode='light'] {
-  /* 品牌阶：anchor 是实测的 #0d51d9，落在 -7（TDesign 亮色的 --td-brand-color）。
-   * 中间级不是手拍的，是按 TDesign 官方色阶的混白比例算出来的。 */
-  --td-brand-color-1: #f3f6fd;
-  --td-brand-color-2: #dbe5f9;
-  --td-brand-color-3: #b2c7f3;
-  --td-brand-color-4: #86a8ec;
-  --td-brand-color-5: #5d8ae6;
-  --td-brand-color-6: #3970e0;
-  --td-brand-color-7: #0d51d9;
-  --td-brand-color-8: #0a3fa9;
-  --td-brand-color-9: #082f7e;
-  --td-brand-color-10: #052057;
+  /* 四个语义阶。锚点一律落在**消费级**上（别名指向的那一级），不是随手挑一级：
+   * 品牌 -7（`--td-brand-color`）、成功 -5、警告 -5、危险 -6。
+   * 中间级是按 TDesign 官方色阶反推的「距离-混色比例」算的，不是手拍。
+   * 亮色的低端（浅底）走官方那套「朝白混」，实测与官方同调。 */
 
-  /* 成功阶：anchor 是实测的 #1ec198（参考站用它画「支持」的绿勾，是语义用法）。
-   * 亮色改用同色相但压深的一级 #0f9a78 —— 品牌那个绿在白底上做文字太虚。 */
-  --td-success-color-1: #f3faf8;
-  --td-success-color-2: #dbf0eb;
-  --td-success-color-3: #b2dfd4;
-  --td-success-color-4: #87cdbc;
-  --td-success-color-5: #5ebba5;
-  --td-success-color-6: #3aac90;
-  --td-success-color-7: #0f9a78;
-  --td-success-color-8: #0c785e;
-  --td-success-color-9: #095946;
-  --td-success-color-10: #063e30;
+  /* 品牌阶：anchor = 实测的 #0d51d9。亮色侧深蓝一路达标（压浅底 6.4:1、白字压它 6.57:1），
+   * 所以亮暗可以不同深浅 —— 暗色为什么要换一个蓝，见暗色块那段注释。 */
+  --td-brand-color-1: #f5f8fd;
+  --td-brand-color-2: #e5ecfb;
+  --td-brand-color-3: #cddbf7;
+  --td-brand-color-4: #b4c9f3;
+  --td-brand-color-5: #98b5ef;
+  --td-brand-color-6: #6490e7;
+  --td-brand-color-7: #0d51d9;
+  --td-brand-color-8: #0a3ea5;
+  --td-brand-color-9: #072c76;
+  --td-brand-color-10: #051d4e;
+
+  /* 成功阶：anchor = 参考站的强调绿 #21e786，但**先朝黑压到白底 4.92:1**。
+   * 不能直接用 #21e786 —— 它在白底只有 1.64:1，而 TDesign 把这个 token 主要当
+   * **文字**色用（见文件头），只有 `.t-progress__inner` 拿它当填充。 */
+  --td-success-color-1: #e3f0ea;
+  --td-success-color-2: #c9e2d6;
+  --td-success-color-3: #8bc2a7;
+  --td-success-color-4: #4a9f75;
+  --td-success-color-5: #12814b;
+  --td-success-color-6: #0a4528;
+  --td-success-color-7: #083720;
+  --td-success-color-8: #062a18;
+  --td-success-color-9: #041d11;
+  --td-success-color-10: #02120a;
+
+  /* 警告阶：anchor = 参考站的琥珀 #ffc55a（`/result` 拿它做 input 的 warning 边框），压到 4.88:1。
+   * 上一版把 warning/error 留在 TDesign 默认（理由是「参考站的琥珀与粉是插画色」）
+   * —— 重测推翻了它：那是成体系的语义用法。 */
+  --td-warning-color-1: #f8f5f2;
+  --td-warning-color-2: #eae5da;
+  --td-warning-color-3: #d9cebb;
+  --td-warning-color-4: #beac8b;
+  --td-warning-color-5: #8c6c32;
+  --td-warning-color-6: #4c3a1b;
+  --td-warning-color-7: #3b2d15;
+  --td-warning-color-8: #2c2210;
+  --td-warning-color-9: #1f180b;
+  --td-warning-color-10: #151108;
+
+  /* 危险阶：anchor = 参考站的粉 #ff5fa0（它拿它做 input 的 error 边框），压到 4.88:1。
+   * 是粉不是红：参考站里纯红只用于「发光」这种装饰性 box-shadow。 */
+  --td-error-color-1: #fbf4f7;
+  --td-error-color-2: #f5e3ea;
+  --td-error-color-3: #edceda;
+  --td-error-color-4: #e4b2c6;
+  --td-error-color-5: #d58aa8;
+  --td-error-color-6: #bd4676;
+  --td-error-color-7: #8e3559;
+  --td-error-color-8: #5e233b;
+  --td-error-color-9: #2e111d;
+  --td-error-color-10: #18090f;
 
   /* 文字（对比度按**最差背景** #ffffff 校验，全部 ≥4.5:1） */
   --td-text-color-primary: #292b32; /* 14.13:1 实测的亮色正文色 */
@@ -194,29 +324,29 @@
   --td-bg-color-secondarycomponent-active: #a6acc0;
   --td-bg-color-specialcomponent: #ffffff;
 
-  /* 边框：发丝线是这个品牌最主要的分隔手段（实测 0.32 透明度的蓝灰）。
-   * 同一个值在暗色也成立 —— 它是半透明的，会自己随底色走。 */
-  --td-border-level-1-color: rgba(106, 111, 130, 0.32);
-  --td-component-stroke: rgba(106, 111, 130, 0.32);
-  --td-border-level-2-color: rgba(106, 111, 130, 0.55);
-  --td-component-border: rgba(106, 111, 130, 0.32);
+  /* 边框：亮色侧的描边取品牌最深色 #16171b 的半透明 —— 参考站自己的亮色控件
+   * 就是 `border-color:#16171b`，这里只是把同一个意图做成发丝级。 */
+  --td-border-level-1-color: rgba(22, 23, 27, 0.18);
+  --td-component-stroke: rgba(22, 23, 27, 0.18);
+  --td-border-level-2-color: rgba(22, 23, 27, 0.32);
+  --td-component-border: rgba(22, 23, 27, 0.24);
 
-  /* 阴影：参考站没有阴影，这里只留「贴合边界」的极浅投影。
-   * 消费者是卡片 / 表格 / 开关 / 下拉，模态弹窗不吃它（见文件头第 2 条）。 */
-  --td-shadow-1: 0 1px 2px rgba(22, 23, 27, 0.06), 0 2px 6px rgba(22, 23, 27, 0.04);
-  --td-shadow-2: 0 4px 12px rgba(22, 23, 27, 0.08), 0 2px 4px rgba(22, 23, 27, 0.04);
-  --td-shadow-3: 0 12px 32px rgba(22, 23, 27, 0.14), 0 4px 8px rgba(22, 23, 27, 0.06);
+  /* 阴影：色相也走 #16171b（与暗色同源），亮色下只用很小的透明度。
+   * 消费者是卡片 / 表格 / 开关 / 下拉，模态弹窗不吃 shadow（它靠 level-1 描边分层）。 */
+  --td-shadow-1: 0 4px 10px rgba(22, 23, 27, 0.08);
+  --td-shadow-2: 0 20px 48px rgba(22, 23, 27, 0.12);
+  --td-shadow-3: 0 24px 64px rgba(22, 23, 27, 0.16);
 
   /* 表格吸顶列的 0.5px 内阴影：必须与边框同色，否则吸顶列会出现一道亮线 */
-  --td-shadow-inset-top: inset 0 0.5px 0 rgba(106, 111, 130, 0.32);
-  --td-shadow-inset-right: inset 0.5px 0 0 rgba(106, 111, 130, 0.32);
-  --td-shadow-inset-bottom: inset 0 -0.5px 0 rgba(106, 111, 130, 0.32);
-  --td-shadow-inset-left: inset -0.5px 0 0 rgba(106, 111, 130, 0.32);
+  --td-shadow-inset-top: inset 0 0.5px 0 rgba(22, 23, 27, 0.24);
+  --td-shadow-inset-right: inset 0.5px 0 0 rgba(22, 23, 27, 0.24);
+  --td-shadow-inset-bottom: inset 0 -0.5px 0 rgba(22, 23, 27, 0.24);
+  --td-shadow-inset-left: inset -0.5px 0 0 rgba(22, 23, 27, 0.24);
 
-  /* 遮罩：遮罩用品牌最深色（#16171b）而不是纯黑，暗色页面下过渡更自然 */
+  /* 遮罩：用品牌最深色而不是纯黑，弹窗边缘过渡更自然 */
   --td-mask-active: rgba(22, 23, 27, 0.6);
   --td-mask-disabled: rgba(255, 255, 255, 0.6);
-  /* 加载遮罩：必须与容器同色，否则暗色卡片上会糊一层浅灰纱 */
+  /* 加载遮罩：必须与容器同色，否则浅底上会糊一层灰纱 */
   --td-mask-background: rgba(255, 255, 255, 0.96);
   --td-mask-gradient: rgba(255, 255, 255, 0);
 
@@ -232,90 +362,162 @@
  * 参考站的原生形态。上面的「实测值」表主要来自这里。
  * ============================================================ */
 :root[theme-mode='dark'] {
-  /* 品牌阶：anchor 落在 -8（TDesign 暗色的 --td-brand-color）。
-   * 下半段（1..7）**混向页面底色 #16171b 而不是纯黑** —— 纯黑会保住饱和度，
-   * 得到死黑蓝；TDesign 的暗色阶是低饱和海军蓝，混底色才能复现那种质感。 */
-  --td-brand-color-1: #151e32;
-  --td-brand-color-2: #142341;
-  --td-brand-color-3: #132854;
-  --td-brand-color-4: #122f6b;
-  --td-brand-color-5: #113785;
-  --td-brand-color-6: #0f42a8;
-  --td-brand-color-7: #0e4ac2;
-  --td-brand-color-8: #0d51d9;
-  --td-brand-color-9: #3970e0;
-  --td-brand-color-10: #6490e7;
+  /* ---- 四个语义阶 -------------------------------------------------------
+   *
+   * **低端（-1..消费级前一档）不走「混向页底」，而是从 TDesign 官方色阶自己的 `-1`
+   * 线性插值到我们的锚点。** 原因：官方暗色阶的低端**比页面亮**（brand -1 = #1b2f51、
+   * success -1 = #193a2a、error -1 = #472324 全比 #16171b 亮），它们是「深色调」不是
+   * 「页面色」。混向页底会让 -1 比官方还深 —— 实测 brand 那条从 3.56:1 掉到 2.37:1。
+   * 而 -1 是 `--td-{g}-color-light`（`variant="light"` 徽标 / alert / 菜单激活项的底），
+   * `--td-brand-color-light` 在 dist 里被消费 27 次，是四个 light token 里最多的。
+   *
+   * 绿色系没有这个问题（成功/警告/危险的消费级就是**亮色**本身），
+   * 所以只有品牌蓝需要单独换一个更亮的锚点。 */
+
+  /* 品牌阶：anchor = #4e7ef9，**不是**参考站的 #0d51d9。这是被算术逼出来的：
+   *
+   * TDesign 把 `--td-brand-color` 同时当填充和文字用 ——
+   *   `.t-button--variant-base.theme-primary` → background（白字压上去）
+   *   `.t-button--variant-text.theme-primary` → color（本项目的「详情」按钮，每张卡都有）
+   *   `.t-menu__item.t-is-active`             → color on `--td-brand-color-light`
+   *
+   * 而同一个色**不可能**两头都到 4.5:1：白字压它要 4.5 就要求亮度 ≤0.183，
+   * 它当字压卡片面要 4.5 就要求亮度 ≥0.231，无解。
+   * 参考站的 #0d51d9 亮度只有 0.110 —— 压卡片面只有 2.15:1，当字根本读不出来。
+   *
+   * 所以暗色往亮侧挪，取参考站自己两个实测蓝（#4678f9 按钮 hover / #6991fa 链接 hover）
+   * 之间刚过 4.5:1 的那一点 #4e7ef9：作文字 4.55:1、导航激活项 3.61:1（官方同位置 3.56）、
+   * 白字压它当填充 3.70:1（与官方暗色 3.76 同档）。 */
+  --td-brand-color-1: #1b2f51;
+  --td-brand-color-2: #223a69;
+  --td-brand-color-3: #2a4681;
+  --td-brand-color-4: #315199;
+  --td-brand-color-5: #385cb1;
+  --td-brand-color-6: #3f67c9;
+  --td-brand-color-7: #4773e1;
+  --td-brand-color-8: #4e7ef9;
+  --td-brand-color-9: #8aaafb;
+  --td-brand-color-10: #adc3fc;
 
   /* 交互方向与 TDesign 暗色默认**相反**，这是照参考站实测改的：
-   * 品牌按钮 hover 是变亮（#0d51d9 → #4678f9），而 TDesign 暗色默认 -7 比 -8 暗。 */
-  --td-brand-color-hover: var(--td-brand-color-9);
+   * 参考站的按钮 hover 是变亮（#0d51d9 → #4678f9），而 TDesign 暗色默认 -7 比 -8 暗。
+   * 取参考站的链接 hover 蓝 #6991fa —— 它比新的基色 #4e7ef9 亮一档，方向对。 */
+  --td-brand-color-hover: #6991fa;
   --td-brand-color-active: var(--td-brand-color-7);
   --td-brand-color-disabled: var(--td-brand-color-3);
 
-  /* 成功阶：anchor 是实测的 #1ec198，直接用（暗底上它本来就够亮） */
-  --td-success-color-1: #172b2a;
-  --td-success-color-2: #183934;
-  --td-success-color-3: #184a41;
-  --td-success-color-4: #195e50;
-  --td-success-color-5: #1a7661;
-  --td-success-color-6: #1c9578;
-  --td-success-color-7: #1dad89;
-  --td-success-color-8: #1ec198;
-  --td-success-color-9: #47ccab;
-  --td-success-color-10: #6fd7bd;
+  /* 成功阶：anchor = 参考站的强调绿 #21e786，在暗色里**直接用**（不压深）。
+   * 它正是用户点名要的「条状图尽量用亮色」：`-5` 就是 `--td-success-color`，
+   * 也就是 `.t-progress__inner` 的填充色。作文字 10.29:1、当填充 vs 轨道 8.64:1。
+   *
+   * 上一版把亮绿钉在 `-8`、而别名读的是 `-5` → 条状图拿到的是 #1c8b57，发闷。
+   * **这就是「条状图颜色不够亮」的全部原因。** 现在四个语义色都钉在消费级上。 */
+  --td-success-color-1: #193a2a;
+  --td-success-color-2: #1b6541;
+  --td-success-color-3: #1d9158;
+  --td-success-color-4: #1fbc6f;
+  --td-success-color-5: #21e786;
+  --td-success-color-6: #58eda4;
+  --td-success-color-7: #6aefae;
+  --td-success-color-8: #97f4c6;
+  --td-success-color-9: #bff8dc;
+  --td-success-color-10: #defbed;
 
-  /* 文字（对比度按**最差背景**卡片面 #292b32 校验，全部 ≥4.5:1） */
-  --td-text-color-primary: #f9faff; /* 13.56:1 实测的标题色 */
-  --td-text-color-secondary: #959cb1; /* 5.16:1 实测的正文次要色 */
-  --td-text-color-placeholder: #8b92a6; /* 4.55:1 实测的 #6a6f82 只有 2.83:1，抬一级 */
-  --td-text-color-disabled: #4b5060; /* 1.76:1  disabled 语义本就该弱 */
-  --td-text-color-anti: #ffffff; /* 品牌底上的白字：6.57:1 */
-  /* 不能取 --td-brand-color（= -8 #0d51d9，卡片面上仅 2.15:1），也不能取最亮的 -10
-   * （#6490e7 只有 4.50:1，差 0.0004 不达标）→ 取 -10 再朝白混 10%，得 5.12:1。
-   * 详见文件头「文字色不许取填充色 token」。 */
-  --td-text-color-brand: #749be9;
-  --td-text-color-link: #749be9;
+  /* 警告阶：anchor = 实测的 #ffc55a（作文字 10.72:1 / 当填充 vs 轨道 9.01:1） */
+  --td-warning-color-1: #4f2a1d;
+  --td-warning-color-2: #7b512c;
+  --td-warning-color-3: #a7783c;
+  --td-warning-color-4: #d39e4b;
+  --td-warning-color-5: #ffc55a;
+  --td-warning-color-6: #ffcc6e;
+  --td-warning-color-7: #ffd891;
+  --td-warning-color-8: #ffe5b4;
+  --td-warning-color-9: #ffedcc;
+  --td-warning-color-10: #fff4e0;
+
+  /* 危险阶：anchor = 实测的 #ff5fa0（作文字 5.93:1 / 当填充 vs 轨道 4.98:1）。
+   * 粉而不是红，是因为参考站就是这么标的（`#ff5fa0` 做 input 的 error 边框）。 */
+  --td-error-color-1: #472324;
+  --td-error-color-2: #6c2f3d;
+  --td-error-color-3: #913b56;
+  --td-error-color-4: #b5476e;
+  --td-error-color-5: #da5387;
+  --td-error-color-6: #ff5fa0;
+  --td-error-color-7: #ff88b8;
+  --td-error-color-8: #ffa8cb;
+  --td-error-color-9: #ffc1da;
+  --td-error-color-10: #ffd2e5;
+
+  /* 文字（对比度按**最差背景**卡片面 #1c1d22 校验，全部 ≥4.5:1） */
+  --td-text-color-primary: #f9faff; /* 实测的标题色；卡片面 16.35:1 */
+  --td-text-color-secondary: #959cb1; /* 实测的正文次要色；7.02:1 */
+  --td-text-color-placeholder: #8b92a6; /* 6.09:1 实测的 #6a6f82 在深底上太虚，抬一级 */
+  --td-text-color-disabled: #4b5060; /* 2.62:1  disabled 语义本就该弱 */
+  --td-text-color-anti: #ffffff; /* 压在 #4e7ef9 填充上的白字：3.70:1（见文件头那段取舍） */
+  /* 不能取 --td-brand-color：它是**填充**档（按钮底 / 进度条 / 开关），本项目的
+   * 「详情」按钮与导航激活项要的是**文字**档。填充档在这里两头都不合 —— 若照参考站
+   * 的 #0d51d9 当字，卡片面上只有 2.15:1。所以文字档独立取实测的交互蓝 #6991fa：
+   * 卡片面 7.03:1、深块 5.63:1。
+   * （#4e7ef9 是填充档为了「白字压得住」被抬亮后的值，当字只有 4.55:1，仍低于本档。） */
+  --td-text-color-brand: #6991fa;
+  --td-text-color-link: #6991fa;
   --td-text-color-watermark: rgba(249, 250, 255, 0.1);
 
-  /* 底色阶梯：page(#16171b) < secondarycontainer < container(#292b32) < component
-   * 前两个是实测值；其余按同样的步进补齐，保证「越靠前的控件面越亮」。 */
+  /* 底色阶梯。实际渲染出来的四级（配合 layout.css 的语义变量）：
+   *
+   *   页面        #16171b   亮度 0.0086   ← --td-bg-color-page
+   *   大卡        #1c1d22   亮度 0.0124   ← --td-bg-color-container      （比页面浅）
+   *   账号卡      #292b32   亮度 0.0243   ← --td-bg-color-secondarycontainer（比大卡浅）
+   *   额度窗口块  #1c1d22   亮度 0.0124   ← --td-bg-color-container      （又压深回去）
+   *
+   * 所以「大卡里嵌浅块、再嵌深块」的**交替**其实保住了 —— 与参考站的
+   * 「深面板里嵌浅块、再嵌深块」同构，只是整体从「页面」这一级起是往上抬而不是往下沉
+   * （参考站的内容面板是纯黑，见文件头偏离第 1 条）。
+   * 上一版把大卡做到 #292b32（比页面浅得多），本轮压回 #1c1d22：更接近参考站那档
+   * 「内部元素色」，也不会让一屏十几张小卡糊成一片。 */
   --td-bg-color-page: #16171b;
-  --td-bg-color-container: #292b32;
-  --td-bg-color-container-hover: #2f323a;
-  --td-bg-color-container-active: #363a43;
-  --td-bg-color-container-select: #363a43;
-  --td-bg-color-secondarycontainer: #1e2026;
-  --td-bg-color-secondarycontainer-hover: #26282f;
-  --td-bg-color-secondarycontainer-active: #2f323a;
-  --td-bg-color-component: #343842;
+  --td-bg-color-container: #1c1d22;
+  --td-bg-color-container-hover: #22242a;
+  --td-bg-color-container-active: #292b32;
+  --td-bg-color-container-select: #292b32;
+  --td-bg-color-secondarycontainer: #292b32;
+  --td-bg-color-secondarycontainer-hover: #30323a; /* 实测的 hover 面 */
+  --td-bg-color-secondarycontainer-active: #3a3d45;
+  --td-bg-color-component: #292b32; /* 进度条轨道：实测的「抬起」档 */
   --td-bg-color-component-hover: #3e4a60; /* 实测的次级按钮底色 */
-  --td-bg-color-component-active: #46536b;
-  --td-bg-color-component-disabled: #22242a;
+  --td-bg-color-component-active: #4a5568;
+  --td-bg-color-component-disabled: #1c1d22;
   --td-bg-color-secondarycomponent: #3e4a60;
-  --td-bg-color-secondarycomponent-hover: #46536b;
-  --td-bg-color-secondarycomponent-active: #4e5c78;
+  --td-bg-color-secondarycomponent-hover: #4a5568;
+  --td-bg-color-secondarycomponent-active: #55617d;
   --td-bg-color-specialcomponent: transparent;
 
-  /* 边框：与亮色同一条发丝线（半透明，自动随底色走） */
-  --td-border-level-1-color: rgba(106, 111, 130, 0.32);
-  --td-component-stroke: rgba(106, 111, 130, 0.32);
-  --td-border-level-2-color: rgba(106, 111, 130, 0.55);
-  --td-component-border: rgba(106, 111, 130, 0.32);
+  /* 边框：深底上必须用**亮**描边才看得见（参考站是 1px solid #ffffff）。
+   * 降到 24% 白的理由见文件头偏离第 2 条。 */
+  --td-border-level-1-color: rgba(249, 250, 255, 0.24);
+  --td-component-stroke: rgba(249, 250, 255, 0.24);
+  --td-border-level-2-color: rgba(249, 250, 255, 0.32);
+  --td-component-border: rgba(249, 250, 255, 0.24);
 
-  /* 阴影：暗色下需要更黑才看得出层次，但仍然保持贴边、不扩散 */
-  --td-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.24);
-  --td-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
-  --td-shadow-3: 0 16px 40px rgba(0, 0, 0, 0.55), 0 4px 10px rgba(0, 0, 0, 0.4);
+  /* 阴影：三个值全是参考站的实测原值（含透明度），色相是品牌最深色 #16171b ——
+   * `0 4px 10px #0000004d` 取自它的 info-box，另两个取自它的浮层。
+   * 注意：在 #16171b 页面上 #16171b 阴影几乎不可见，这是**参考站本来的行为** ——
+   * 它的暗色分层靠描边与底色差，不靠阴影。保留 token 是为了浅底与浮层。 */
+  --td-shadow-1: 0 4px 10px rgba(0, 0, 0, 0.3);
+  --td-shadow-2: 0 20px 48px rgba(22, 23, 27, 0.8);
+  --td-shadow-3: 0 24px 64px rgba(22, 23, 27, 0.64);
 
-  --td-shadow-inset-top: inset 0 0.5px 0 rgba(106, 111, 130, 0.32);
-  --td-shadow-inset-right: inset 0.5px 0 0 rgba(106, 111, 130, 0.32);
-  --td-shadow-inset-bottom: inset 0 -0.5px 0 rgba(106, 111, 130, 0.32);
-  --td-shadow-inset-left: inset -0.5px 0 0 rgba(106, 111, 130, 0.32);
+  --td-shadow-inset-top: inset 0 0.5px 0 rgba(249, 250, 255, 0.24);
+  --td-shadow-inset-right: inset 0.5px 0 0 rgba(249, 250, 255, 0.24);
+  --td-shadow-inset-bottom: inset 0 -0.5px 0 rgba(249, 250, 255, 0.24);
+  --td-shadow-inset-left: inset -0.5px 0 0 rgba(249, 250, 255, 0.24);
 
-  --td-mask-active: rgba(13, 13, 16, 0.72);
+  /* 遮罩：这里**不能**用 #16171b 系 —— 页面本身就是 #16171b，等于没压暗。
+   * 参考站的弹窗遮罩就是纯黑 `#000c`，照它取。 */
+  --td-mask-active: rgba(0, 0, 0, 0.72);
   --td-mask-disabled: rgba(0, 0, 0, 0.6);
-  --td-mask-background: rgba(41, 43, 50, 0.96);
-  --td-mask-gradient: rgba(41, 43, 50, 0);
+  --td-mask-background: rgba(28, 29, 34, 0.96);
+  --td-mask-gradient: rgba(28, 29, 34, 0);
 
   --td-table-shadow-color: rgba(0, 0, 0, 0.55);
   --td-scrollbar-color: rgba(249, 250, 255, 0.16);
@@ -326,15 +528,16 @@
 /* ============================================================
  * 故意不动的部分
  *
- * - `--td-warning-color-*` / `--td-error-color-*`：**保持在 TDesign 默认**。
- *   参考站里那个琥珀 `#ffc55a` 和粉色 `#ff5fa0` 是插画/装饰用色，
- *   没有语义用法；而告警色一旦离开红/橙，用户就读不出「这是出事」。
- *   品牌一致性在这里让位于语义可识别性。
  * - `--td-font-size-*` / `--td-line-height-*` / `--td-size-*`：一个字都没改。
- *   参考站是营销页（H1 44px），本项目是密集读数面板，字号阶梯属于
+ *   参考站是包含 H1 44px 的展示页，本项目是密集读数面板，字号阶梯属于
  *   `docs/design-baseline.md` 第 4/5 节的范畴，不随品牌走。
  * - `--td-gray-color-*` / `--td-font-gray-*` / `--td-font-white-*` 原始调色板：
  *   不经手。语义 token（上面那些）已经全部接管外观，改底层调色板只会让
  *   少数直取 `--td-gray-*` 的组件出现无法预测的偏移。若日后发现某处漏网，
  *   按「先测量、再定点覆盖」处理，不要整阶替换。
+ *
+ * （上一版这里还有一条「告警色不随品牌走，保持 TDesign 默认」。本轮重测推翻了它：
+ * `/result` 用 #ffc55a 做 input 的 warning 边框、#ff5fa0 做 error 边框、#1ec198
+ * 做 success 边框 —— 是成体系的语义用法，不是插画色。所以四个语义阶现在**都**跟着
+ * 品牌走，并各自满足「当文字 4.5:1 / 当条状图填充 3:1」。）
  */

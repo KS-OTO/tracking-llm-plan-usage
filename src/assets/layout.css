@@ -286,10 +286,31 @@
   text-decoration: underline;
 }
 
+/**
+ * 卡内两级的圆角 —— 为什么不让它们继续用 `--td-radius-medium`。
+ *
+ * 参考站（`help-dev.18bit.cn/result`）的圆角是**阶梯**，不是单值，而且阶梯是按
+ * **嵌套深度**走的：大卡 20px → info-list 12px → info-box / 行项 10–8px。
+ * 但 TDesign 只有一个 `--td-radius-medium` 服务「卡片 / 浮层」，在本项目里它**同时**
+ * 命中三层嵌套（区块卡 → 账号卡 → 窗口块）。三层全 20px 会把阶梯压平，
+ * 「越往里越方」这个读感就没有了。
+ *
+ * 所以卡内两层不走 token，走这两个语义变量：值只此一处，`theme.css` 的
+ * `--td-radius-medium`（20px，实测大卡）继续管 `t-card` / `t-tooltip`。
+ * 这是本项目既有的「变量过桥」约定 —— 同 `.section-compact .window-block`
+ * 与 `--app-last-updated-display`。
+ */
+:root {
+  /** 账号卡：参考站的 `info-list` 档（12px）。 */
+  --app-radius-group: 12px;
+  /** 窗口块：参考站的 `info-box` 档（10px）—— 同样是「图标 + 文字 + 小徽标」的盒子。 */
+  --app-radius-block: 10px;
+}
+
 /* 账号卡（卡内的次级容器） */
 .account-group {
   background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--app-radius-group);
   padding: var(--td-size-5) var(--td-size-6);
   height: 100%;
   /* 纵向弹性：账号卡自身已被网格拉伸到与同行邻居等高，
@@ -363,11 +384,11 @@
   gap: var(--td-size-2);
 }
 
-/* 额度窗口块（进度条所在的白底容器） */
+/* 额度窗口块（进度条所在的容器）—— 圆角是卡内最内一档，见 `--app-radius-block` */
 .window-block {
   padding: var(--td-size-5) var(--td-size-6);
   background: var(--td-bg-color-container);
-  border-radius: var(--td-radius-medium);
+  border-radius: var(--app-radius-block);
 }
 
 /**
