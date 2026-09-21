@@ -1,7 +1,7 @@
 /**
  * 品牌主题层的守卫（对应 `docs/design-baseline.md` 第 0.1 节）。
  *
- * 锁两条不变量，两条都有**静默失效**的失败方式，靠人眼 review 是抓不住的：
+ * 锁的不变量都有**静默失效**的失败方式 —— 改坏了不报错、类型检查也过，只有这里能抓：
  *
  * 1. **字面颜色只准出现在 `src/assets/theme.css`。**
  *    一旦有人在某个 `.vue` 的 `<style>` 里写死 `#0d51d9`，那个值就脱离了
@@ -13,6 +13,13 @@
  *    （各组件 `style/css.mjs`）是随 `./tdesign` 那个 import 才进模块图的。
  *    把 theme.css 提到前面去，构建不报错、类型检查不报错，只是**颜色不生效** ——
  *    排查成本极高。所以顺序必须被断言，而不是靠注释提醒。
+ *
+ * 3. **语义色必须钉在「消费级」上。** `--td-{success,warning,error}-color` 是别名，
+ *    分别指向 `-5` / `-5` / `-6`，而进度条的填充色就是它们。钉错一级 → 条状图发闷，
+ *    但**对比度、类型、渲染全都不报错**（上一版把亮绿钉在 `-8`，实际拿到 `#1c8b57`）。
+ *
+ * 4. **对比度是算出来的，不是看出来的。** 正文 4.5:1、非文字 3:1 在这里被逐条断言；
+ *    品牌填充「既当填充又当文字」那个算术上无解的取舍，也把两头都钉死。
  */
 import { readFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
@@ -181,11 +188,21 @@ describe('品牌主题层', () => {
     }
   })
 
-  // 顺带把「anchor 落在第几级」这个契约也钉住（亮 -7 / 暗 -8，见文件头实测表）
+  /**
+   * 品牌填充上的反白字。
+   *
+   * 亮色侧 `#0d51d9` 上有 6.57:1，达标。**暗色侧实测 3.70:1**（TDesign 官方暗色同位置是
+   * 3.76:1）—— 这不是漏改，是算术上无解逼出来的取舍（见 `theme.css` 文件头「暗色为什么
+   * 换了个蓝」）：TDesign 把 `--td-brand-color` 同时当填充和文字，白字压它要求亮度
+   * ≤0.183、它当字压卡片面要求亮度 ≥0.231，同一个色满足不了。所以这里把**权衡本身**
+   * 钉死：暗色必须「填充上白字 ≥3.6」且「它当字压卡片面 ≥4.5」，任何一头被改坏都会红。
+   *
+   * 下限取 3.6 而不是实测的 3.70，是留一点浮动余量（3.6997 这种浮点尾数不该判红）。
+   */
   it.each([
-    ['亮色', ":root[theme-mode='light'] {", '--td-brand-color-7'],
-    ['暗色', ":root[theme-mode='dark'] {", '--td-brand-color-8'],
-  ])('%s：压在品牌填充上的反白字过 AA', (label, selector, fillStep) => {
+    ['亮色', ":root[theme-mode='light'] {", '--td-brand-color-7', 4.5],
+    ['暗色', ":root[theme-mode='dark'] {", '--td-brand-color-8', 3.6],
+  ])('%s：压在品牌填充上的反白字不低于约定下限', (label, selector, fillStep, floor) => {
     const decls = declarationsOf(selector)
     const foreground = resolveValue(decls, '--td-text-color-anti')
     const background = resolveValue(decls, fillStep)
@@ -193,7 +210,90 @@ describe('品牌主题层', () => {
     expect(
       ratio,
       `${label} ${foreground} on ${fillStep}=${background} 只有 ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(floor)
+  })
+
+  // 上一条的另一半：品牌填充色**当文字**时（`.t-button--variant-text.theme-primary`
+  // 的「详情」按钮就压卡片面）也必须过 AA。参考站的 `#0d51d9` 在这里只有 2.15:1，
+  // 所以暗色换成了 `#4e7ef9`；这条锁住「不许换回去」。
+  it.each([
+    ['亮色', ":root[theme-mode='light'] {", '--td-brand-color-7'],
+    ['暗色', ":root[theme-mode='dark'] {", '--td-brand-color-8'],
+  ])('%s：品牌填充色当文字压在容器面上过 AA', (label, selector, fillStep) => {
+    const decls = declarationsOf(selector)
+    const container = resolveValue(decls, '--td-bg-color-container')
+    const fill = resolveValue(decls, fillStep)
+    const ratio = contrast(fill, container)
+    expect(
+      ratio,
+      `${label} ${fillStep}=${fill} 当字压在 ${container} 上只有 ${ratio.toFixed(2)}:1`,
     ).toBeGreaterThanOrEqual(4.5)
+  })
+
+  /**
+   * 进度条的填充色必须**亮**（用户点名「条状图尽量用亮色」）。
+   *
+   * 这条是上一版的回归守卫：`--td-{success,warning,error}-color` 是**别名**，
+   * 分别指向 `-5` / `-5` / `-6`（实测 `es/style/index.css`），而 `.t-progress__inner`
+   * 的填充色就是它们。上一版把 `#21e786` 钉在 `-8`，于是进度条实际拿到 `#1c8b57`
+   * —— 一个发闷的中绿，而当时**所有门禁都是绿的**。
+   *
+   * 用「对容器面 ≥4.5」当亮度的代理指标：深底上的亮绿是 10.29:1，那个发闷的
+   * `#1c8b57` 只有 3.91:1 —— 会红。再加一条「对轨道 ≥3」保证条本身看得出来。
+   */
+  it.each([
+    ['亮色', ":root[theme-mode='light'] {"],
+    ['暗色', ":root[theme-mode='dark'] {"],
+  ])('%s：进度条填充（语义色消费级）是亮色且看得出', (label, selector) => {
+    const decls = declarationsOf(selector)
+    const container = resolveValue(decls, '--td-bg-color-container')
+    const track = resolveValue(decls, '--td-bg-color-component')
+    // 别名实际指向的级别 —— 写死在这里，就是为了让「钉错级」这件事被测到
+    const fills = [
+      ['success', '--td-success-color-5'],
+      ['warning', '--td-warning-color-5'],
+      ['error', '--td-error-color-6'],
+    ] as const
+    for (const [name, token] of fills) {
+      const fill = resolveValue(decls, token)
+      const onContainer = contrast(fill, container)
+      const onTrack = contrast(fill, track)
+      expect(
+        onContainer,
+        `${label} ${name} ${token}=${fill} 压容器面 ${container} 只有 ${onContainer.toFixed(2)}:1 —— 不够亮（发闷的填充约 3.9:1）`,
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        onTrack,
+        `${label} ${name} ${token}=${fill} 压轨道 ${track} 只有 ${onTrack.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('圆角是阶梯：大卡必须明显比按钮圆（medium ≥ 3× default）', () => {
+    const decls = declarationsOf(':root {')
+    const medium = Number.parseFloat(resolveValue(decls, '--td-radius-medium'))
+    const base = Number.parseFloat(resolveValue(decls, '--td-radius-default'))
+    expect(Number.isFinite(medium) && Number.isFinite(base)).toBe(true)
+    expect(
+      medium,
+      `大卡 ${medium}px / 按钮 ${base}px —— 被一刀切成同一个值了`,
+    ).toBeGreaterThanOrEqual(base * 3)
+    // round / circle 必须还是圆的，被顺手改成 2px 会变成坏掉而不是锐利
+    expect(resolveValue(decls, '--td-radius-round')).not.toBe('2px')
+    expect(resolveValue(decls, '--td-radius-circle')).toBe('50%')
+  })
+
+  // 暗色卡片的明暗方向。参考站的内容面板是**纯黑、比页面更深**，本项目刻意做成
+  // 比页面**浅**（理由见 theme.css 偏离第 1 条）。这条把那个决定钉住：方向被改回去时
+  // 必须同步改文档，而不是悄悄漂移。
+  it('暗色：卡片比页面浅（刻意的结构偏离，见 theme.css 偏离第 1 条）', () => {
+    const decls = declarationsOf(":root[theme-mode='dark'] {")
+    const page = resolveValue(decls, '--td-bg-color-page')
+    const container = resolveValue(decls, '--td-bg-color-container')
+    expect(
+      luminance(container),
+      `卡片 ${container} 应比页面 ${page} 浅（亮度应更大）`,
+    ).toBeGreaterThan(luminance(page))
   })
 
   /**
