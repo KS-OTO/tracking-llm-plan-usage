@@ -77,8 +77,12 @@ Page behaviour:
   variables; see [Site customization](#site-customization-name--logo--favicon--refresh-interval).
 - **Dark mode**: one-click toggle, persisted in `localStorage`, defaulting to the system
   `prefers-color-scheme`.
-- **Accessibility**: semantic landmarks (header/main/footer), keyboard reachable, ARIA labelling,
-  contrast aligned with the official TDesign tokens.
+- **Accessibility**: semantic landmarks (header/main/footer), keyboard reachable, ARIA labelling.
+  All five text tiers (link colour included) are checked against WCAG AA (≥4.5:1) in both light and
+  dark mode; values live in `src/assets/theme.css`. The faintest tier deliberately does _not_ reuse
+  TDesign's official value, because that one is meant for input placeholders while here it renders
+  real body text. Link colours use the **text** tier rather than TDesign's `--td-brand-color`, which
+  is a fill colour and only reaches 2.15:1 on a dark surface.
 - **Skeletons / error alerts / empty states**: all carried by TDesign Skeleton / Alert / Empty.
 - **Cards show only high-priority readings**: only window usage, balances and status — the numbers
   you look at daily. Account identity, subscription metadata, detail tables and secondary metrics
@@ -696,6 +700,10 @@ src/              Vue 3 frontend (TDesign Vue Next + Pinia)
                   "Fill every layer" contract: section card → account card → window block, each eating the height left by its parent
                   Dialog geometry: placement="center" decides screen centring (TDesign's default top = 20vh from the viewport top),
                   with width/height floors and internal body scrolling in section 5 of the same file
+  assets/theme.css  brand theme layer: overrides TDesign's --td-* design tokens (one set per mode)
+                    the single place colours may be declared — components contain none; values are
+                    measured from the live 18Bit sites. Radius / font / surface ladder / text tiers /
+                    hairline borders all live here; spec in section 0.1 of design-baseline.md
 e2e/              Playwright E2E smoke tests
 worker/           Cloudflare Workers entry (reuses server/app.ts)
 cloud-functions/  EdgeOne Makers cloud functions (catch-all /api/* + /api/diag self-diagnostic)
@@ -743,7 +751,9 @@ the essentials are:
 
 - **Environment**: Bun 1.2+ and Node `^22.18.0 || >=24.12.0`
 - **The four gates**: `test:unit` → `build` → `test:e2e` → `vp check`, fixed order, all green
-- **Code ground rules**: use TDesign's native tokens only (no parallel `--ui-*` layer); layout only
+- **Code ground rules**: use TDesign's native tokens only (no parallel `--ui-*` layer), and put brand
+  values in `src/assets/theme.css` — that file is the single place colours are declared, so components
+  never carry any; layout only
   through the semantic primitives in `src/assets/layout.css` (components declare no breakpoints and
   never use `t-row`/`t-col`); column strategy is applied centrally by `App.vue` based on item
   counts; `<t-statistic>` may only appear in `MetricTile.vue`; components are registered only from
