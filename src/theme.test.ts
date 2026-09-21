@@ -196,6 +196,43 @@ describe('品牌主题层', () => {
     ).toBeGreaterThanOrEqual(4.5)
   })
 
+  /**
+   * 填充档 token 不得当**前景色**用 —— 对应 `theme.css` 文件头「文字色不许取填充色 token」。
+   *
+   * `--td-brand-color` 在亮色是 `-7`、暗色是 `-8`，后者是给「上面压白字的色块」选的。
+   * 本项目 `layout.css` 两处链接原本就这么写：亮色 6.57:1 侥幸可读、**暗色掉到 2.15:1**，
+   * 而当时所有门禁都是绿的 —— 所以这条只能靠静态规则锁。
+   *
+   * 只锁「前景」属性：`background` / `border` 那类**本来就该**用填充档，不在范围内；
+   * 色阶的**某一级**（`--td-brand-color-7`）也允许，禁的是不带级别的那几个。
+   */
+  it('前景色属性不得直接引用填充档 token', () => {
+    const foreground = new Set(['color', 'text-decoration-color', 'caret-color', 'fill', 'stroke'])
+    const fillToken = /var\(\s*--td-(?:brand|success|warning|error)-color\s*\)/
+
+    const offenders: string[] = []
+    for (const file of sourceFiles(SRC_DIR, ['.vue', '.css'])) {
+      const name = relative(SRC_DIR, file).replaceAll('\\', '/')
+      if (name === THEME_FILE) {
+        continue
+      }
+      for (const { line, text } of cssWithLineNumbers(file)) {
+        for (const segment of text.replace(/\/\*[\s\S]*?\*\//g, '').split(/[;{}]/)) {
+          const colon = segment.indexOf(':')
+          if (colon === -1) {
+            continue
+          }
+          const property = segment.slice(0, colon).trim().toLowerCase()
+          if (foreground.has(property) && fillToken.test(segment.slice(colon + 1))) {
+            offenders.push(`${name} → ${line}: ${property} 用了填充档 token`)
+          }
+        }
+      }
+    }
+
+    expect(offenders, '这些前景色应当改指 --td-text-color-*').toEqual([])
+  })
+
   it('字面颜色只出现在 theme.css，组件与其它样式表一律走 var(--td-*)', () => {
     const files = sourceFiles(SRC_DIR, ['.vue', '.css'])
     expect(files.length).toBeGreaterThan(20)

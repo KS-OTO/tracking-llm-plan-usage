@@ -44,8 +44,11 @@ body {
   min-height: 100vh;
 }
 
+/* 全局链接色。走 `--td-text-color-link` 而**不是** `--td-brand-color` ——
+ * 后者是填充档（亮色 -7 / 暗色 -8），暗色下当文字用只有 2.15:1。
+ * 亮色两者同值（都是 -7），所以这一改**不影响亮色**。 */
 a {
-  color: var(--td-brand-color);
+  color: var(--td-text-color-link);
   text-decoration: none;
 }
 
