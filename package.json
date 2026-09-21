@@ -69,7 +69,7 @@
     "typescript": "~6.0.0",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.2.7",
     "vite-plugin-vue-devtools": "^8.1.5",
-    "vite-plus": "0.2.7",
+    "vite-plus": "0.3.3",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.11",
     "wrangler": "^4.131.2"
