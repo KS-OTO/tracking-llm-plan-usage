@@ -59,6 +59,9 @@ function personalWindows(personal: TokenPlanPersonalPlan): WindowQuota[] {
     windows.push(personalWindow('fiveHour', '5 小时窗口', personal.fiveHour))
   }
   windows.push(personalWindow('weekly', '7 天窗口', personal.weekly))
+  if (personal.monthly) {
+    windows.push(personalWindow('monthly', '月度窗口', personal.monthly))
+  }
   return windows
 }
 
@@ -72,6 +75,9 @@ function personalMeta(personal: TokenPlanPersonalPlan): Field[] {
   const fields: Field[] = [
     field('数据来源', personal.source === 'cookie' ? '会话 Cookie' : 'AK/SK'),
   ]
+  if (personal.accountId) {
+    fields.push(field('账号 ID', personal.accountId))
+  }
   // 没有重置卡就不渲染这一行：挂一个「—」只会让读者以为数据丢了
   if (personal.resetCards.length > 0) {
     fields.push(field('重置卡', resetCardSummary(personal.resetCards)))

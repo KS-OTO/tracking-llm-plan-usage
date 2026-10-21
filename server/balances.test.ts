@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vite-plus/test'
 
-import { parseOpenRouterBalance, parseOpenRouterDetail } from './balances.ts'
+import {
+  normalizeSiliconFlowSite,
+  parseNovitaBalance,
+  parseOpenRouterBalance,
+  parseOpenRouterDetail,
+  parseSiliconFlowBalance,
+  parseStepFunBalance,
+} from './balances.ts'
 
 describe('parseOpenRouterBalance', () => {
   it('computes remaining credits from total minus usage', () => {
@@ -78,5 +85,87 @@ describe('parseOpenRouterDetail', () => {
       limitRemaining: null,
       usageMonthly: 0,
     })
+  })
+})
+
+describe('parseStepFunBalance', () => {
+  it('uses the total balance and exposes cash / voucher dimensions', () => {
+    const result = parseStepFunBalance({
+      balance: 12.34,
+      total_cash_balance: 10,
+      total_voucher_balance: 2.34,
+    })
+
+    expect(result).toMatchObject({ provider: 'StepFun', balance: 12.34, unit: 'CNY' })
+    expect(result.details).toEqual([
+      { key: 'cash', label: '现金余额', value: 10, unit: 'CNY' },
+      { key: 'voucher', label: '代金券余额', value: 2.34, unit: 'CNY' },
+    ])
+  })
+
+  it('derives the balance from cash + voucher when balance is absent', () => {
+    expect(parseStepFunBalance({ total_cash_balance: 3, total_voucher_balance: 4 }).balance).toBe(7)
+  })
+
+  it('rejects a response without any balance field instead of showing zero', () => {
+    expect(() => parseStepFunBalance({ object: 'account' })).toThrow('balance')
+  })
+})
+
+describe('parseSiliconFlowBalance', () => {
+  it('reads totalBalance and keeps recharge / granted dimensions', () => {
+    const result = parseSiliconFlowBalance(
+      { data: { totalBalance: 8.5, balance: 5, chargeBalance: 3.5, status: 'normal' } },
+      'cn',
+    )
+
+    expect(result).toMatchObject({ provider: 'SiliconFlow', balance: 8.5, unit: 'CNY' })
+    expect(result.meta).toEqual([{ label: '账户状态', value: 'normal' }])
+    expect(result.details?.map((item) => item.key)).toEqual(['recharge', 'granted'])
+  })
+
+  it('labels the international site and uses USD', () => {
+    const result = parseSiliconFlowBalance({ data: { totalBalance: 1.25 } }, 'global')
+
+    expect(result).toMatchObject({ provider: 'SiliconFlow（国际站）', unit: 'USD' })
+  })
+
+  it('rejects a response without data', () => {
+    expect(() => parseSiliconFlowBalance({ code: 401 }, 'cn')).toThrow('data')
+  })
+})
+
+describe('normalizeSiliconFlowSite', () => {
+  it('defaults to cn and accepts the known aliases', () => {
+    expect(normalizeSiliconFlowSite(undefined)).toBe('cn')
+    expect(normalizeSiliconFlowSite('CN')).toBe('cn')
+    expect(normalizeSiliconFlowSite('global')).toBe('global')
+    expect(normalizeSiliconFlowSite('en')).toBe('global')
+  })
+
+  it('rejects an unknown site instead of silently querying the wrong one', () => {
+    expect(() => normalizeSiliconFlowSite('global-en')).toThrow('SILICONFLOW_SITE')
+  })
+})
+
+describe('parseNovitaBalance', () => {
+  it('converts the 0.0001 USD unit and exposes cash / credit dimensions', () => {
+    const result = parseNovitaBalance({
+      availableBalance: 123456,
+      cashBalance: 100000,
+      creditLimit: 23456,
+      outstandingInvoices: 0,
+    })
+
+    expect(result).toMatchObject({ provider: 'Novita AI', balance: 12.3456, unit: 'USD' })
+    expect(result.details).toEqual([
+      { key: 'cash', label: '现金余额', value: 10, unit: 'USD' },
+      { key: 'credit', label: '信用额度', value: 2.3456, unit: 'USD' },
+      { key: 'outstanding', label: '待付账单', value: 0, unit: 'USD' },
+    ])
+  })
+
+  it('rejects a response without availableBalance', () => {
+    expect(() => parseNovitaBalance({ cashBalance: 1 })).toThrow('availableBalance')
   })
 })

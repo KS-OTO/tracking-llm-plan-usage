@@ -8,15 +8,30 @@
  *
  * 环境变量通过 EnvGetter 抽象注入（Bun: process.env；Worker: bindings）。
  */
-import { fetchOpenRouterDetail } from './balances.ts'
+import {
+  fetchNovitaBalance,
+  fetchOpenRouterDetail,
+  fetchSiliconFlowBalance,
+  fetchStepFunBalance,
+  normalizeSiliconFlowSite,
+  type SimpleBalanceInfo,
+} from './balances.ts'
 import { cachedQuery } from './cache.ts'
+import { fetchCommandCodePlan } from './commandcode.ts'
+import { fetchSub2ApiUsage } from './sub2api.ts'
+import { fetchZenMuxPlan, ZENMUX_DEFAULT_BASE_URL } from './zenmux.ts'
 import { queryResourcePackageInstances, type AliyunCredentials } from './aliyun.ts'
 import { fetchAliyunPersonalPlan, type AliyunPersonalPlan } from './aliyun-console.ts'
 import { fetchDeepSeekBalance } from './deepseek.ts'
 import { fetchQianfanData, type BaiduCredentials } from './baidu.ts'
 import { fetchGiteePackageBalance, fetchGiteeVoucher } from './gitee.ts'
 import { fetchOpenCodeGoUsage } from './opencode.ts'
-import { fetchKimiPlan, fetchMiniMaxPlan, type TokenPlanInfo } from './plans.ts'
+import {
+  fetchKimiPlan,
+  fetchMiniMaxPlan,
+  normalizeMiniMaxSite,
+  type TokenPlanInfo,
+} from './plans.ts'
 import { fetchNewApi, type NewApiAccountData } from './newapi.ts'
 import {
   readIncompletePairs,
@@ -95,8 +110,6 @@ const ACCOUNT_ERROR_HINTS: Array<{ pattern: string; hint: string }> = [
   { pattern: 'CookieExpired', hint: '会话 Cookie 已过期，需重新获取' },
   { pattern: 'Forbidden', hint: '无权限访问该资源' },
   { pattern: 'ConsoleSessionExpired', hint: '百炼控制台会话已失效，需更新 Cookie' },
-  { pattern: 'OpenCodeGo_HTTP_401', hint: 'OpenCode Go API Key 无效或已失效' },
-  { pattern: 'OpenCodeGo_HTTP_403', hint: 'OpenCode Go 无权限（该 Key 可能未开通订阅）' },
   {
     pattern: 'Zhipu_500',
     hint: '智谱上游内部错误（未订阅 GLM Coding Plan 的账号查额度也会这样报，可先到控制台确认订阅状态）',
@@ -183,7 +196,7 @@ type UsageSliceResult<T> = { data: T } | { error: string; code: string }
  * 把 provider 查询的成败收敛成切片（返回的 promise 永不 reject）。
  *
  * 这是 `/api/usage` 的关键：合并成一个端点后，**容错粒度必须保持不变** ——
- * 一个平台挂了只降级它自己那一格，其余 9 家照常返回（与 PR #17 智谱子查询容错同一原则）。
+ * 一个平台挂了只降级它自己那一格，其余平台照常返回（与 PR #17 智谱子查询容错同一原则）。
  */
 async function usageSliceOf<T>(load: Promise<T>): Promise<UsageSliceResult<T>> {
   try {
@@ -407,9 +420,29 @@ export function createAppHandler(env: EnvGetter) {
   const OPENROUTER_KEYS = readKeys('OPENROUTER_API_KEY', env)
   const KIMI_KEYS = readKeys('KIMI_API_KEY', env)
   const MINIMAX_KEYS = readKeys('MINIMAX_API_KEY', env)
+  // MiniMax 国际站 / 国内站按 Key 同序号配对（缺省 cn）
+  const MINIMAX_SITE_BY_KEY = readPairedMap('MINIMAX_API_KEY', 'MINIMAX_SITE', env)
   const OPENCODE_GO_KEYS = readKeys('OPENCODE_GO_API_KEY', env)
+  const STEPFUN_KEYS = readKeys('STEPFUN_API_KEY', env)
+  const SILICONFLOW_KEYS = readKeys('SILICONFLOW_API_KEY', env)
+  // SiliconFlow 有国内 / 国际两个站点，按 Key 同序号配对站点（缺省 cn）
+  const SILICONFLOW_SITE_BY_KEY = readPairedMap('SILICONFLOW_API_KEY', 'SILICONFLOW_SITE', env)
+  const NOVITA_KEYS = readKeys('NOVITA_API_KEY', env)
+  const COMMAND_CODE_KEYS = readKeys('COMMAND_CODE_API_KEY', env)
+  const ZENMUX_KEYS = readKeys('ZENMUX_API_KEY', env)
+  // ZenMux 的额度端点由用户配置（默认官方地址），按 Key 同序号配对
+  const ZENMUX_BASE_URL_BY_KEY = readPairedMap('ZENMUX_API_KEY', 'ZENMUX_BASE_URL', env)
+  // 智谱团队版：同一把 Key + 组织 / 项目两个请求头（按 Key 同序号配对）
+  const ZHIPU_ORG_BY_KEY = readPairedMap('ZHIPU_API_KEY', 'ZHIPU_ORGANIZATION_ID', env)
+  const ZHIPU_PROJECT_BY_KEY = readPairedMap('ZHIPU_API_KEY', 'ZHIPU_PROJECT_ID', env)
+  // 阿里云 Token Plan 控制台区域：国内百炼（默认）/ QwenCloud 国际站
+  const aliyunRegionValue = env('ALIYUN_TOKENPLAN_REGION')?.trim().toLowerCase()
+  const ALIYUN_TOKENPLAN_REGION =
+    aliyunRegionValue === 'intl' || aliyunRegionValue === 'global' ? 'intl' : 'cn'
   // New API 是自托管服务：端点由各部署自己决定，因此凭据成对（站点地址 + 系统访问令牌）
   const NEWAPI_PAIRS = readKeyPairs('NEWAPI_BASE_URL', 'NEWAPI_TOKEN', env)
+  // Sub2API 同为自托管网关：站点地址 + 模型调用 API Key
+  const SUB2API_PAIRS = readKeyPairs('SUB2API_BASE_URL', 'SUB2API_API_KEY', env)
   // New-Api-User 请求头（可选）：管理员代查他人数据时按站点地址配对
   const NEWAPI_USER_ID_BY_URL = readPairedMap('NEWAPI_BASE_URL', 'NEWAPI_USER_ID', env)
   // 站点自定义（站点名 / Logo / favicon / 刷新间隔）：纯前端外观，不参与鉴权
@@ -468,6 +501,12 @@ export function createAppHandler(env: EnvGetter) {
   labelMap('kimi', 'KIMI_API_KEY', 'KIMI_LABEL')
   labelMap('minimax', 'MINIMAX_API_KEY', 'MINIMAX_LABEL')
   labelMap('opencode', 'OPENCODE_GO_API_KEY', 'OPENCODE_GO_LABEL')
+  labelMap('stepfun', 'STEPFUN_API_KEY', 'STEPFUN_LABEL')
+  labelMap('siliconflow', 'SILICONFLOW_API_KEY', 'SILICONFLOW_LABEL')
+  labelMap('novita', 'NOVITA_API_KEY', 'NOVITA_LABEL')
+  labelMap('commandcode', 'COMMAND_CODE_API_KEY', 'COMMAND_CODE_LABEL')
+  labelMap('zenmux', 'ZENMUX_API_KEY', 'ZENMUX_LABEL')
+  labelMap('sub2api', 'SUB2API_BASE_URL', 'SUB2API_LABEL')
   labelMap('baidu', 'BAIDU_ACCESS_KEY_ID', 'BAIDU_LABEL')
   // New API 用站点地址做别名索引（同一站点可能配多个 Key）
   labelMap('newapi', 'NEWAPI_BASE_URL', 'NEWAPI_LABEL')
@@ -486,6 +525,9 @@ export function createAppHandler(env: EnvGetter) {
     // （`readKeyPairs` 遇到不成对就整对丢弃），页面上既没有错误也没有空状态，
     // 用户能看到的只有「少了一张卡」。实测本机就因为变量改过名而踩过一次。
     ...readIncompletePairs('NEWAPI_BASE_URL', 'NEWAPI_TOKEN', env),
+    ...readIncompletePairs('SUB2API_BASE_URL', 'SUB2API_API_KEY', env),
+    // 智谱团队版：组织 / 项目两个请求头缺一不可，半配置时直说缺哪个
+    ...readIncompletePairs('ZHIPU_ORGANIZATION_ID', 'ZHIPU_PROJECT_ID', env),
   ]
 
   // ---------------------------------------------------------------------------
@@ -493,8 +535,14 @@ export function createAppHandler(env: EnvGetter) {
   // ---------------------------------------------------------------------------
 
   function handleStatus(): Response {
-    // 套餐类（Kimi / MiniMax / OpenCode Go）单独统计，与前端「套餐订阅」Tab 的归属一致
-    const plansKeyHints = [...KIMI_KEYS, ...MINIMAX_KEYS, ...OPENCODE_GO_KEYS].map(maskKey)
+    // 套餐类（Kimi / MiniMax / OpenCode Go / Command Code / ZenMux）单独统计，与前端「套餐订阅」Tab 的归属一致
+    const plansKeyHints = [
+      ...KIMI_KEYS,
+      ...MINIMAX_KEYS,
+      ...OPENCODE_GO_KEYS,
+      ...COMMAND_CODE_KEYS,
+      ...ZENMUX_KEYS,
+    ].map(maskKey)
     return json({
       providers: {
         deepseek: providerStatus(DEEPSEEK_KEYS.map(maskKey)),
@@ -506,6 +554,12 @@ export function createAppHandler(env: EnvGetter) {
         tokenplan: providerStatus(aliyunTokenPlanSources.map((source) => source.keyHint)),
         plans: providerStatus(plansKeyHints),
         newapi: providerStatus(NEWAPI_PAIRS.map((pair) => maskKey(pair.key))),
+        subapi: providerStatus(SUB2API_PAIRS.map((pair) => maskKey(pair.secret))),
+        stepfun: providerStatus(STEPFUN_KEYS.map(maskKey)),
+        siliconflow: providerStatus(SILICONFLOW_KEYS.map(maskKey)),
+        novita: providerStatus(NOVITA_KEYS.map(maskKey)),
+        commandcode: providerStatus(COMMAND_CODE_KEYS.map(maskKey)),
+        zenmux: providerStatus(ZENMUX_KEYS.map(maskKey)),
       },
       incomplete: INCOMPLETE_VARS,
       // 站点自定义随状态一并下发：前端首屏只发一次 /api/status 就能拿到品牌与刷新节奏
@@ -538,7 +592,7 @@ export function createAppHandler(env: EnvGetter) {
         entries: MINIMAX_KEYS.map((key) => ({
           keyHint: maskKey(key),
           label: labelOf('minimax', key),
-          run: () => fetchMiniMaxPlan(key),
+          run: () => fetchMiniMaxPlan(key, normalizeMiniMaxSite(MINIMAX_SITE_BY_KEY.get(key))),
         })),
       },
       {
@@ -547,6 +601,23 @@ export function createAppHandler(env: EnvGetter) {
           keyHint: maskKey(key),
           label: labelOf('opencode', key),
           run: () => fetchOpenCodeGoUsage(key),
+        })),
+      },
+      {
+        provider: 'Command Code',
+        entries: COMMAND_CODE_KEYS.map((key) => ({
+          keyHint: maskKey(key),
+          label: labelOf('commandcode', key),
+          run: () => fetchCommandCodePlan(key),
+        })),
+      },
+      {
+        provider: 'ZenMux',
+        entries: ZENMUX_KEYS.map((key) => ({
+          keyHint: maskKey(key),
+          label: labelOf('zenmux', key),
+          run: () =>
+            fetchZenMuxPlan(key, ZENMUX_BASE_URL_BY_KEY.get(key) || ZENMUX_DEFAULT_BASE_URL),
         })),
       },
     ].filter((group) => group.entries.length > 0)
@@ -678,9 +749,15 @@ export function createAppHandler(env: EnvGetter) {
         keyHint: maskKey(apiKey),
         label: labelOf('zhipu', apiKey),
         run: async () => {
+          const organizationId = ZHIPU_ORG_BY_KEY.get(apiKey)
+          const projectId = ZHIPU_PROJECT_BY_KEY.get(apiKey)
+          if (Boolean(organizationId) !== Boolean(projectId)) {
+            throw new Error('智谱团队版需同时配置 ZHIPU_ORGANIZATION_ID 与 ZHIPU_PROJECT_ID')
+          }
+          const team = organizationId && projectId ? { organizationId, projectId } : undefined
           // 三个子查询各自容错：任何一路失败都只降级它自己对应的区块
           const [codingPlan, balance, packages] = await Promise.all([
-            subQuerySliceOf(getZhipuCodingPlanQuota(apiKey)),
+            subQuerySliceOf(getZhipuCodingPlanQuota(apiKey, team)),
             subQuerySliceOf(getZhipuAccountBalance(apiKey)),
             subQuerySliceOf(getZhipuTokenPackages(apiKey)),
           ])
@@ -731,6 +808,7 @@ export function createAppHandler(env: EnvGetter) {
             fetchAliyunPersonalPlan({
               ...(cookie ? { cookie } : {}),
               ...(credentials ? { credentials } : {}),
+              region: ALIYUN_TOKENPLAN_REGION,
             }).then(
               (data): PersonalSlice => ({ data }),
               (cause: unknown): PersonalSlice => ({
@@ -776,6 +854,73 @@ export function createAppHandler(env: EnvGetter) {
     return { accounts }
   }
 
+  async function stepFunPayload(): Promise<{ accounts: unknown[] }> {
+    if (STEPFUN_KEYS.length === 0) {
+      throw new NotConfiguredError('未配置 STEPFUN_API_KEY 环境变量')
+    }
+    const accounts = await runAccounts(
+      STEPFUN_KEYS.map(
+        (apiKey): AccountEntry<SimpleBalanceInfo> => ({
+          keyHint: maskKey(apiKey),
+          label: labelOf('stepfun', apiKey),
+          run: () => fetchStepFunBalance(apiKey),
+        }),
+      ),
+    )
+    return { accounts }
+  }
+
+  async function siliconFlowPayload(): Promise<{ accounts: unknown[] }> {
+    if (SILICONFLOW_KEYS.length === 0) {
+      throw new NotConfiguredError('未配置 SILICONFLOW_API_KEY 环境变量')
+    }
+    const accounts = await runAccounts(
+      SILICONFLOW_KEYS.map(
+        (apiKey): AccountEntry<SimpleBalanceInfo> => ({
+          keyHint: maskKey(apiKey),
+          label: labelOf('siliconflow', apiKey),
+          run: () => {
+            const site = normalizeSiliconFlowSite(SILICONFLOW_SITE_BY_KEY.get(apiKey))
+            return fetchSiliconFlowBalance(apiKey, site)
+          },
+        }),
+      ),
+    )
+    return { accounts }
+  }
+
+  async function novitaPayload(): Promise<{ accounts: unknown[] }> {
+    if (NOVITA_KEYS.length === 0) {
+      throw new NotConfiguredError('未配置 NOVITA_API_KEY 环境变量')
+    }
+    const accounts = await runAccounts(
+      NOVITA_KEYS.map(
+        (apiKey): AccountEntry<SimpleBalanceInfo> => ({
+          keyHint: maskKey(apiKey),
+          label: labelOf('novita', apiKey),
+          run: () => fetchNovitaBalance(apiKey),
+        }),
+      ),
+    )
+    return { accounts }
+  }
+
+  async function sub2ApiPayload(): Promise<{ accounts: unknown[] }> {
+    if (SUB2API_PAIRS.length === 0) {
+      throw new NotConfiguredError('未配置 SUB2API_BASE_URL / SUB2API_API_KEY 环境变量')
+    }
+    const accounts = await runAccounts(
+      SUB2API_PAIRS.map(
+        (pair): AccountEntry<SimpleBalanceInfo> => ({
+          keyHint: maskKey(pair.secret),
+          label: labelOf('sub2api', pair.key),
+          run: () => fetchSub2ApiUsage(pair.key, pair.secret),
+        }),
+      ),
+    )
+    return { accounts }
+  }
+
   async function volcInferencePayload(filters: {
     days: string | null
     model?: string
@@ -811,7 +956,7 @@ export function createAppHandler(env: EnvGetter) {
    * 火山推理用量：**保留独立端点**。
    *
    * 它是唯一带用户输入的读数接口（`model` / `modelEndpoint` 过滤），并入 `/api/usage`
-   * 会让「改一个模型过滤」退化成「全量重拉 10 家平台」—— 反而更贵。
+   * 会让「改一个模型过滤」退化成「全量重拉所有平台」—— 反而更贵。
    * 缓存按参数分 key，因此在同一组过滤条件上来回切换不会重复打上游。
    */
   async function handleVolcInference(requestUrl: URL): Promise<Response> {
@@ -847,6 +992,10 @@ export function createAppHandler(env: EnvGetter) {
     openrouter: 60,
     plans: 300,
     newapi: 60,
+    subapi: 60,
+    stepfun: 60,
+    siliconflow: 60,
+    novita: 60,
   } as const
 
   type UsageProviderKey = keyof typeof USAGE_TTL_SECONDS
@@ -871,31 +1020,49 @@ export function createAppHandler(env: EnvGetter) {
   }
 
   /**
-   * `/api/usage`：把 9 个「每刷新一次、无用户参数、纯读数」的端点合成 1 个。
+   * `/api/usage`：把「每刷新一次、无用户参数、纯读数」的所有端点合成 1 个。
    *
    * 动机见 issue #23：托管在边缘云上，部分平台按**节点生存时间**计费 ——
    * 端点数直接决定唤醒次数与单次存活时长。合并后每次刷新的前端请求 12 → 2
    * （`/api/status` + `/api/usage`），而**服务端的上游调用数一个不少**，
-   * 每个 provider 仍是独立容错切片：一家挂了其余 9 家照常返回。
+   * 每个 provider 仍是独立容错切片：一家挂了其余平台照常返回。
    *
    * `?refresh=1` 表示手动刷新：跳过缓存读取（但仍复用进行中的同 key 请求），
    * 因此点「刷新」永远拿得到实时数据，而自动刷新走缓存省下上游墙钟。
    */
   async function handleUsage(requestUrl: URL): Promise<Response> {
     const bypass = requestUrl.searchParams.get('refresh') === '1'
-    const [deepseek, volcPlan, zhipu, aliyun, tokenPlan, gitee, baidu, openrouter, plans, newapi] =
-      await Promise.all([
-        usageProvider('deepseek', deepseekPayload, bypass),
-        usageProvider('volcPlan', volcPlanPayload, bypass),
-        usageProvider('zhipu', zhipuPayload, bypass),
-        usageProvider('aliyun', aliyunPayload, bypass),
-        usageProvider('tokenPlan', tokenPlanPayload, bypass),
-        usageProvider('gitee', giteePayload, bypass),
-        usageProvider('baidu', baiduPayload, bypass),
-        usageProvider('openrouter', openRouterPayload, bypass),
-        usageProvider('plans', plansPayload, bypass),
-        usageProvider('newapi', newApiPayload, bypass),
-      ])
+    const [
+      deepseek,
+      volcPlan,
+      zhipu,
+      aliyun,
+      tokenPlan,
+      gitee,
+      baidu,
+      openrouter,
+      plans,
+      newapi,
+      subapi,
+      stepfun,
+      siliconflow,
+      novita,
+    ] = await Promise.all([
+      usageProvider('deepseek', deepseekPayload, bypass),
+      usageProvider('volcPlan', volcPlanPayload, bypass),
+      usageProvider('zhipu', zhipuPayload, bypass),
+      usageProvider('aliyun', aliyunPayload, bypass),
+      usageProvider('tokenPlan', tokenPlanPayload, bypass),
+      usageProvider('gitee', giteePayload, bypass),
+      usageProvider('baidu', baiduPayload, bypass),
+      usageProvider('openrouter', openRouterPayload, bypass),
+      usageProvider('plans', plansPayload, bypass),
+      usageProvider('newapi', newApiPayload, bypass),
+      usageProvider('subapi', sub2ApiPayload, bypass),
+      usageProvider('stepfun', stepFunPayload, bypass),
+      usageProvider('siliconflow', siliconFlowPayload, bypass),
+      usageProvider('novita', novitaPayload, bypass),
+    ])
     return json({
       providers: {
         deepseek,
@@ -908,6 +1075,10 @@ export function createAppHandler(env: EnvGetter) {
         openrouter,
         plans,
         newapi,
+        subapi,
+        stepfun,
+        siliconflow,
+        novita,
       },
       fetchedAt: Date.now(),
     })
@@ -917,7 +1088,7 @@ export function createAppHandler(env: EnvGetter) {
   // 请求分发：/api/* 返回 API 响应；其余路径返回 null（由宿主处理静态资源）
   //
   // 只有 3 个端点（issue #23 的验收标准）：/api/status（首屏、0 上游调用）、
-  // /api/usage（每刷新、9 家平台合并）、/api/volc/inference-usage（带用户输入，按需）。
+  // /api/usage（每刷新、所有平台合并）、/api/volc/inference-usage（带用户输入，按需）。
   // ---------------------------------------------------------------------------
 
   return async (request: Request): Promise<Response | null> => {

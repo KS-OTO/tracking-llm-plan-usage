@@ -27,6 +27,7 @@ import {
   moneyMetric,
   notice,
   table,
+  textMetric,
   windowQuota,
 } from '../detail'
 import { formatTokens } from '../format'
@@ -112,11 +113,13 @@ export function toZhipuDetail(account: ZhipuAccount, variant: 'plan' | 'balance'
   const codingPlan = 'data' in account.codingPlan ? account.codingPlan.data : null
   const balance = 'data' in account.balance ? account.balance.data : null
   const packages = 'data' in account.packages ? account.packages.data : []
+  const noPlan = codingPlan?.noPlan === true
   return {
     identity: identityFields(account, 'ZHIPU_LABEL / ZHIPU_LABEL_N'),
     windows: codingPlan ? codingWindows(codingPlan, planCard) : [],
     balances: balance ? balanceMetrics(balance, !planCard) : [],
     metrics: [
+      ...(noPlan ? [textMetric('coding-plan', 'Coding Plan', '未订阅（按量付费）')] : []),
       {
         ...countMetric('packages', '生效资源包', activePackages(packages).length),
         ...(planCard ? { cardFace: false as const } : {}),
@@ -125,6 +128,7 @@ export function toZhipuDetail(account: ZhipuAccount, variant: 'plan' | 'balance'
     tables: [packageTable(packages)],
     meta: [
       field('Coding Plan 等级', codingPlan?.level ?? null),
+      ...(codingPlan?.scope === 'team' ? [field('套餐口径', '团队版')] : []),
       ...(balance
         ? [
             field('信用支付', creditStatusLabel(balance.creditStatus)),
@@ -137,6 +141,9 @@ export function toZhipuDetail(account: ZhipuAccount, variant: 'plan' | 'balance'
     // 失败告警只在**属于这张卡**的时候出现（套餐卡的弹窗里不该有余额接口的错误）；
     // 卡面负责的那一半失败时必须上卡面 —— 否则用户看到的是「空卡 + 没有解释」。
     notices: [
+      ...(noPlan && planCard
+        ? [{ ...notice('info', '当前账户未订阅 Coding Plan，按量计费'), cardFace: true }]
+        : []),
       ...('error' in account.codingPlan && planCard
         ? [
             {

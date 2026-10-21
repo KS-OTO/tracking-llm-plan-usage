@@ -112,6 +112,26 @@ describe('TokenPlanSection', () => {
     expect(text).not.toContain('320.0K')
   })
 
+  it('renders the monthly window and international account id when present', async () => {
+    const wrapper = mountWithTDesign(TokenPlanSection, {
+      props: {
+        data: personalData({
+          monthly: { percent: 50, resetTime: Date.now() + 86_400_000 },
+          accountId: 'acc-1',
+        }),
+        loading: false,
+        error: null,
+      },
+    })
+
+    expect(wrapper.text()).toContain('月度窗口')
+    expect(wrapper.text()).toContain('50.0%')
+
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('账号 ID')
+    expect(detail).toContain('acc-1')
+  })
+
   it('prefers the alias over the key hint', () => {
     const wrapper = mountWithTDesign(TokenPlanSection, {
       props: { data: fixture, loading: false, error: null },

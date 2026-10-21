@@ -398,8 +398,12 @@ describe('/api/usage：平台之间与子查询之间的独立容错', () => {
         'deepseek',
         'gitee',
         'newapi',
+        'novita',
         'openrouter',
         'plans',
+        'siliconflow',
+        'stepfun',
+        'subapi',
         'tokenPlan',
         'volcPlan',
         'zhipu',
@@ -531,6 +535,277 @@ describe('/api/usage：平台之间与子查询之间的独立容错', () => {
       const after = await usageSliceOf({ DEEPSEEK_API_KEY: 'sk-deepseek-key' }, 'deepseek')
       expect(after).toHaveProperty('data')
       expect(calls).toBe(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('智谱未订阅 Coding Plan 时返回中性 noPlan，而不是一条故障', async () => {
+    vi.stubGlobal('fetch', (input: unknown) => {
+      const url = String(input)
+      const payload = url.includes('/api/monitor/usage/quota/limit')
+        ? { success: false, code: 500, msg: '当前用户不存在coding plan' }
+        : url.includes('tokenAccounts/list/my')
+          ? { code: 200, msg: '操作成功', total: 0, rows: [] }
+          : {
+              code: 200,
+              msg: '操作成功',
+              data: { balance: 1, availableBalance: 1, rechargeAmount: 0, giveAmount: 1 },
+            }
+      return Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    })
+    try {
+      const slice = await usageSliceOf({ ZHIPU_API_KEY: 'test.zhipu-key' }, 'zhipu')
+      const codingPlan = accountsOf(slice)[0]?.codingPlan
+      expect(codingPlan).toMatchObject({ data: { noPlan: true, windows: [] } })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('智谱额度优先用绝对用量计算百分比，而不是上游取整值', async () => {
+    vi.stubGlobal('fetch', (input: unknown) => {
+      const url = String(input)
+      const payload = url.includes('/api/monitor/usage/quota/limit')
+        ? {
+            success: true,
+            code: 200,
+            data: {
+              level: 'pro',
+              limits: [
+                {
+                  type: 'CREDIT_LIMIT',
+                  unit: 3,
+                  usage: 12000,
+                  currentValue: 1438,
+                  remaining: 10562,
+                  percentage: 11,
+                  nextResetTime: 0,
+                },
+              ],
+            },
+          }
+        : url.includes('tokenAccounts/list/my')
+          ? { code: 200, msg: '操作成功', total: 0, rows: [] }
+          : { code: 200, msg: '操作成功', data: { balance: 1, availableBalance: 1 } }
+      return Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    })
+    try {
+      const slice = await usageSliceOf({ ZHIPU_API_KEY: 'test.zhipu-key' }, 'zhipu')
+      expect(accountsOf(slice)[0]?.codingPlan).toMatchObject({
+        data: { windows: [{ window: 'fiveHour', percentage: (1438 / 12000) * 100 }] },
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('智谱团队版带上 type=2 与组织 / 项目请求头', async () => {
+    const calls: Array<{ url: string; headers: Headers }> = []
+    vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      calls.push({ url, headers: new Headers(init?.headers) })
+      const payload = url.includes('/api/monitor/usage/quota/limit')
+        ? {
+            success: true,
+            code: 200,
+            msg: '',
+            data: {
+              level: 'team',
+              limits: [
+                {
+                  type: 'TOKENS_LIMIT',
+                  unit: 3,
+                  usage: 100,
+                  currentValue: 20,
+                  remaining: 80,
+                  percentage: 20,
+                  nextResetTime: 0,
+                },
+              ],
+            },
+          }
+        : url.includes('tokenAccounts/list/my')
+          ? { code: 200, msg: '操作成功', total: 0, rows: [] }
+          : { code: 200, msg: '操作成功', data: { balance: 1, availableBalance: 1 } }
+      return Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    })
+    try {
+      const slice = await usageSliceOf(
+        {
+          ZHIPU_API_KEY: 'test.zhipu-key',
+          ZHIPU_ORGANIZATION_ID: 'org-1',
+          ZHIPU_PROJECT_ID: 'proj-1',
+        },
+        'zhipu',
+      )
+      expect(accountsOf(slice)[0]?.codingPlan).toMatchObject({
+        data: { scope: 'team', level: 'team' },
+      })
+      const quotaCall = calls.find((call) => call.url.includes('/quota/limit'))
+      expect(quotaCall?.url).toContain('type=2')
+      expect(quotaCall?.headers.get('bigmodel-organization')).toBe('org-1')
+      expect(quotaCall?.headers.get('bigmodel-project')).toBe('proj-1')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('StepFun 余额进入独立切片，字段与账号身份都在', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            balance: 12.34,
+            total_cash_balance: 10,
+            total_voucher_balance: 2.34,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    )
+    try {
+      const slice = await usageSliceOf({ STEPFUN_API_KEY: 'stepfun-key' }, 'stepfun')
+      expect(accountsOf(slice)[0]).toMatchObject({
+        provider: 'StepFun',
+        balance: 12.34,
+        unit: 'CNY',
+        keyHint: 'step****-key',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('SiliconFlow 站点配置非法时给出明确错误，且不打上游', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls += 1
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    try {
+      const slice = await usageSliceOf(
+        { SILICONFLOW_API_KEY: 'silicon-key', SILICONFLOW_SITE: 'global-en' },
+        'siliconflow',
+      )
+      const account = accountsOf(slice)[0]
+      expect(account?.error).toContain('SILICONFLOW_SITE')
+      expect(calls).toBe(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('Sub2API 站点地址成对读取，回调到 /v1/usage', async () => {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', (input: unknown) => {
+      urls.push(String(input))
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            isValid: true,
+            remaining: 7.5,
+            planName: 'Pro',
+            quota: { limit: 10, used: 2.5, unit: 'USD' },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+    })
+    try {
+      const slice = await usageSliceOf(
+        {
+          SUB2API_BASE_URL: 'https://sub.example.com/v1/',
+          SUB2API_API_KEY: 'sub-key',
+        },
+        'subapi',
+      )
+      expect(urls).toEqual(['https://sub.example.com/v1/usage'])
+      expect(accountsOf(slice)[0]).toMatchObject({
+        provider: 'Sub2API',
+        balance: 7.5,
+        total: 10,
+        used: 2.5,
+        plan: 'Pro',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('Command Code 出现在套餐切片里，窗口与余额都带 credits 口径', async () => {
+    vi.stubGlobal('fetch', (input: unknown) => {
+      const url = String(input)
+      const payload = url.includes('/alpha/whoami')
+        ? { org: { id: 'org-1' } }
+        : url.includes('/alpha/billing/credits')
+          ? {
+              credits: {
+                planId: 'provider',
+                monthlyCredits: 10,
+                purchasedCredits: 0,
+                freeCredits: 0,
+              },
+              windowLimits: {
+                limited: true,
+                fiveHour: { used: 1, cap: 10 },
+                weekly: { used: 2, cap: 20 },
+              },
+            }
+          : url.includes('/alpha/billing/subscriptions')
+            ? { data: { planId: 'goat', currentPeriodEnd: '2026-10-01T00:00:00.000Z' } }
+            : { totalCost: 5 }
+      return Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    })
+    try {
+      const slice = await usageSliceOf({ COMMAND_CODE_API_KEY: 'cc-key' }, 'plans')
+      const plansData = z
+        .object({
+          plans: z.array(
+            z.object({
+              provider: z.string(),
+              accounts: z.array(z.record(z.string(), z.unknown())),
+            }),
+          ),
+        })
+        .parse(slice.data)
+      const group = plansData.plans.find((item) => item.provider === 'Command Code')
+      if (!group) {
+        throw new Error('plans 切片里缺少 Command Code 分组')
+      }
+      const account = group.accounts[0]
+      if (!account) {
+        throw new Error('Command Code 分组里缺少账号')
+      }
+      expect(account).toMatchObject({
+        provider: 'Command Code',
+        plan: 'goat',
+        balance: { remaining: 10, unit: 'credits' },
+      })
+      const windows = z
+        .array(z.object({ window: z.string(), used: z.number(), unit: z.string() }))
+        .parse(account.windows)
+      expect(windows[2]).toMatchObject({ window: 'monthly', used: 5, unit: 'credits' })
     } finally {
       vi.unstubAllGlobals()
     }

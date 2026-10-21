@@ -23,6 +23,7 @@ import type {
   InferenceUsageResponse,
   NewApiResponse,
   PlansResponse,
+  SimpleBalanceResponse,
   SiteConfig,
   StatusResponse,
   TokenPlanResponse,
@@ -85,7 +86,12 @@ function applyResult<T>(result: PromiseSettledResult<T>, target: Ref<Slice<T>>):
  * 与 `applyResult` 的区别在于「失败」是**服务端给的业务错误**（HTTP 200 + `{error, code}`），
  * 而不是 promise reject —— 合并端点之后，一家的失败不再让整个请求失败。
  */
-function applyUsage<T>(slice: UsageSlice<T>, target: Ref<Slice<T>>): void {
+function applyUsage<T>(slice: UsageSlice<T> | undefined, target: Ref<Slice<T>>): void {
+  // 旧版服务端没有新平台的切片：保持中性空态，不把「版本过旧」渲染成红色故障
+  if (!slice) {
+    target.value = { data: null, error: null, notConfigured: true }
+    return
+  }
   if ('data' in slice) {
     target.value = { data: slice.data, error: null, notConfigured: false }
     return
@@ -126,6 +132,26 @@ export const useDashboardStore = defineStore('dashboard', () => {
   })
   const plans = ref<Slice<PlansResponse>>({ data: null, error: null, notConfigured: false })
   const newapi = ref<Slice<NewApiResponse>>({ data: null, error: null, notConfigured: false })
+  const subapi = ref<Slice<SimpleBalanceResponse>>({
+    data: null,
+    error: null,
+    notConfigured: false,
+  })
+  const stepfun = ref<Slice<SimpleBalanceResponse>>({
+    data: null,
+    error: null,
+    notConfigured: false,
+  })
+  const siliconflow = ref<Slice<SimpleBalanceResponse>>({
+    data: null,
+    error: null,
+    notConfigured: false,
+  })
+  const novita = ref<Slice<SimpleBalanceResponse>>({
+    data: null,
+    error: null,
+    notConfigured: false,
+  })
 
   const loading = ref(false)
   const lastUpdated = ref<Date | null>(null)
@@ -156,7 +182,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   let refreshTimer: ReturnType<typeof setInterval> | undefined
 
   /**
-   * 单独拉 `/api/status` 并**立即**落地，不等 `/api/usage`（9 家平台的上游查询）。
+   * 单独拉 `/api/status` 并**立即**落地，不等 `/api/usage`（所有平台的上游查询）。
    *
    * 站点名 / Logo / favicon / 刷新间隔都在这个切片里，而 provider 查询会真的打到各家
    * 上游接口——最慢的一家足以把品牌文案拖到几秒之后（实测 3.7s，页面一直显示默认站点名）。
@@ -220,7 +246,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
 
     // 信封整体失败（后端不可达 / 5xx），或形状不对（老服务端没有 /api/usage）：
-    // 9 家一起标注 —— 这与「某一家上游挂了」是两件事，后者由服务端在信封里表达。
+    // 所有平台一起标注 —— 这与「某一家上游挂了」是两件事，后者由服务端在信封里表达。
     const providers = usageOutcome.status === 'fulfilled' ? usageOutcome.value.providers : undefined
     if (providers) {
       applyUsage(providers.deepseek, deepseek)
@@ -233,6 +259,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
       applyUsage(providers.openrouter, openrouter)
       applyUsage(providers.plans, plans)
       applyUsage(providers.newapi, newapi)
+      applyUsage(providers.subapi, subapi)
+      applyUsage(providers.stepfun, stepfun)
+      applyUsage(providers.siliconflow, siliconflow)
+      applyUsage(providers.novita, novita)
     } else {
       const reason =
         usageOutcome.status === 'rejected'
@@ -251,6 +281,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
       applyFailure(reason, openrouter)
       applyFailure(reason, plans)
       applyFailure(reason, newapi)
+      applyFailure(reason, subapi)
+      applyFailure(reason, stepfun)
+      applyFailure(reason, siliconflow)
+      applyFailure(reason, novita)
     }
 
     if (inferenceOutcome.status === 'fulfilled') {
@@ -378,6 +412,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
     openrouter,
     plans,
     newapi,
+    subapi,
+    stepfun,
+    siliconflow,
+    novita,
     loading,
     lastUpdated,
     nextRefreshAt,

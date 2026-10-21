@@ -12,7 +12,7 @@
 [![Docs](https://img.shields.io/badge/Docs-Wiki-0052d9?logo=github)](https://github.com/KS-OTO/tracking-llm-plan-usage/wiki)
 
 把 **DeepSeek、火山方舟、智谱、阿里云百炼、模力方舟、百度千帆、OpenRouter、New API**（自托管网关）
-以及 **Kimi / MiniMax / OpenCode Go** 订阅套餐的余额与额度窗口，收进**一个页面**。
+以及 **Kimi / MiniMax / OpenCode Go / Command Code / ZenMux** 订阅套餐，外加 StepFun / SiliconFlow / Novita AI / Sub2API 余额，收进**一个页面**。
 凭据只存在服务端环境变量里，浏览器拿不到任何 Key。
 
 > **在线演示：<https://cp-ai101.18bit.cn/>** ·
@@ -59,18 +59,22 @@ bun run dev               # 单进程：前端 5173 + 内置 API（读取 .env�
 
 ## 支持的平台
 
-| 平台                  | 能看到什么                                                                   | 需要的凭据                                                 |
-| --------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| DeepSeek              | 总余额 / 充值余额 / 赠金余额（CNY·USD）、可用状态                            | `DEEPSEEK_API_KEY`                                         |
-| 火山方舟 Agent Plan   | 5 小时 / 每周 / 每月配额与进度、重置倒计时；套餐档位、模型调用明细、推理用量 | `VOLC_ACCESS_KEY_ID` + `VOLC_SECRET_KEY`                   |
-| 智谱 GLM              | Coding Plan 等级与 5 小时 / 每周窗口额度、账户余额、Token 资源包             | `ZHIPU_API_KEY`                                            |
-| 阿里云百炼            | Token 资源包（总量 / 剩余 / 有效期）                                         | `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_SECRET_KEY`               |
-| 阿里云百炼 Token Plan | 组织 / 座席 / 共享包额度；**个人版** 5 小时 / 7 天窗口用量、加购包           | 同上（团队版）；个人版另加 `ALIYUN_TOKENPLAN_COOKIE`       |
-| 模力方舟（Gitee AI）  | 资源包总 / 已用 / 剩余、代金券余额与明细                                     | `GITEE_AI_API_KEY`；代金券需 `GITEE_AI_SESSION_COOKIE`     |
-| 百度智能云千帆        | 量包（总量 / 已用 / 到期）、TPM 配额、近 7 天调用概览                        | `BAIDU_ACCESS_KEY_ID` + `BAIDU_SECRET_KEY`                 |
-| OpenRouter            | 剩余额度 / 限额剩余 / 今日用量；充值总额、周月用量在详情弹窗                 | `OPENROUTER_API_KEY`                                       |
-| New API（自托管）     | **订阅**（周期额度窗口）或 **钱包**（剩余 / 累计已用 / 请求数）              | `NEWAPI_BASE_URL` + `NEWAPI_TOKEN`（多站点加 `_2` / `_3`） |
-| 订阅套餐              | Kimi / MiniMax / OpenCode Go 的按窗口订阅额度                                | `KIMI_API_KEY` / `MINIMAX_API_KEY` / `OPENCODE_GO_API_KEY` |
+| 平台                  | 能看到什么                                                                                               | 需要的凭据                                                                                    |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| DeepSeek              | 总余额 / 充值余额 / 赠金余额（CNY·USD）、可用状态                                                        | `DEEPSEEK_API_KEY`                                                                            |
+| 火山方舟 Agent Plan   | 5 小时 / 每周 / 每月配额与进度、重置倒计时；套餐档位、模型调用明细、推理用量                             | `VOLC_ACCESS_KEY_ID` + `VOLC_SECRET_KEY`                                                      |
+| 智谱 GLM              | Coding Plan 等级与 5 小时 / 每周窗口额度、账户余额、Token 资源包                                         | `ZHIPU_API_KEY`                                                                               |
+| 阿里云百炼            | Token 资源包（总量 / 剩余 / 有效期）                                                                     | `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_SECRET_KEY`                                                  |
+| 阿里云百炼 Token Plan | 组织 / 座席 / 共享包额度；**个人版** 5 小时 / 7 天 / 月度窗口、加购包；支持百炼国内站与 QwenCloud 国际站 | 同上（团队版）；个人版另加 `ALIYUN_TOKENPLAN_COOKIE`，国际站设 `ALIYUN_TOKENPLAN_REGION=intl` |
+| 模力方舟（Gitee AI）  | 资源包总 / 已用 / 剩余、代金券余额与明细                                                                 | `GITEE_AI_API_KEY`；代金券需 `GITEE_AI_SESSION_COOKIE`                                        |
+| 百度智能云千帆        | 量包（总量 / 已用 / 到期）、TPM 配额、近 7 天调用概览                                                    | `BAIDU_ACCESS_KEY_ID` + `BAIDU_SECRET_KEY`                                                    |
+| OpenRouter            | 剩余额度 / 限额剩余 / 今日用量；充值总额、周月用量在详情弹窗                                             | `OPENROUTER_API_KEY`                                                                          |
+| StepFun               | 剩余余额（CNY）；现金 / 代金券余额在详情弹窗                                                             | `STEPFUN_API_KEY`                                                                             |
+| SiliconFlow           | 剩余余额（国内站 CNY / 国际站 USD）；充值 / 赠费余额在详情弹窗                                           | `SILICONFLOW_API_KEY`（可选 `SILICONFLOW_SITE=global`）                                       |
+| Novita AI             | 剩余余额（USD，上游 0.0001 USD 已折算）；现金 / 信用额度 / 待付账单进弹窗                                | `NOVITA_API_KEY`                                                                              |
+| Sub2API（自托管）     | 剩余额度 / 总额 / 已用、套餐名；不限量订阅只显示套餐名                                                   | `SUB2API_BASE_URL` + `SUB2API_API_KEY`（多站点加 `_2`）                                       |
+| New API（自托管）     | **订阅**（周期额度窗口）或 **钱包**（剩余 / 累计已用 / 请求数）                                          | `NEWAPI_BASE_URL` + `NEWAPI_TOKEN`（多站点加 `_2` / `_3`）                                    |
+| 订阅套餐              | Kimi / MiniMax / OpenCode Go / Command Code / ZenMux 的按窗口订阅额度                                    | 对应的 `*_API_KEY`（Command Code 另含 credit 余额；MiniMax 可设 `MINIMAX_SITE`）              |
 
 **全部为可选**：配齐哪几家就显示哪几家。密钥只存在于服务端环境变量，前端只渲染掩码。
 各平台的接口、字段语义、实测口径与已知限制见
@@ -256,8 +260,9 @@ docs/             设计系统规格 + 供应商接口调研
 - UI 组件库：[TDesign Vue Next](https://tdesign.tencent.com/vue-next/)
 - 工具链：[Vite+](https://viteplus.dev/)（Oxfmt / Oxlint / tsgolint / Vitest / Rolldown）、[Bun](https://bun.sh)
 - 火山引擎签名实现参考：[字节跳动官方文档](https://www.volcengine.com/docs/6369/67269)
-- 阿里云百炼 Token Plan 用量实现参考：[modelstudioai/cli](https://github.com/modelstudioai/cli)
+- 阿里云百炼 Token Plan 用量实现参考：[modelstudioai/cli](https://github.com/modelstudioai/cli)、[oh-my-pi](https://github.com/can1357/oh-my-pi)（SEC_TOKEN / 国际站 / 月度窗口口径）
 - OpenCode Go 用量语义参考：[cc-switch PR #6547](https://github.com/farion1231/cc-switch/pull/6547)、[axonhub PR #2204](https://github.com/looplj/axonhub/pull/2204)
+- 余额 / Code Plan 查询口径对齐：[farion1231/cc-switch](https://github.com/farion1231/cc-switch)（Command Code、ZenMux、StepFun、SiliconFlow、Novita、Sub2API、智谱团队版）
 - New API 订阅 / 钱包字段定义：[QuantumNous/new-api](https://github.com/QuantumNous/new-api)
 
 本项目与上述任何平台均无隶属或背书关系。各平台的接口、字段与条款可能随时变化，

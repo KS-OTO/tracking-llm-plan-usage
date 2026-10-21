@@ -95,3 +95,38 @@
 - 接入 `/api/extras` 的 `plans` 分组（与 Kimi / MiniMax Token Plan 同一区块），
   窗口类型扩展 `'fiveHour' | 'weekly' | 'monthly'`，前端新增「30 天窗口」标签。
 - 环境变量 `OPENCODE_GO_API_KEY`（多账号 `_2`… 后缀，别名 `OPENCODE_GO_LABEL`）。
+
+## 五、2026-10-20 对齐（cc-switch v4.0.16 源码复核）
+
+复核基准：`farion1231/cc-switch@74cf8e6`（v4.0.16，2026-10-20）。
+
+### 本轮补齐的供应商
+
+| 类别        | 供应商       | 接口 / 字段口径                                                                                                                               | 我方实现                                                 |
+| ----------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 余额        | StepFun      | `GET api.stepfun.com/v1/accounts`；`balance` + `total_cash_balance` / `total_voucher_balance`                                                 | `server/balances.ts` → `stepfun` 切片                    |
+| 余额        | SiliconFlow  | `GET api.siliconflow.{cn,com}/v1/user/info`；`data.totalBalance` + 充值 / 赠费；CN=CNY / 全球=USD                                             | `siliconflow` 切片（`SILICONFLOW_SITE=cn                 | global`） |
+| 余额        | Novita AI    | `GET api.novita.ai/v3/user/balance`；金额单位 0.0001 USD，`availableBalance` ÷ 10000                                                          | `novita` 切片                                            |
+| 余额 / 订阅 | Sub2API      | `GET {baseUrl}/v1/usage`（Bearer 模型 Key）；`remaining` / `quota.limit` / `quota.used` / `planName` / `unit`；`remaining=-1` 为不限量        | `server/sub2api.ts` → `subapi` 切片；不限量只显示套餐名  |
+| 套餐        | Command Code | `/alpha/whoami` → 组织 ID；`/alpha/billing/credits`、`/alpha/billing/subscriptions`、`/alpha/usage/summary`；5h / 周滚动窗口 + 计费周期月度池 | `server/commandcode.ts`，`plans` 切片（USD 绝对额度）    |
+| 套餐        | ZenMux       | `GET {ZENMUX_BASE_URL}`（默认 `https://zenmux.ai/api/v1`）；`quota_5_hour` / `quota_7_day` 的 `usage_percentage`(0–1) + USD 额度              | `server/zenmux.ts`，`plans` 切片                         |
+| 套餐        | 智谱团队版   | 同个人版路径 + `?type=2` + `bigmodel-organization` / `bigmodel-project` 请求头                                                                | `ZHIPU_ORGANIZATION_ID` / `ZHIPU_PROJECT_ID` 按 Key 配对 |
+| 状态        | 智谱未订阅   | 按量账户回 HTTP 200 + `code:500 "当前用户不存在coding plan"`，视为**中性状态**而非故障                                                        | 额度卡显示「未订阅（按量付费）」，余额卡照常             |
+
+### 错误处理 / 字段语义对齐
+
+- 所有新查询统一 15s 超时（与 CC-Switch 一致），鉴权失败给出明确中文文案
+  （401 = Key 无效 / 403 = 未开通服务）。
+- OpenCode Go：`percent=0` 时丢弃上游占位 `resetsAt`；缺失 `percent` 的窗口跳过；
+  一个窗口都解析不出来时报错而不是渲染空卡；403 单独提示「Key 有效但未开通 Go 订阅」。
+- Command Code / ZenMux 的窗口在百分比之外附带 `used` / `total` / `unit`，
+  卡面显示「已用 $X / $Y」，详情表格新增「额度」列。
+- Sub2API 不限量分组不再伪造 `0` 余额，改为只展示套餐名。
+
+### 仍未实现（凭据模型不兼容）
+
+- Claude / Codex / Gemini / Grok Build 官方订阅：读取本机 CLI 的 OAuth 凭据，
+  本项目是纯服务端环境变量模型，无法复用。
+- GitHub Copilot / xAI OAuth / Codex OAuth 反向代理：同上，需要 OAuth 会话。
+- 智谱团队版的 `zhipu_team` 显式模板选择：我方在 `ZHIPU_ORGANIZATION_ID` /
+  `ZHIPU_PROJECT_ID` 同时存在时自动切团队口径，无需额外枚举。
