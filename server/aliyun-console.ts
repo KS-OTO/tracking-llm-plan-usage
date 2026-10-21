@@ -667,16 +667,25 @@ export interface ConsoleTransport {
  * `ALIYUN_TOKENPLAN_COOKIE` 允许三种粘法：
  * - 整段 `Cookie` 请求头（形如 `a=b; c=d`）；
  * - 从 DevTools 复制的**单个 Cookie 值**（如 `login_aliyunid_ticket` 的值）；
- * - 上述任一种的 **percent-encoded** 形式（平台面板拒绝空格 / 分号时使用）。
+ * - 上述任一种的 **percent-encoded** 形式；
+ * - `HEX` + 十六进制（只含 A-Z0-9，适配拒绝一切特殊字符的面板）。
  *
  * 判据：出现 `=` 即视为已带 Cookie 名，原样使用；否则按「裸 ticket 值」补上
- * `login_aliyunid_ticket=` 前缀。编码值在检测到 `%3D` / `%3B` / `%24`（= ; $）
- * 时尝试解码一次，解不开就按原值处理。
+ * `login_aliyunid_ticket=` 前缀。编码值在检测到对应前缀 / 百分号时解码一次，
+ * 解不开就按原值处理。
  */
 export function normalizeSessionCookie(raw: string): string {
   let value = raw.trim()
   if (value === '') {
     return ''
+  }
+  if (/^HEX[0-9a-f]+$/i.test(value) && (value.length - 3) % 2 === 0) {
+    const hex = value.slice(3)
+    const bytes = new Uint8Array(hex.length / 2)
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+    }
+    value = new TextDecoder().decode(bytes)
   }
   if (/%3D|%3B|%24/i.test(value)) {
     try {

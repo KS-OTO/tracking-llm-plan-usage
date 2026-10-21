@@ -152,6 +152,15 @@ describe('normalizeSessionCookie', () => {
   it('decodes a percent-encoded bare ticket and adds its cookie name', () => {
     expect(normalizeSessionCookie('ticket%24%24value')).toBe('login_aliyunid_ticket=ticket$$value')
   })
+
+  it('decodes a HEX-prefixed value containing only A-Z0-9', () => {
+    expect(normalizeSessionCookie('HEX6c6f67696e5f616c6979756e69645f7469636b65743d616263')).toBe(
+      'login_aliyunid_ticket=abc',
+    )
+    expect(normalizeSessionCookie('HEX7469636b6574242476616c7565')).toBe(
+      'login_aliyunid_ticket=ticket$$value',
+    )
+  })
 })
 
 describe('sessionExpiredHint', () => {
