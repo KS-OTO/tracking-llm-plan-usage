@@ -664,17 +664,29 @@ export interface ConsoleTransport {
 /**
  * 归一化控制台会话 Cookie（纯函数）。
  *
- * `ALIYUN_TOKENPLAN_COOKIE` 允许两种粘法，两者都很常见：
- * - 从 DevTools 复制的**单个 Cookie 值**（如 `login_aliyunid_ticket` 的值，自身不含 `=`）；
- * - 整段 `Cookie` 请求头（形如 `a=b; c=d`）。
+ * `ALIYUN_TOKENPLAN_COOKIE` 允许三种粘法：
+ * - 整段 `Cookie` 请求头（形如 `a=b; c=d`）；
+ * - 从 DevTools 复制的**单个 Cookie 值**（如 `login_aliyunid_ticket` 的值）；
+ * - 上述任一种的 **percent-encoded** 形式（平台面板拒绝空格 / 分号时使用）。
  *
  * 判据：出现 `=` 即视为已带 Cookie 名，原样使用；否则按「裸 ticket 值」补上
- * `login_aliyunid_ticket=` 前缀。实测该 ticket 值本身不含 `=`，不会误判。
+ * `login_aliyunid_ticket=` 前缀。编码值在检测到 `%3D` / `%3B` / `%24`（= ; $）
+ * 时尝试解码一次，解不开就按原值处理。
  */
 export function normalizeSessionCookie(raw: string): string {
-  const value = raw.trim()
+  let value = raw.trim()
   if (value === '') {
     return ''
+  }
+  if (/%3D|%3B|%24/i.test(value)) {
+    try {
+      const decoded = decodeURIComponent(value)
+      if (decoded.includes('=') || decoded.includes('$')) {
+        value = decoded
+      }
+    } catch {
+      // 非法 percent 序列：保留原值，交由后续请求报错
+    }
   }
   return value.includes('=') ? value : `login_aliyunid_ticket=${value}`
 }

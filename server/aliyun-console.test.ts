@@ -143,6 +143,15 @@ describe('normalizeSessionCookie', () => {
     expect(normalizeSessionCookie('   ')).toBe('')
     expect(normalizeSessionCookie('')).toBe('')
   })
+
+  it('decodes a percent-encoded full cookie header', () => {
+    const raw = 'a=b; login_aliyunid_csrf=t; login_aliyunid_ticket=x$y'
+    expect(normalizeSessionCookie(encodeURIComponent(raw))).toBe(raw)
+  })
+
+  it('decodes a percent-encoded bare ticket and adds its cookie name', () => {
+    expect(normalizeSessionCookie('ticket%24%24value')).toBe('login_aliyunid_ticket=ticket$$value')
+  })
 })
 
 describe('sessionExpiredHint', () => {
