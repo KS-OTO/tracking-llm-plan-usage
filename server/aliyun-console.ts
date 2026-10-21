@@ -47,6 +47,68 @@ const CONSOLE_GATEWAY_HOST = 'bailian-cs.console.aliyun.com'
 const GATEWAY_ACTION = 'BroadScopeAspnGateway'
 const GATEWAY_PRODUCT = 'sfm_bailian'
 const CONSOLE_REGION = 'cn-beijing'
+
+/**
+ * Token Plan 控制台分两个区域产品（与 oh-my-pi `alibaba-token-plan.ts` 对齐）：
+ * - `cn`：百炼北京站，Cookie 来自 bailian.console.aliyun.com；
+ * - `intl`：QwenCloud 国际站（新加坡），Cookie 来自 home.qwencloud.com。
+ *
+ * 两边的会话页、网关域名、action 与 cornerstoneParam 都不同，不能混用。
+ */
+export type AliyunTokenPlanRegion = 'cn' | 'intl'
+
+interface ConsoleProfile {
+  origin: string
+  sessionUrl: string
+  dashboardUrl: string
+  gatewayHost: string
+  gatewayAction: string
+  region: string
+  cornerstoneParam: Record<string, unknown>
+}
+
+const CONSOLE_PROFILES: Record<AliyunTokenPlanRegion, ConsoleProfile> = {
+  cn: {
+    origin: 'https://bailian.console.aliyun.com',
+    sessionUrl: 'https://bailian.console.aliyun.com/cn-beijing?tab=plan',
+    dashboardUrl: 'https://bailian.console.aliyun.com/cn-beijing?tab=plan',
+    gatewayHost: CONSOLE_GATEWAY_HOST,
+    gatewayAction: GATEWAY_ACTION,
+    region: CONSOLE_REGION,
+    cornerstoneParam: {
+      feURL:
+        'https://bailian.console.aliyun.com/cn-beijing?tab=plan#/efm/subscription/token-plan/personal',
+      protocol: 'V2',
+      console: 'ONE_CONSOLE',
+      productCode: 'p_efm',
+      switchUserType: 3,
+      domain: 'bailian.console.aliyun.com',
+      consoleSite: 'BAILIAN_ALIYUN',
+      userNickName: '',
+      userPrincipalName: '',
+      xsp_lang: 'zh-CN',
+    },
+  },
+  intl: {
+    origin: 'https://home.qwencloud.com',
+    sessionUrl: 'https://home.qwencloud.com/tool/user/info.json',
+    dashboardUrl: 'https://home.qwencloud.com/billing/subscription/token-plan-individual',
+    gatewayHost: 'cs-data.qwencloud.com',
+    gatewayAction: 'IntlBroadScopeAspnGateway',
+    region: 'ap-southeast-1',
+    cornerstoneParam: {
+      domain: 'home.qwencloud.com',
+      consoleSite: 'QWENCLOUD',
+      console: 'ONE_CONSOLE',
+      xsp_lang: 'en-US',
+      protocol: 'V2',
+      productCode: 'p_efm',
+    },
+  },
+}
+
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
 /** 控制台页面通道（会话 Cookie 鉴权）。 */
 const CONSOLE_DATA_PATH = '/data/api.json'
 /** CLI 通道（cliAccessToken Bearer 鉴权）。 */
@@ -339,6 +401,140 @@ export function buildGatewayRequest(
   }
 }
 
+export interface SessionToken {
+  secToken: string
+  accountId?: string
+}
+
+/**
+ * 新版控制台会先要求从会话页取 `SEC_TOKEN`，再把它作为表单字段
+ * `sec_token` 提交；同时回传 CSRF 头。oh-my-pi 在 2026-10 的
+ * `alibaba-token-plan.ts` 中即以此流程查询，旧版直连网关仍作为兜底。
+ */
+export function buildSecureGatewayRequest(
+  api: string,
+  region: AliyunTokenPlanRegion,
+  session: SessionToken,
+  cookie: string,
+  csrf?: string,
+  data: Record<string, unknown> = {},
+): ConsoleGatewayRequest {
+  const profile = CONSOLE_PROFILES[region]
+  const query = new URLSearchParams({
+    action: profile.gatewayAction,
+    product: GATEWAY_PRODUCT,
+    api,
+  })
+  const body = new URLSearchParams({
+    product: GATEWAY_PRODUCT,
+    action: profile.gatewayAction,
+    region: profile.region,
+    sec_token: session.secToken,
+    params: JSON.stringify({
+      Api: api,
+      V: '1.0',
+      Data: {
+        ...data,
+        cornerstoneParam: {
+          ...profile.cornerstoneParam,
+          ...(region === 'cn' ? { feTraceId: crypto.randomUUID() } : {}),
+        },
+      },
+    }),
+  })
+  const headers: Record<string, string> = {
+    accept: 'application/json, text/plain, */*',
+    'content-type': 'application/x-www-form-urlencoded',
+    cookie,
+    origin: profile.origin,
+    referer: profile.dashboardUrl,
+    'user-agent': BROWSER_USER_AGENT,
+    'x-requested-with': 'XMLHttpRequest',
+  }
+  if (csrf) {
+    headers['x-xsrf-token'] = csrf
+    headers['x-csrf-token'] = csrf
+  }
+  return {
+    url: `https://${profile.gatewayHost}${CONSOLE_DATA_PATH}?${query.toString()}`,
+    headers,
+    body: body.toString(),
+  }
+}
+
+/** 从整段 Cookie 里取 CSRF（两个常见名字都接受）。 */
+export function extractCsrf(cookie: string): string | undefined {
+  for (const segment of cookie.split(';')) {
+    const separator = segment.indexOf('=')
+    if (separator < 0) {
+      continue
+    }
+    const name = segment.slice(0, separator).trim()
+    if (name === 'login_aliyunid_csrf' || name === 'csrf') {
+      const value = segment.slice(separator + 1).trim()
+      return value || undefined
+    }
+  }
+  return undefined
+}
+
+/**
+ * 取会话 token：
+ * - 国内站：会话页 HTML 里的 `SEC_TOKEN: "…"`；
+ * - 国际站：`tool/user/info.json` 的 `data.secToken`（同时给出 accountId）。
+ *
+ * 取不到时返回 undefined，由调用方回落到旧版直连请求（旧 Cookie 仍可能有效）。
+ */
+export async function fetchSessionToken(
+  region: AliyunTokenPlanRegion,
+  cookie: string,
+): Promise<SessionToken | undefined> {
+  const profile = CONSOLE_PROFILES[region]
+  let res: Response
+  try {
+    res = await fetch(profile.sessionUrl, {
+      headers: {
+        accept:
+          region === 'cn'
+            ? 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8'
+            : 'application/json, text/plain, */*',
+        cookie,
+        referer: `${profile.origin}/`,
+        'user-agent': BROWSER_USER_AGENT,
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch {
+    return undefined
+  }
+  if (!res.ok) {
+    return undefined
+  }
+
+  if (region === 'cn') {
+    const html = await res.text()
+    const secToken = /\bSEC_TOKEN\s*:\s*"([^"]+)"/.exec(html)?.[1]
+    return secToken ? { secToken } : undefined
+  }
+
+  const json: unknown = await res.json().catch(() => undefined)
+  const payload = asRecord(json)
+  const data = payload ? asRecord(payload.data) : undefined
+  const secToken = data && typeof data.secToken === 'string' ? data.secToken : undefined
+  if (!secToken) {
+    return undefined
+  }
+  const accountId = data
+    ? ['accountId', 'userId', 'aliyunId', 'loginId']
+        .map((key) => data[key])
+        .find((value): value is string | number =>
+          typeof value === 'string' ? value !== '' : typeof value === 'number',
+        )
+    : undefined
+  return { secToken, ...(accountId !== undefined ? { accountId: String(accountId) } : {}) }
+}
+
 const DataRecord = z.record(z.string(), z.unknown())
 
 /** 窄化 unknown → 普通对象；非对象（含数组）返回 undefined，不抛错。 */
@@ -419,13 +615,19 @@ export function parseGatewayResponse(status: number, text: string): unknown {
   }
 
   const envelope = GatewayEnvelope.safeParse(json)
+  const root = asRecord(json)
+  const rootData = root ? asRecord(root.data) : undefined
   const inner = envelope.success ? envelope.data.data : undefined
-  if (inner?.success === false) {
-    const errorCode = inner.errorCode?.trim() || 'UnknownError'
+  const rejected = inner?.success === false || root?.successResponse === false
+  if (rejected) {
+    const errorCode =
+      inner?.errorCode?.trim() ||
+      (typeof rootData?.errorCode === 'string' ? rootData.errorCode.trim() : '') ||
+      'UnknownError'
     const notLogined = errorCode.includes('NotLogined')
     throw new AliyunConsoleApiError(
       notLogined ? 'ConsoleSessionExpired' : errorCode,
-      notLogined ? SESSION_EXPIRED_MESSAGE : inner.errorMsg?.trim() || errorCode,
+      notLogined ? SESSION_EXPIRED_MESSAGE : inner?.errorMsg?.trim() || errorCode,
     )
   }
 
@@ -435,7 +637,12 @@ export function parseGatewayResponse(status: number, text: string): unknown {
 async function postConsoleGateway(req: ConsoleGatewayRequest): Promise<unknown> {
   let res: Response
   try {
-    res = await fetch(req.url, { method: 'POST', headers: req.headers, body: req.body })
+    res = await fetch(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: req.body,
+      signal: AbortSignal.timeout(15_000),
+    })
   } catch (cause) {
     throw new AliyunConsoleApiError('NetworkError', `控制台网关请求失败: ${String(cause)}`)
   }
@@ -449,6 +656,8 @@ async function postConsoleGateway(req: ConsoleGatewayRequest): Promise<unknown> 
  */
 export interface ConsoleTransport {
   readonly kind: 'cookie' | 'cli'
+  /** 国际站会话可解析出的账号 ID（仅用于展示，可选）。 */
+  readonly accountId?: string
   call(api: string, data?: Record<string, unknown>): Promise<unknown>
 }
 
@@ -484,28 +693,70 @@ export function sessionExpiredHint(normalizedCookie: string): string {
   return `（当前配置值长度 ${normalizedCookie.length}；若明显短于浏览器中复制的值，说明本地 .env 里字面 $ 未转义为 \\$）`
 }
 
-/** 控制台会话 Cookie 通道：只需 `login_aliyunid_ticket`。 */
-export function createCookieTransport(cookie: string): ConsoleTransport {
+/** 控制台会话 Cookie 通道：优先新版 SEC_TOKEN 流程，旧版直连网关作为兜底。 */
+export function createCookieTransport(
+  cookie: string,
+  region: AliyunTokenPlanRegion = 'cn',
+): ConsoleTransport {
   const value = normalizeSessionCookie(cookie)
   if (value === '') {
     throw new AliyunConsoleApiError('InvalidCredentials', 'ALIYUN_TOKENPLAN_COOKIE 为空')
   }
+  let sessionPromise: Promise<SessionToken | undefined> | undefined
+  let accountId: string | undefined
+  const session = (): Promise<SessionToken | undefined> =>
+    (sessionPromise ??= fetchSessionToken(region, value))
+
   return {
     kind: 'cookie',
+    get accountId() {
+      return accountId
+    },
     call: async (api, data = {}) => {
+      const sessionInfo = await session()
+      let secureError: unknown
+      if (sessionInfo) {
+        accountId = sessionInfo.accountId ?? accountId
+        try {
+          return await postConsoleGateway(
+            buildSecureGatewayRequest(api, region, sessionInfo, value, extractCsrf(value), data),
+          )
+        } catch (cause) {
+          secureError = cause
+          const code = cause instanceof AliyunConsoleApiError ? cause.code : ''
+          // 只有「会话/路由」类失败才值得回落到旧版；业务拒绝直接透出
+          if (code !== 'ConsoleSessionExpired' && !code.startsWith('HTTP_')) {
+            throw cause
+          }
+        }
+      }
+
+      if (region !== 'cn') {
+        const cause =
+          secureError ??
+          new AliyunConsoleApiError(
+            'ConsoleSessionExpired',
+            '国际站会话页未返回 SEC_TOKEN，请重新登录 home.qwencloud.com 并更新 Cookie',
+          )
+        throw cause
+      }
+
       try {
         return await postConsoleGateway(
           buildGatewayRequest(CONSOLE_DATA_PATH, api, data, { cookie: value }),
         )
       } catch (cause) {
+        const expired =
+          cause instanceof AliyunConsoleApiError && cause.code === 'ConsoleSessionExpired'
+        const final = expired ? cause : (secureError ?? cause)
         // 会话失效最常见的原因是「值本身已损坏」，此处补上长度便于用户自证
-        if (cause instanceof AliyunConsoleApiError && cause.code === 'ConsoleSessionExpired') {
+        if (final instanceof AliyunConsoleApiError && final.code === 'ConsoleSessionExpired') {
           throw new AliyunConsoleApiError(
-            cause.code,
-            `${cause.message}${sessionExpiredHint(value)}`,
+            final.code,
+            `${final.message}${sessionExpiredHint(value)}`,
           )
         }
-        throw cause
+        throw final
       }
     },
   }
@@ -530,13 +781,22 @@ export interface AliyunPersonalAuth {
   cookie?: string
   /** AK/SK（兜底；需 RAM `modelstudio:GenerateCLIAccessToken`）。 */
   credentials?: AliyunCredentials
+  /** 控制台区域：国内百炼（默认）或 QwenCloud 国际站。 */
+  region?: AliyunTokenPlanRegion
 }
 
 async function resolveTransport(auth: AliyunPersonalAuth): Promise<ConsoleTransport> {
+  const region = auth.region ?? 'cn'
   if (auth.cookie?.trim()) {
-    return createCookieTransport(auth.cookie)
+    return createCookieTransport(auth.cookie, region)
   }
   if (auth.credentials) {
+    if (region !== 'cn') {
+      throw new AliyunConsoleApiError(
+        'InvalidCredentials',
+        '国际站 Token Plan 仅支持 ALIYUN_TOKENPLAN_COOKIE（AK/SK 通道只覆盖国内站）',
+      )
+    }
     return createCliTransport(auth.credentials)
   }
   throw new AliyunConsoleApiError(
@@ -584,23 +844,29 @@ export interface AliyunPersonalPlan {
   /** 5 小时窗口；官方已下线，两个字段都缺失时为 null（展示层隐藏该窗口）。 */
   fiveHour: AliyunPersonalWindow | null
   weekly: AliyunPersonalWindow
+  /** 月度窗口（仅月度套餐返回）；无该字段时为 null。 */
+  monthly: AliyunPersonalWindow | null
+  /** 国际站会话返回的账号 ID（国内站通常没有）。 */
+  accountId: string | null
   subscription: AliyunPersonalSubscription | null
   addon: AliyunPersonalAddon | null
   resetCards: AliyunResetCard[]
 }
 
 /**
- * 已用百分比：接口返回的是 **0-1 比值**，换算为 0-100 并钳制。
+ * 已用百分比归一化。
  *
- * 依据：真实抓包 `per1WeekPercentage=0.2750906925`（对应控制台 27.51%），
- * 且官方 CLI 与 AliyunTokenBar 均按 ×100 展示（后者另对 1.5 这类越界值钳到 100）。
+ * 接口绝大多数时候返回 **0-1 比值**（真实抓包 `0.2750906925` ⇒ 27.51%），
+ * 但部分网关/套餐会直接回 0-100 的百分数（oh-my-pi 的 `parseUsedFraction`
+ * 也按这条规则兼容）：`>1` 视为已经是百分数，否则 ×100。
  */
 export function toUsedPercent(value: unknown): number {
   const num = typeof value === 'string' ? Number(value) : value
   if (typeof num !== 'number' || !Number.isFinite(num)) {
     return 0
   }
-  return Math.min(100, Math.max(0, num * 100))
+  const percent = num > 1 ? num : num * 100
+  return Math.min(100, Math.max(0, percent))
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -621,6 +887,7 @@ function toText(value: unknown): string {
 export function parsePersonalUsage(payload: Record<string, unknown>): {
   fiveHour: AliyunPersonalWindow | null
   weekly: AliyunPersonalWindow
+  monthly: AliyunPersonalWindow | null
 } {
   const hasFiveHour = payload.per5HourPercentage != null
   const hasFiveHourReset = payload.per5HourResetTime != null
@@ -632,12 +899,23 @@ export function parsePersonalUsage(payload: Record<string, unknown>): {
         }
       : null
 
+  const hasMonthly = payload.per1MonthPercentage != null
+  const hasMonthlyReset = payload.per1MonthResetTime != null
+  const monthly: AliyunPersonalWindow | null =
+    hasMonthly || hasMonthlyReset
+      ? {
+          percent: toUsedPercent(payload.per1MonthPercentage),
+          resetTime: resetTimeToMillis(payload.per1MonthResetTime),
+        }
+      : null
+
   return {
     fiveHour,
     weekly: {
       percent: toUsedPercent(payload.per1WeekPercentage),
       resetTime: resetTimeToMillis(payload.per1WeekResetTime),
     },
+    monthly,
   }
 }
 
@@ -738,6 +1016,8 @@ export async function fetchAliyunPersonalPlan(
     source: transport.kind,
     fiveHour: windows.fiveHour,
     weekly: windows.weekly,
+    monthly: windows.monthly,
+    accountId: transport.accountId ?? null,
     subscription,
     addon,
     resetCards,
