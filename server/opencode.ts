@@ -17,6 +17,13 @@ import { resetTimeToMillis, type TokenPlanInfo, type TokenPlanWindow } from './p
 
 export const OPENCODE_GO_USAGE_URL = 'https://opencode.ai/zen/go/v1/usage'
 
+/**
+ * upstream 从 2026-09-06 起要求带上 `x-opencode-session`（用于把后台轮询
+ * 与普通推理请求区分开）；缺失会被当作异常客户端。进程/isolate 内复用同一个
+ * 随机 ID 即可，不需要持久化。
+ */
+const OPENCODE_SESSION_ID = crypto.randomUUID()
+
 export class OpenCodeApiError extends Error {
   constructor(
     public code: string,
@@ -26,11 +33,11 @@ export class OpenCodeApiError extends Error {
   }
 }
 
-/** 已用百分比：钳制到 0-100，非法值回落 0。 */
-function toPercent(value: unknown): number {
+/** 已用百分比：钳制到 0-100；不可解析时返回 null（跳过该窗口，不伪造 0%）。 */
+function toPercent(value: unknown): number | null {
   const num = typeof value === 'string' ? Number(value) : value
   if (typeof num !== 'number' || !Number.isFinite(num)) {
-    return 0
+    return null
   }
   return Math.min(100, Math.max(0, num))
 }
@@ -93,16 +100,25 @@ export function parseOpenCodeGoUsage(body: unknown): TokenPlanInfo {
     if (!entry) {
       continue
     }
+    const percent = toPercent(entry.percent)
+    if (percent === null) {
+      continue
+    }
     const status = toStatus(entry.status)
     windows.push({
       window,
-      percent: toPercent(entry.percent),
-      resetTime: resetTimeToMillis(entry.resetsAt),
+      percent,
+      // percent=0 时上游给的是「now + 窗口时长」占位值，不是真实重置时间
+      resetTime: percent > 0 ? resetTimeToMillis(entry.resetsAt) : 0,
       // status 为 undefined 时不写入键，保持既有响应结构稳定
       ...(status === undefined ? {} : { status }),
     })
   }
 
+  // 一个窗口都没解析出来 = 未文档化端点再次变形，明确报错而不是渲染空卡片
+  if (windows.length === 0) {
+    throw new OpenCodeApiError('InvalidResponse', 'OpenCode Go 响应未包含可识别的额度窗口')
+  }
   return { provider: 'OpenCode Go', windows }
 }
 
@@ -111,7 +127,13 @@ export async function fetchOpenCodeGoUsage(apiKey: string): Promise<TokenPlanInf
   let res: Response
   try {
     res = await fetch(OPENCODE_GO_USAGE_URL, {
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        accept: 'application/json',
+        'user-agent': 'llm-usage-monitor/1.0',
+        'x-opencode-session': OPENCODE_SESSION_ID,
+      },
+      signal: AbortSignal.timeout(15_000),
     })
   } catch (cause) {
     throw new OpenCodeApiError('NetworkError', `OpenCode Go 请求失败: ${String(cause)}`)
@@ -132,9 +154,16 @@ export async function fetchOpenCodeGoUsage(apiKey: string): Promise<TokenPlanInf
     const envelope = z
       .object({ error: z.object({ message: z.string().optional() }).optional() })
       .safeParse(json)
+    const detail = envelope.success
+      ? (envelope.data.error?.message ?? text.slice(0, 200))
+      : text.slice(0, 200)
     throw new OpenCodeApiError(
       `OpenCodeGo_HTTP_${res.status}`,
-      envelope.success ? (envelope.data.error?.message ?? text.slice(0, 200)) : text.slice(0, 200),
+      res.status === 401
+        ? 'OpenCode Go API Key 无效或已失效（HTTP 401）'
+        : res.status === 403
+          ? 'OpenCode Go API Key 有效，但该账号未开通 Go 订阅（HTTP 403）'
+          : `OpenCode Go 请求失败（HTTP ${res.status}）：${detail}`,
     )
   }
 

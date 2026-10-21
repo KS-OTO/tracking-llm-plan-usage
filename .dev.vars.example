@@ -1,87 +1,108 @@
 # ============================================================
-# Cloudflare Workers 环境变量（本地调试用 .dev.vars，生产用 wrangler secret put <NAME>）
+# Cloudflare Workers 环境变量（本地 .dev.vars；生产用 wrangler secret put <NAME>）
 #
-# 本文件的**变量集合与顺序**和 .env.example 完全一致，可以用它逐行对照查漏。
-# 详细说明（用途 / 获取地址 / 排错）请看 .env.example —— 同一段说明只在那里维护，
-# 这里只写 Workers 与本地 .env 的**差异**。
+# 变量集合与顺序和 .env.example 完全一致，只是把长篇说明留给主模板。
+# 变量全集以 `server/env-vars.ts` 的 SERVER_ENV_VARS 为准；
+# `server/env-vars.test.ts` 会校验两份示例的同构性。
 #
-# 三份文档的分工：
-#   .env.example        主模板：变量最全、说明最详细
-#   .dev.vars.example ← 你在这里：同集合同顺序，只讲 Workers 专属差异
+# 三份文件的分工：
+#   .env.example        主模板：用途 / 获取地址 / 排错
+#   .dev.vars.example ← 你在这里：Workers 专属差异
 #   .env                本机真实值（gitignored）
 #
-# 变量全集以 `server/env-vars.ts` 的 SERVER_ENV_VARS 为准，
-# `server/env-vars.test.ts` 会断言两份 example 的同构性，新增平台时记得同步。
-#
-# ------------------------------------------------------------
-# 多账号：第 1 组基础变量名，第 N 组加 _N 后缀（连续编号，断号即停）。
-# 账号别名（可选）：*_LABEL / *_LABEL_N 按**同序号**与凭据配对，只影响卡片标题。
+# 多账号：第 1 组基础名，第 N 组加 _N（连续编号，断号即停）。
+# 别名：*_LABEL / *_LABEL_N 按同序号配对，只影响卡片标题。
 #   OPENCODE_GO_API_KEY_2=sk-xxxx
 #   OPENCODE_GO_LABEL_2=后端团队专用
 #
-# ✅ .dev.vars **不做 $VAR 展开**：Cookie / ticket 值里的字面 $ 直接粘原值，
-#    不要加反斜杠（本地 .env 才需要写成 \$）。
-# ❗ 但平台面板（Workers Secret / Vercel / EdgeOne）也都是直接粘原值，
-#    只有本地 .env 需要转义 —— 别把两个规则弄反。
-# ------------------------------------------------------------
+# ✅ .dev.vars / Workers Secret / Vercel / EdgeOne 都直接粘原值（含字面 $）。
+# ❗ 只有本地 .env 需要把 $ 写成 \$ —— 别把两个规则弄反。
+# ============================================================
 
-# ---------- DeepSeek ----------
+# ---------- 一、余额账户 ----------
+
 DEEPSEEK_API_KEY=sk-xxxx
 # DEEPSEEK_LABEL=
 
-# ---------- 火山方舟（Volcengine Ark）----------
-VOLC_ACCESS_KEY_ID=AKLTxxxx
-VOLC_SECRET_KEY=xxxx
-# VOLC_LABEL=
+OPENROUTER_API_KEY=
+# OPENROUTER_LABEL=
 
-# ---------- 智谱 GLM（Zhipu BigModel）----------
+STEPFUN_API_KEY=
+# STEPFUN_LABEL=
+
+SILICONFLOW_API_KEY=
+# cn=国内站（CNY）/ global=国际站（USD）
+# SILICONFLOW_SITE=cn
+# SILICONFLOW_LABEL=
+
+NOVITA_API_KEY=
+# NOVITA_LABEL=
+
 ZHIPU_API_KEY=xxxxx.xxxxx
 # ZHIPU_LABEL=
+# 团队版：组织 / 项目缺一不可
+# ZHIPU_ORGANIZATION_ID=
+# ZHIPU_PROJECT_ID=
 
-# ---------- 阿里云百炼（Aliyun）----------
-ALIYUN_ACCESS_KEY_ID=LTAIxxxx
-ALIYUN_SECRET_KEY=xxxx
-# ALIYUN_LABEL=
-# 百炼控制台 login_aliyunid_ticket 的值；**无需 AK/SK、无需 RAM 授权**。
-# .dev.vars / 平台面板都直接粘原值（含 $），不要加反斜杠。
-# ALIYUN_TOKENPLAN_COOKIE=
-# 只有 Cookie、没有 AK/SK 的账号，别名要用这个（ALIYUN_LABEL 会被忽略）
-# ALIYUN_TOKENPLAN_LABEL=
-
-# ---------- 模力方舟（Gitee AI）----------
 GITEE_AI_API_KEY=UC03<32位访问令牌>
 # GITEE_LABEL=
-# 代金券查询专用（可选）：ai.gitee.com 登录后的整行 Cookie，约 30 天过期。
-# 平台面板拒绝空格 / 分号时，先用 encodeURIComponent 编码再粘贴，服务端自动兼容。
-# GITEE_AI_SESSION_COOKIE=user_locale=zh-CN; __Secure-next-auth.session-token=xxxx-xxxx
+# 代金券查询：整行 Cookie；平台拒绝空格 / 分号时先用 encodeURIComponent 编码
+# GITEE_AI_SESSION_COOKIE=
 
-# ---------- 百度智能云千帆（Baidu Qianfan）----------
 BAIDU_ACCESS_KEY_ID=ALTAKxxxx
 BAIDU_SECRET_KEY=xxxx
 # BAIDU_LABEL=
 
-# ---------- 余额类（→「余额账户」Tab）----------
-OPENROUTER_API_KEY=
-# OPENROUTER_LABEL=
+SUB2API_BASE_URL=https://sub.example.com/
+SUB2API_API_KEY=
+# SUB2API_LABEL=
 
-# ---------- 扩展平台 · 套餐类（→「套餐订阅」Tab）----------
+# ---------- 二、套餐订阅 ----------
+
+VOLC_ACCESS_KEY_ID=AKLTxxxx
+VOLC_SECRET_KEY=xxxx
+# VOLC_LABEL=
+
+ALIYUN_ACCESS_KEY_ID=LTAIxxxx
+ALIYUN_SECRET_KEY=xxxx
+# ALIYUN_LABEL=
+# 个人版用量：国内站粘 login_aliyunid_ticket 的值；国际站粘完整 Cookie 头
+# ALIYUN_TOKENPLAN_COOKIE=
+# cn=百炼北京站（默认）/ intl=QwenCloud 国际站；全局生效
+# ALIYUN_TOKENPLAN_REGION=cn
+# 只有 Cookie、没有 AK/SK 的账号别名
+# ALIYUN_TOKENPLAN_LABEL=
+
 KIMI_API_KEY=
 # KIMI_LABEL=
+
 MINIMAX_API_KEY=
+# cn=国内站（默认）/ global=国际站
+# MINIMAX_SITE=cn
 # MINIMAX_LABEL=
+
 OPENCODE_GO_API_KEY=
 # OPENCODE_GO_LABEL=
 
-# ---------- New API（自托管大模型网关）----------
-# 站点地址 + **系统访问令牌**成对；⚠️ 不是 `sk-` 模型密钥（会静默退化成账单接口）。
-# 401 有两种：令牌不认识 vs 令牌有效但账号被停用，以后者居多 —— 别急着重置令牌。
-NEWAPI_BASE_URL=https://ai.example.com/
-NEWAPI_TOKEN=
-# NEWAPI_USER_ID=
-# NEWAPI_LABEL=主力站
+COMMAND_CODE_API_KEY=
+# COMMAND_CODE_LABEL=
 
-# ---------- 站点自定义（全部可选，随 /api/status 下发）----------
-# 与 .env.example 完全相同的五个变量，语义见那里。
+ZENMUX_API_KEY=
+# ZENMUX_BASE_URL=https://zenmux.ai/api/v1
+# ZENMUX_LABEL=
+
+# New API：站点地址 + 系统访问令牌成对；不是 sk- 模型密钥。
+# 误填 sk- 会静默退化到账单接口。
+# NEWAPI_BASE_URL=https://ai.example.com/
+# NEWAPI_TOKEN=
+# NEWAPI_USER_ID=
+# NEWAPI_LABEL=
+
+# ---------- 三、服务监听（仅 Bun 生产模式；Workers 无效） ----------
+# HOST=0.0.0.0
+# PORT=8787
+
+# ---------- 四、站点自定义（可选） ----------
 # SITE_NAME=内部用量面板
 # SITE_LOGO_URL=https://cdn.example.com/logo.svg
 # SITE_LOGO_URL_DARK=https://cdn.example.com/logo-dark.svg

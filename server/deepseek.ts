@@ -47,12 +47,18 @@ const DeepSeekResponse = z.object({
 })
 
 export async function fetchDeepSeekBalance(apiKey: string): Promise<DeepSeekBalance> {
-  const res = await fetch('https://api.deepseek.com/user/balance', {
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      accept: 'application/json',
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch('https://api.deepseek.com/user/balance', {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(15_000),
+    })
+  } catch (cause) {
+    throw new DeepSeekApiError(0, 'NetworkError', `DeepSeek 请求失败: ${String(cause)}`)
+  }
   const text = await res.text()
 
   let json: unknown
@@ -77,10 +83,15 @@ export async function fetchDeepSeekBalance(apiKey: string): Promise<DeepSeekBala
   const embeddedError = typeof body.error === 'string' ? body.error : body.error?.message
 
   if (!res.ok) {
+    const detail = embeddedError ?? text.slice(0, 200)
     throw new DeepSeekApiError(
       res.status,
       `DeepSeek_${res.status}`,
-      embeddedError ?? text.slice(0, 200),
+      res.status === 401
+        ? `DeepSeek API Key 无效或已失效（HTTP 401）${detail ? `：${detail}` : ''}`
+        : res.status === 403
+          ? `DeepSeek 无权限访问该接口（HTTP 403）${detail ? `：${detail}` : ''}`
+          : `DeepSeek 请求失败（HTTP ${res.status}）：${detail}`,
     )
   }
   // 部分网关以 HTTP 200 携带错误信封：显式失败而非展示假零值

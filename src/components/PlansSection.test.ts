@@ -177,6 +177,51 @@ describe('PlansSection', () => {
     expect(alerts.map((alert) => alert.text())).toEqual([expect.stringContaining('sk-9****failed')])
   })
 
+  it('renders Command Code credits, balance and plan id', async () => {
+    const wrapper = mountWithTDesign(PlansSection, {
+      props: {
+        group: {
+          provider: 'Command Code',
+          accounts: [
+            {
+              keyHint: 'sk-c****code',
+              provider: 'Command Code',
+              plan: 'individual-goat',
+              balance: { remaining: 70, unit: 'credits', label: 'Credit balance' },
+              windows: [
+                {
+                  window: 'fiveHour',
+                  percent: 10,
+                  resetTime: 0,
+                  used: 1,
+                  total: 10,
+                  unit: 'credits',
+                },
+                {
+                  window: 'monthly',
+                  percent: 20,
+                  resetTime: 0,
+                  used: 5,
+                  total: 25,
+                  unit: 'credits',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('1 / 10 credits')
+    expect(text).toContain('计费周期')
+    expect(text).toContain('Credit balance')
+
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('individual-goat')
+    expect(detail).toContain('额度')
+  })
+
   it('wraps the stacked windows in .window-list so parallel accounts line up', () => {
     // 两个账号各 3 个窗口：其中一个多一行「上游限流」说明
     const group: PlanGroup = {

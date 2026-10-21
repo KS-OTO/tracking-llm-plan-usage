@@ -54,7 +54,10 @@ async function zhipuRequest(
 ): Promise<unknown> {
   let res: Response
   try {
-    res = await fetch(url, { headers: { ...headers, accept: 'application/json' } })
+    res = await fetch(url, {
+      headers: { ...headers, accept: 'application/json' },
+      signal: AbortSignal.timeout(15_000),
+    })
   } catch (cause) {
     throw new ZhipuApiError('NetworkError', `${label}失败: ${String(cause)}`)
   }
@@ -94,6 +97,21 @@ export interface ZhipuQuotaWindow {
 export interface ZhipuCodingPlanQuota {
   level: string
   windows: ZhipuQuotaWindow[]
+  /** 查询口径：个人版或团队版（团队版需 organization / project 两个请求头）。 */
+  scope: 'personal' | 'team'
+  /**
+   * 账户没有 Coding Plan（按量付费）。
+   *
+   * 智谱对这类账号回 HTTP 200 + `{code:500,msg:"当前用户不存在coding plan"}` ——
+   * 这是**正常状态**而非故障。CC-Switch 会因此回落到账户余额；本项目的余额卡片
+   * 本来就独立存在，所以这里只把额度卡渲染成中性的「未订阅」，不再报红。
+   */
+  noPlan?: boolean
+}
+
+export interface ZhipuTeamOptions {
+  organizationId: string
+  projectId: string
 }
 
 const ZhipuQuotaBody = z.object({
@@ -122,22 +140,64 @@ const ZhipuQuotaBody = z.object({
     .catch({ level: '', limits: [] }),
 })
 
+/**
+ * 按量账户查套餐时，接口回 HTTP 200 + 业务错误：
+ * `{"code":500,"msg":"当前用户不存在coding plan","success":false}`。
+ * 只认「msg 提到 coding plan 且说没有」，Key 无效 / 网络错误 / 其他业务错误都不算，
+ * 免得把真故障显示成「未订阅」。
+ */
+function zhipuBodyHasNoPlan(body: z.infer<typeof ZhipuQuotaBody>): boolean {
+  if (body.success !== false) {
+    return false
+  }
+  const msg = body.msg.toLowerCase()
+  const compact = msg.replace(/[\s_-]/g, '')
+  return (
+    compact.includes('codingplan') &&
+    [
+      '不存在',
+      '没有',
+      '未开通',
+      'not exist',
+      'not found',
+      'not have',
+      "doesn't have",
+      'no coding plan',
+      'not subscribed',
+    ].some((keyword) => msg.includes(keyword))
+  )
+}
+
 /** Coding Plan 额度查询。注意鉴权用裸 Key（无 Bearer 前缀）。 */
-export async function getZhipuCodingPlanQuota(apiKey: string): Promise<ZhipuCodingPlanQuota> {
+export async function getZhipuCodingPlanQuota(
+  apiKey: string,
+  team?: ZhipuTeamOptions,
+): Promise<ZhipuCodingPlanQuota> {
+  const query = team ? '?type=2' : ''
+  const headers: Record<string, string> = {
+    authorization: apiKey,
+    'content-type': 'application/json',
+    // 上游按 accept-language 本地化 msg；要中文（英文 "Internal service error" 对用户无意义）
+    'accept-language': 'zh-CN,zh',
+  }
+  if (team) {
+    headers['bigmodel-organization'] = team.organizationId
+    headers['bigmodel-project'] = team.projectId
+  }
+
   const json = await zhipuRequest(
-    `${ZHIPU_OPEN_BASE_URL}/api/monitor/usage/quota/limit`,
-    {
-      authorization: apiKey,
-      'content-type': 'application/json',
-      // 上游按 accept-language 本地化 msg；要中文（英文 "Internal service error" 对用户无意义）
-      'accept-language': 'zh-CN,zh',
-    },
+    `${ZHIPU_OPEN_BASE_URL}/api/monitor/usage/quota/limit${query}`,
+    headers,
     apiKey,
     'Coding Plan 额度查询',
   )
   const body = parseZhipuBody(ZhipuQuotaBody, json)
+  const scope = team ? 'team' : 'personal'
 
   if (body.success === false) {
+    if (zhipuBodyHasNoPlan(body)) {
+      return { level: '', windows: [], scope, noPlan: true }
+    }
     // 业务码必须透传：500=上游内部错误（未订阅 Coding Plan 的账号也会走到这里），
     // 1000=Key 无效，1001=没带鉴权头。写成统一的 Zhipu_BUSINESS 就只剩一句没用的
     // "内部服务器错误"，用户无从判断是该换 Key 还是根本没订阅。
@@ -159,17 +219,23 @@ export async function getZhipuCodingPlanQuota(apiKey: string): Promise<ZhipuCodi
     if (!windowName) {
       continue
     }
+    // `percentage` 是上游四舍五入后的整数（1438/12000 ≈ 11.98 会回 11）；
+    // 有绝对额度时用精确比值，避免卡面长期少算。
+    const percentage =
+      limit.usage > 0
+        ? Math.min(100, Math.max(0, (limit.currentValue / limit.usage) * 100))
+        : limit.percentage
     windows.push({
       window: windowName,
       total: limit.usage,
       used: limit.currentValue,
       remaining: limit.remaining,
-      percentage: limit.percentage,
+      percentage,
       nextResetTime: limit.nextResetTime,
     })
   }
 
-  return { level: body.data.level, windows }
+  return { level: body.data.level, windows, scope }
 }
 
 // ---------------------------------------------------------------------------

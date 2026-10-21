@@ -95,7 +95,7 @@ export const api = {
   /** 首屏：品牌 / favicon / 刷新节奏 / 半配置提示。0 次上游调用。 */
   status: () => get<StatusResponse>('/api/status'),
   /**
-   * 每刷新一次：9 家平台的读数一次返回（每格仍是独立容错切片）。
+   * 每刷新一次：所有平台的读数一次返回（每格仍是独立容错切片）。
    *
    * `refresh` 为 true 时服务端**跳过 TTL 缓存**（手动刷新拿实时数据），
    * 自动刷新则吃缓存以省下上游墙钟。
@@ -106,7 +106,7 @@ export const api = {
    * 火山推理用量：**唯一的按需端点**。
    *
    * 它带用户输入的 `model` / `modelEndpoint` 过滤，合并进 `/api/usage` 会让
-   * 「换一个模型」退化成「全量重拉 9 家平台」。
+   * 「换一个模型」退化成「全量重拉所有平台」。
    */
   volcInference: (days: number, model?: string, refresh = false) =>
     get<InferenceUsageResponse>('/api/volc/inference-usage', {

@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vite-plus/test'
+import { describe, expect, it, vi } from 'vite-plus/test'
 
-import { PlanApiError, parseKimiPlan, parseMiniMaxPlan, resetTimeToMillis } from './plans.ts'
+import {
+  fetchMiniMaxPlan,
+  normalizeMiniMaxSite,
+  PlanApiError,
+  parseKimiPlan,
+  parseMiniMaxPlan,
+  resetTimeToMillis,
+} from './plans.ts'
 
 describe('parseKimiPlan', () => {
   it('parses the 5-hour limit and weekly usage windows', () => {
@@ -47,7 +54,7 @@ describe('parseMiniMaxPlan', () => {
     ])
   })
 
-  it('skips the weekly window when weekly status is not active', () => {
+  it('skips the weekly window when weekly status is unlimited', () => {
     const result = parseMiniMaxPlan({
       model_remains: [{ ...generalRemains, current_weekly_status: 3 }],
     })
@@ -55,10 +62,97 @@ describe('parseMiniMaxPlan', () => {
     expect(result.windows.map((window) => window.window)).toEqual(['fiveHour'])
   })
 
+  it('forces 100% when the upstream says a window is exhausted', () => {
+    const result = parseMiniMaxPlan({
+      model_remains: [
+        {
+          ...generalRemains,
+          current_interval_status: 2,
+          current_weekly_status: 2,
+          current_weekly_remaining_percent: 40,
+        },
+      ],
+    })
+
+    expect(result.windows.map((window) => window.percent)).toEqual([100, 100])
+  })
+
+  it('rejects a bucket that is not part of the current plan', () => {
+    expect(() =>
+      parseMiniMaxPlan({
+        model_remains: [
+          {
+            model_name: 'general',
+            current_interval_remaining_percent: 100,
+            current_weekly_remaining_percent: 100,
+            current_interval_status: 3,
+            current_weekly_status: 3,
+            current_interval_total_count: 0,
+            current_weekly_total_count: 0,
+          },
+        ],
+      }),
+    ).toThrow('不包含 general 额度')
+  })
+
+  it('throws when the response has no general bucket', () => {
+    expect(() => parseMiniMaxPlan({ model_remains: [] })).toThrow('general')
+  })
+
   it('throws when the base response reports an error', () => {
     expect(() =>
       parseMiniMaxPlan({ base_resp: { status_code: 1001, status_msg: 'cookie is missing' } }),
     ).toThrow(PlanApiError)
+  })
+})
+
+describe('normalizeMiniMaxSite', () => {
+  it('defaults to cn and accepts global aliases', () => {
+    expect(normalizeMiniMaxSite(undefined)).toBe('cn')
+    expect(normalizeMiniMaxSite('CN')).toBe('cn')
+    expect(normalizeMiniMaxSite('global')).toBe('global')
+    expect(normalizeMiniMaxSite('intl')).toBe('global')
+  })
+
+  it('rejects an unknown site instead of silently picking one', () => {
+    expect(() => normalizeMiniMaxSite('eu')).toThrow('MINIMAX_SITE')
+  })
+})
+
+describe('fetchMiniMaxPlan', () => {
+  it('uses the new token_plan endpoint first and falls back on 404', async () => {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', (input: unknown) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.includes('/v1/token_plan/remains')) {
+        return Promise.resolve(new Response('not found', { status: 404 }))
+      }
+      return Promise.resolve(
+        Response.json({
+          base_resp: { status_code: 0, status_msg: '' },
+          model_remains: [
+            {
+              model_name: 'general',
+              current_interval_remaining_percent: 30,
+              current_weekly_status: 1,
+              current_weekly_remaining_percent: 60,
+            },
+          ],
+        }),
+      )
+    })
+    try {
+      const plan = await fetchMiniMaxPlan('mm-key', 'global')
+
+      expect(urls).toEqual([
+        'https://api.minimax.io/v1/token_plan/remains',
+        'https://api.minimax.io/v1/api/openplatform/coding_plan/remains',
+      ])
+      expect(plan.windows.map((window) => window.percent)).toEqual([70, 40])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

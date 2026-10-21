@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -119,5 +119,31 @@ describe('环境变量示例文档', () => {
     const a = registeredVars('.env.example').filter((n) => !HOST_LOCAL_ENV_VARS.includes(n))
     const b = registeredVars('.dev.vars.example').filter((n) => !HOST_LOCAL_ENV_VARS.includes(n))
     expect(a).toStrictEqual(b)
+  })
+})
+
+/**
+ * `.env` 是本机真实配置（gitignored），CI / 新克隆仓库里不存在。
+ * 存在时要求它覆盖全部变量：新增平台只改 example、忘了改本地 `.env` 的情况，
+ * 用户会表现为「配了但卡片不出现」，而示例文档测试完全看不出来。
+ */
+describe('.env（本机真实配置，存在时）', () => {
+  const localEnv = resolve(REPO_ROOT, '.env')
+
+  it('覆盖 SERVER_ENV_VARS 的全部变量', () => {
+    if (!existsSync(localEnv)) {
+      return
+    }
+    const registered = registeredVars('.env')
+    const missing = SERVER_ENV_VARS.filter((name) => !registered.includes(name))
+    expect(missing).toStrictEqual([])
+  })
+
+  it('没有代码不认识的变量', () => {
+    if (!existsSync(localEnv)) {
+      return
+    }
+    const unknown = registeredVars('.env').filter((name) => !isKnownEnvVar(name))
+    expect(unknown).toStrictEqual([])
   })
 })

@@ -47,10 +47,17 @@ export interface StatusResponse {
     gitee: ProviderStatus
     baidu: ProviderStatus
     tokenplan: ProviderStatus
-    /** 套餐类扩展平台（Kimi / MiniMax / OpenCode Go），与「套餐订阅」Tab 对应。 */
+    /** 套餐类扩展平台（Kimi / MiniMax / OpenCode Go / Command Code / ZenMux），与「套餐订阅」Tab 对应。 */
     plans: ProviderStatus
     /** New API（自托管订阅网关，站点地址 + 系统访问令牌成对配置）。 */
     newapi: ProviderStatus
+    /** Sub2API（自托管订阅网关，站点地址 + 模型调用 Key 成对配置）。 */
+    subapi: ProviderStatus
+    stepfun: ProviderStatus
+    siliconflow: ProviderStatus
+    novita: ProviderStatus
+    commandcode: ProviderStatus
+    zenmux: ProviderStatus
   }
   /** 半配置的成对凭据变量名（只配了 Key 没配 SecretKey）。 */
   incomplete?: string[]
@@ -68,7 +75,7 @@ export interface StatusResponse {
 export type UsageSlice<T> = { data: T } | { error: string; code: string }
 
 /**
- * 合并读数信封（issue #23）：9 家平台一次请求返回。
+ * 合并读数信封（issue #23）：所有平台一次请求返回。
  *
  * 合并端点减少的是边缘节点的**唤醒次数**，**不是容错粒度** —— 服务端仍是
  * 每家独立收敛成切片，一家挂了其余照常返回（与 PR #17 智谱子查询容错同一原则）。
@@ -85,6 +92,10 @@ export interface UsageResponse {
     openrouter: UsageSlice<OpenRouterDetailResponse>
     plans: UsageSlice<PlansResponse>
     newapi: UsageSlice<NewApiResponse>
+    subapi: UsageSlice<SimpleBalanceResponse>
+    stepfun: UsageSlice<SimpleBalanceResponse>
+    siliconflow: UsageSlice<SimpleBalanceResponse>
+    novita: UsageSlice<SimpleBalanceResponse>
   }
   /** 服务端组装响应的时刻（毫秒）。 */
   fetchedAt: number
@@ -509,6 +520,10 @@ export interface ZhipuQuotaWindow {
 export interface ZhipuCodingPlanQuota {
   level: string
   windows: ZhipuQuotaWindow[]
+  /** 查询口径：个人版 / 团队版。 */
+  scope?: 'personal' | 'team'
+  /** 账户没有 Coding Plan（按量付费）：中性状态，不是故障。 */
+  noPlan?: boolean
 }
 
 export interface ZhipuAccountBalance {
@@ -656,6 +671,10 @@ export interface TokenPlanPersonalPlan {
   /** 5 小时窗口；官方取消该窗口时为 null。 */
   fiveHour: TokenPlanPersonalWindow | null
   weekly: TokenPlanPersonalWindow
+  /** 月度窗口（仅月度套餐返回）。 */
+  monthly?: TokenPlanPersonalWindow | null
+  /** 国际站会话返回的账号 ID。 */
+  accountId?: string | null
   subscription: TokenPlanPersonalSubscription | null
   addon: TokenPlanPersonalAddon | null
   resetCards: TokenPlanResetCard[]
@@ -715,10 +734,18 @@ export interface PlanWindowUsage {
   resetTime: number
   /** 上游窗口状态（如 OpenCode Go 的 `rate-limited`）；缺省表示正常或不适用。 */
   status?: string
+  /** 货币额度型套餐的绝对用量（Command Code / ZenMux）。 */
+  used?: number
+  total?: number
+  unit?: string
 }
 
 export interface PlanAccountUsage {
   provider: string
+  /** 套餐标识 / 等级（上游返回时展示在详情里）。 */
+  plan?: string
+  /** 账户级余额（如 Command Code 的 credit balance）。 */
+  balance?: { remaining: number; unit: string; label?: string }
   windows: PlanWindowUsage[]
   error?: string
 }
@@ -732,12 +759,32 @@ export interface PlanGroup {
  * 套餐类扩展平台（套餐订阅 Tab）的窗口用量。
  *
  * 数据由 `/api/usage` 的 `plans` 切片下发（端点已合并，见 issue #23）。
- * 余额类平台（StepFun / SiliconFlow / Novita）曾由已废弃的 `/api/extras` 提供，
- * 因前端从未调用而随该端点一并移除；OpenRouter 有自己的切片。
+ * 余额类平台由各自的切片下发（StepFun / SiliconFlow / Novita / Sub2API），
+ * OpenRouter 有自己的切片。
  */
 export interface PlansResponse {
   plans: PlanGroup[]
   configured: number
+}
+
+/** 通用余额视图：StepFun / SiliconFlow / Novita AI / Sub2API。 */
+export interface SimpleBalanceData {
+  provider: string
+  /** 订阅型网关可能只回套餐名（不限量），此时为 null。 */
+  balance: number | null
+  total?: number
+  used?: number
+  unit: string
+  /** 套餐名（Sub2API）。 */
+  plan?: string
+  /** 详情弹窗里的补充货币读数（现金 / 赠金 / 信用额度…）。 */
+  details?: Array<{ key: string; label: string; value: number; unit: string }>
+  /** 详情弹窗里的文本字段（账户状态等）。 */
+  meta?: Array<{ label: string; value: string }>
+}
+
+export interface SimpleBalanceResponse {
+  accounts: AccountEnvelope<SimpleBalanceData>[]
 }
 
 export interface ApiErrorPayload {

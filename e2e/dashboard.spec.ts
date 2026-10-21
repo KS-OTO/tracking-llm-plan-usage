@@ -27,7 +27,7 @@ test.describe('dashboard smoke', () => {
    * 冒泡到外层，这里是第一道会变红的锁（历史 bug：同一账号的多个子查询共用一个
    * `Promise.all`，任一子接口 500 就把该账号其余数据全部丢掉）。
    */
-  test('usage endpoint folds ten providers into one 200 envelope', async ({ request }) => {
+  test('usage endpoint folds all providers into one 200 envelope', async ({ request }) => {
     const res = await request.get('/api/usage')
     expect(res.status()).toBe(200)
     const body = z
@@ -45,8 +45,12 @@ test.describe('dashboard smoke', () => {
       'deepseek',
       'gitee',
       'newapi',
+      'novita',
       'openrouter',
       'plans',
+      'siliconflow',
+      'stepfun',
+      'subapi',
       'tokenPlan',
       'volcPlan',
       'zhipu',
@@ -167,6 +171,87 @@ test.describe('dashboard smoke', () => {
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
     await expect(page.getByText('未配置 DEEPSEEK_API_KEY')).toBeVisible({ timeout: 30_000 })
+  })
+
+  test('new provider cards render mocked Command Code and Sub2API slices', async ({ page }) => {
+    const notConfigured = { error: '未配置', code: 'NOT_CONFIGURED' }
+    await page.route('**/api/status*', (route) =>
+      route.fulfill({ json: { providers: {}, now: Date.now() } }),
+    )
+    await page.route('**/api/volc/inference-usage*', (route) =>
+      route.fulfill({ json: { accounts: [] } }),
+    )
+    await page.route('**/api/usage*', (route) =>
+      route.fulfill({
+        json: {
+          providers: {
+            deepseek: notConfigured,
+            volcPlan: notConfigured,
+            zhipu: notConfigured,
+            aliyun: notConfigured,
+            tokenPlan: notConfigured,
+            gitee: notConfigured,
+            baidu: notConfigured,
+            openrouter: notConfigured,
+            newapi: notConfigured,
+            siliconflow: notConfigured,
+            novita: notConfigured,
+            stepfun: notConfigured,
+            plans: {
+              data: {
+                configured: 1,
+                plans: [
+                  {
+                    provider: 'Command Code',
+                    accounts: [
+                      {
+                        keyHint: 'sk-c****code',
+                        provider: 'Command Code',
+                        plan: 'individual-goat',
+                        windows: [
+                          {
+                            window: 'fiveHour',
+                            percent: 10,
+                            resetTime: 0,
+                            used: 1,
+                            total: 10,
+                            unit: 'credits',
+                          },
+                        ],
+                        balance: { remaining: 70, unit: 'credits', label: 'Credit balance' },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+            subapi: {
+              data: {
+                accounts: [
+                  {
+                    keyHint: 'sub****key',
+                    provider: 'Sub2API',
+                    balance: null,
+                    unit: 'USD',
+                    plan: 'Ultra',
+                  },
+                ],
+              },
+            },
+          },
+          fetchedAt: Date.now(),
+        },
+      }),
+    )
+
+    await page.goto('/')
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
+    await expect(page.locator('#anchor-plans-command-code')).toBeVisible({ timeout: 30_000 })
+    await expect(page.locator('#anchor-plans-command-code')).toContainText('1 / 10 credits')
+
+    await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
+    await expect(page.locator('#anchor-subapi')).toBeVisible()
+    await expect(page.locator('#anchor-subapi')).toContainText('Ultra（不限量）')
   })
 
   test('dark mode toggle switches root theme attribute and persists', async ({ page }) => {

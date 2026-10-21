@@ -20,7 +20,8 @@ describe('parseOpenCodeGoUsage', () => {
 
     expect(result.provider).toBe('OpenCode Go')
     expect(result.windows).toEqual([
-      { window: 'fiveHour', percent: 0, resetTime: Date.parse(ISO_ROLLING) },
+      // 0% 时上游的 resetsAt 是占位值，解析层丢弃（见 CC-Switch 同一口径）
+      { window: 'fiveHour', percent: 0, resetTime: 0 },
       { window: 'weekly', percent: 19, resetTime: Date.parse(ISO_WEEKLY) },
       { window: 'monthly', percent: 5, resetTime: Date.parse(ISO_MONTHLY) },
     ])
@@ -34,12 +35,12 @@ describe('parseOpenCodeGoUsage', () => {
     expect(result.windows.map((item) => item.window)).toEqual(['fiveHour', 'monthly'])
   })
 
-  it('returns no windows when usage is absent', () => {
-    expect(parseOpenCodeGoUsage({}).windows).toEqual([])
-    expect(parseOpenCodeGoUsage({ usage: null }).windows).toEqual([])
+  it('throws when no window can be parsed instead of rendering an empty card', () => {
+    expect(() => parseOpenCodeGoUsage({})).toThrow('额度窗口')
+    expect(() => parseOpenCodeGoUsage({ usage: null })).toThrow('额度窗口')
   })
 
-  it('clamps out-of-range percentages and falls back to 0', () => {
+  it('clamps out-of-range percentages and skips windows without a percent', () => {
     const result = parseOpenCodeGoUsage({
       usage: {
         rolling: { percent: 150, resetsAt: ISO_ROLLING },
@@ -48,8 +49,20 @@ describe('parseOpenCodeGoUsage', () => {
       },
     })
 
-    // percent 缺失 → 0（窗口仍展示，不隐藏）
-    expect(result.windows.map((item) => item.percent)).toEqual([100, 0, 0])
+    // percent 缺失 → 跳过该窗口（CC-Switch 同一口径），不再伪造 0%
+    expect(result.windows.map((item) => item.percent)).toEqual([100, 0])
+  })
+
+  it('drops the upstream placeholder reset when percent is zero', () => {
+    const result = parseOpenCodeGoUsage({
+      usage: {
+        rolling: { percent: 0, resetsAt: ISO_ROLLING },
+        weekly: { percent: 0, resetsAt: ISO_WEEKLY },
+      },
+    })
+
+    // 0% 时 resetsAt 是「now + 窗口时长」，展示倒计时会误导
+    expect(result.windows.map((item) => item.resetTime)).toEqual([0, 0])
   })
 
   it('tolerates string percentages and epoch-second resetsAt', () => {
@@ -84,11 +97,9 @@ describe('parseOpenCodeGoUsage', () => {
         (item) => item.percent,
       ),
     ).toEqual([100])
-    expect(
-      parseOpenCodeGoUsage({ usage: { weekly: { percent: 'abc' } } }).windows.map(
-        (item) => item.percent,
-      ),
-    ).toEqual([0])
+    expect(() => parseOpenCodeGoUsage({ usage: { weekly: { percent: 'abc' } } })).toThrow(
+      '额度窗口',
+    )
   })
 
   it('rejects non-object payloads as InvalidResponse', () => {
@@ -130,7 +141,7 @@ describe('parseOpenCodeGoUsage window status', () => {
   })
 
   it('keeps an unrecognised status verbatim instead of dropping it', () => {
-    const result = parseOpenCodeGoUsage({ usage: { monthly: { status: 'exhausted' } } })
+    const result = parseOpenCodeGoUsage({ usage: { monthly: { status: 'exhausted', percent: 1 } } })
 
     expect(result.windows.map((item) => item.status)).toEqual(['exhausted'])
   })

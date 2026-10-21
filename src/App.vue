@@ -6,6 +6,7 @@ import { RefreshIcon, MoonIcon, SunnyIcon } from 'tdesign-icons-vue-next'
 import AccountSection from './components/AccountSection.vue'
 import AliyunSection from './components/AliyunSection.vue'
 import BaiduSection from './components/BaiduSection.vue'
+import BalanceSection from './components/BalanceSection.vue'
 import DeepSeekSection from './components/DeepSeekSection.vue'
 import GiteeSection from './components/GiteeSection.vue'
 import NewApiSection from './components/NewApiSection.vue'
@@ -41,6 +42,10 @@ const {
   openrouter,
   plans,
   newapi,
+  subapi,
+  stepfun,
+  siliconflow,
+  novita,
   loading,
   lastUpdated,
   nextRefreshAt,
@@ -102,8 +107,12 @@ const failedProviders = computed(() => {
   check('模力方舟', gitee.value)
   check('百度千帆', baidu.value)
   check('OpenRouter', openrouter.value)
-  check('订阅套餐（Kimi/MiniMax/OpenCode Go）', plans.value)
+  check('订阅套餐（Kimi/MiniMax/OpenCode Go/Command Code/ZenMux）', plans.value)
   check('New API', newapi.value)
+  check('Sub2API', subapi.value)
+  check('StepFun', stepfun.value)
+  check('SiliconFlow', siliconflow.value)
+  check('Novita AI', novita.value)
   return entries
 })
 
@@ -128,6 +137,10 @@ const accountCounts = computed(() => ({
   baidu: accountCount(baidu.value),
   openrouter: accountCount(openrouter.value),
   newapi: accountCount(newapi.value),
+  subapi: accountCount(subapi.value),
+  stepfun: accountCount(stepfun.value),
+  siliconflow: accountCount(siliconflow.value),
+  novita: accountCount(novita.value),
 }))
 
 /** 订阅套餐按平台展开：一个平台一个网格单元，卡片标题即平台名。 */
@@ -380,6 +393,67 @@ const balanceSections = computed(() =>
         loading: loading.value && openrouter.value.data === null,
         error: openrouter.value.error,
         notConfigured: openrouter.value.notConfigured,
+      },
+    ),
+    platformSection(
+      BalanceSection,
+      { key: 'stepfun', name: 'StepFun', count: accountCounts.value.stepfun, anchor: 'stepfun' },
+      {
+        title: 'StepFun',
+        envHint: 'STEPFUN_API_KEY',
+        consoleUrl: 'https://platform.stepfun.com/',
+        data: stepfun.value.data,
+        loading: loading.value && stepfun.value.data === null,
+        error: stepfun.value.error,
+        notConfigured: stepfun.value.notConfigured,
+      },
+    ),
+    platformSection(
+      BalanceSection,
+      {
+        key: 'siliconflow',
+        name: 'SiliconFlow',
+        count: accountCounts.value.siliconflow,
+        anchor: 'siliconflow',
+      },
+      {
+        title: 'SiliconFlow',
+        envHint: 'SILICONFLOW_API_KEY',
+        consoleUrl: 'https://cloud.siliconflow.cn/',
+        data: siliconflow.value.data,
+        loading: loading.value && siliconflow.value.data === null,
+        error: siliconflow.value.error,
+        notConfigured: siliconflow.value.notConfigured,
+      },
+    ),
+    platformSection(
+      BalanceSection,
+      {
+        key: 'novita',
+        name: 'Novita AI',
+        count: accountCounts.value.novita,
+        anchor: 'novita',
+      },
+      {
+        title: 'Novita AI',
+        envHint: 'NOVITA_API_KEY',
+        consoleUrl: 'https://novita.ai/',
+        data: novita.value.data,
+        loading: loading.value && novita.value.data === null,
+        error: novita.value.error,
+        notConfigured: novita.value.notConfigured,
+      },
+    ),
+    platformSection(
+      BalanceSection,
+      { key: 'subapi', name: 'Sub2API', count: accountCounts.value.subapi, anchor: 'subapi' },
+      {
+        title: 'Sub2API',
+        envHint: 'SUB2API_BASE_URL / SUB2API_API_KEY',
+        data: subapi.value.data,
+        loading: loading.value && subapi.value.data === null,
+        error: subapi.value.error,
+        notConfigured: subapi.value.notConfigured,
       },
     ),
     // New API 钱包余额（无订阅的站点，或查询失败的账号）

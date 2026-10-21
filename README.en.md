@@ -12,7 +12,7 @@
 [![Docs](https://img.shields.io/badge/Docs-Wiki-0052d9?logo=github)](https://github.com/KS-OTO/tracking-llm-plan-usage/wiki)
 
 Balances and quota windows for **DeepSeek, Volcano Ark, Zhipu, Alibaba Cloud Bailian, Gitee AI,
-Baidu Qianfan, OpenRouter, New API** (self-hosted gateway) and the **Kimi / MiniMax / OpenCode Go**
+Baidu Qianfan, OpenRouter, StepFun, SiliconFlow, Novita AI, New API and Sub2API** (self-hosted gateways) and the **Kimi / MiniMax / OpenCode Go / Command Code / ZenMux**
 subscription plans — all on **one page**. Credentials live only in server-side environment
 variables; the browser never receives a key.
 
@@ -66,18 +66,22 @@ platform instead of failing. Enter one variable and that card lights up; no code
 
 ## Supported platforms
 
-| Platform                   | What you see                                                                               | Credentials needed                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| DeepSeek                   | Total / topped-up / granted balance (CNY·USD), availability                                | `DEEPSEEK_API_KEY`                                                            |
-| Volcano Ark Agent Plan     | 5-hour / weekly / monthly quotas and progress, reset countdown; plan tier, call details    | `VOLC_ACCESS_KEY_ID` + `VOLC_SECRET_KEY`                                      |
-| Zhipu GLM                  | Coding Plan tier and 5-hour / weekly window quotas, balance, token resource packs          | `ZHIPU_API_KEY`                                                               |
-| Alibaba Cloud Bailian      | Token resource packs (total / remaining / validity)                                        | `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_SECRET_KEY`                                  |
-| Alibaba Bailian Token Plan | Organisation / seats / shared packs; **personal edition** 5-hour / 7-day usage, add-ons    | Same as above (team edition); personal edition adds `ALIYUN_TOKENPLAN_COOKIE` |
-| Gitee AI                   | Resource packs total / used / remaining, coupon balance and details                        | `GITEE_AI_API_KEY`; coupons need `GITEE_AI_SESSION_COOKIE`                    |
-| Baidu Qianfan              | Volume packs (total / used / expiry), TPM quota, last-7-days overview                      | `BAIDU_ACCESS_KEY_ID` + `BAIDU_SECRET_KEY`                                    |
-| OpenRouter                 | Remaining credit / limit remaining / today's usage; top-up and monthly usage in the dialog | `OPENROUTER_API_KEY`                                                          |
-| New API (self-hosted)      | **Subscription** (period quota windows) or **wallet** (remaining / total used / requests)  | `NEWAPI_BASE_URL` + `NEWAPI_TOKEN` (add `_2` / `_3` for more)                 |
-| Subscription plans         | Window-based subscription quotas for Kimi / MiniMax / OpenCode Go                          | `KIMI_API_KEY` / `MINIMAX_API_KEY` / `OPENCODE_GO_API_KEY`                    |
+| Platform                   | What you see                                                                                                                              | Credentials needed                                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| DeepSeek                   | Total / topped-up / granted balance (CNY·USD), availability                                                                               | `DEEPSEEK_API_KEY`                                                                                                              |
+| Volcano Ark Agent Plan     | 5-hour / weekly / monthly quotas and progress, reset countdown; plan tier, call details                                                   | `VOLC_ACCESS_KEY_ID` + `VOLC_SECRET_KEY`                                                                                        |
+| Zhipu GLM                  | Coding Plan tier and 5-hour / weekly window quotas, balance, token resource packs                                                         | `ZHIPU_API_KEY`                                                                                                                 |
+| Alibaba Cloud Bailian      | Token resource packs (total / remaining / validity)                                                                                       | `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_SECRET_KEY`                                                                                    |
+| Alibaba Bailian Token Plan | Organisation / seats / shared packs; **personal edition** 5-hour / 7-day / monthly usage, add-ons; Bailian CN and QwenCloud international | Same as above (team edition); personal edition adds `ALIYUN_TOKENPLAN_COOKIE`, set `ALIYUN_TOKENPLAN_REGION=intl` for QwenCloud |
+| Gitee AI                   | Resource packs total / used / remaining, coupon balance and details                                                                       | `GITEE_AI_API_KEY`; coupons need `GITEE_AI_SESSION_COOKIE`                                                                      |
+| Baidu Qianfan              | Volume packs (total / used / expiry), TPM quota, last-7-days overview                                                                     | `BAIDU_ACCESS_KEY_ID` + `BAIDU_SECRET_KEY`                                                                                      |
+| OpenRouter                 | Remaining credit / limit remaining / today's usage; top-up and monthly usage in the dialog                                                | `OPENROUTER_API_KEY`                                                                                                            |
+| StepFun                    | Remaining balance (CNY); cash / voucher balances in the dialog                                                                            | `STEPFUN_API_KEY`                                                                                                               |
+| SiliconFlow                | Remaining balance (CNY on the CN site, USD globally); recharge / granted in the dialog                                                    | `SILICONFLOW_API_KEY` (optionally `SILICONFLOW_SITE=global`)                                                                    |
+| Novita AI                  | Remaining balance (USD, converted from 0.0001 USD); cash / credit / invoices in dialog                                                    | `NOVITA_API_KEY`                                                                                                                |
+| Sub2API (self-hosted)      | Remaining / total / used, plan name; unlimited groups show the plan name only                                                             | `SUB2API_BASE_URL` + `SUB2API_API_KEY` (add `_2` for more)                                                                      |
+| New API (self-hosted)      | **Subscription** (period quota windows) or **wallet** (remaining / total used / requests)                                                 | `NEWAPI_BASE_URL` + `NEWAPI_TOKEN` (add `_2` / `_3` for more)                                                                   |
+| Subscription plans         | Window-based quotas for Kimi / MiniMax / OpenCode Go / Command Code / ZenMux                                                              | The matching `*_API_KEY` (Command Code also has a credit balance; MiniMax accepts `MINIMAX_SITE`)                               |
 
 **Everything is optional**: configure the platforms you want and only those render. Keys exist only
 in server-side environment variables, and the frontend only ever renders a mask. For per-platform
@@ -289,7 +293,7 @@ treat it as a credential leak too — a leak in history is still a leak.
 - UI component library: [TDesign Vue Next](https://tdesign.tencent.com/vue-next/)
 - Toolchain: [Vite+](https://viteplus.dev/) (Oxfmt / Oxlint / tsgolint / Vitest / Rolldown), [Bun](https://bun.sh)
 - Volcano Engine signature implementation reference: [ByteDance official docs](https://www.volcengine.com/docs/6369/67269)
-- Alibaba Bailian Token Plan usage implementation reference: [modelstudioai/cli](https://github.com/modelstudioai/cli)
+- Alibaba Bailian Token Plan usage implementation reference: [modelstudioai/cli](https://github.com/modelstudioai/cli), [oh-my-pi](https://github.com/can1357/oh-my-pi) (SEC_TOKEN / international site / monthly window)
 - OpenCode Go usage semantics: [cc-switch PR #6547](https://github.com/farion1231/cc-switch/pull/6547), [axonhub PR #2204](https://github.com/looplj/axonhub/pull/2204)
 - New API subscription / wallet field definitions: [QuantumNous/new-api](https://github.com/QuantumNous/new-api)
 

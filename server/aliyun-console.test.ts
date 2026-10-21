@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vite-plus/test'
+import { describe, expect, it, vi } from 'vite-plus/test'
 
 import {
   buildGatewayParams,
   buildGatewayRequest,
+  buildSecureGatewayRequest,
+  createCookieTransport,
+  extractCsrf,
+  fetchSessionToken,
   normalizeSessionCookie,
   parseAccessTokenResponse,
   parsePersonalAddon,
@@ -214,6 +218,144 @@ describe('buildGatewayRequest', () => {
   })
 })
 
+describe('buildSecureGatewayRequest', () => {
+  const usageApi = 'zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage'
+
+  it('uses the QwenCloud international gateway and carries sec_token + CSRF', () => {
+    const request = buildSecureGatewayRequest(
+      usageApi,
+      'intl',
+      { secToken: 'sec-token', accountId: 'account-1' },
+      'session_id=test; login_aliyunid_csrf=csrf-token',
+      'csrf-token',
+    )
+    const body = new URLSearchParams(request.body)
+
+    expect(request.url).toBe(
+      'https://cs-data.qwencloud.com/data/api.json?' +
+        'action=IntlBroadScopeAspnGateway&product=sfm_bailian&' +
+        `api=${encodeURIComponent(usageApi)}`,
+    )
+    expect(request.headers.origin).toBe('https://home.qwencloud.com')
+    expect(request.headers['x-xsrf-token']).toBe('csrf-token')
+    expect(body.get('region')).toBe('ap-southeast-1')
+    expect(body.get('sec_token')).toBe('sec-token')
+    expect(JSON.parse(body.get('params') ?? '{}')).toMatchObject({
+      Api: usageApi,
+      Data: {
+        cornerstoneParam: {
+          domain: 'home.qwencloud.com',
+          consoleSite: 'QWENCLOUD',
+          xsp_lang: 'en-US',
+        },
+      },
+    })
+  })
+
+  it('uses the Beijing gateway with a fresh feTraceId', () => {
+    const request = buildSecureGatewayRequest(
+      usageApi,
+      'cn',
+      { secToken: 'cn-sec-token' },
+      'login_aliyunid_ticket=abc',
+    )
+    const body = new URLSearchParams(request.body)
+    const params = JSON.parse(body.get('params') ?? '{}')
+
+    expect(request.url).toContain('https://bailian-cs.console.aliyun.com/data/api.json?')
+    expect(request.url).toContain('action=BroadScopeAspnGateway')
+    expect(body.get('region')).toBe('cn-beijing')
+    expect(body.get('sec_token')).toBe('cn-sec-token')
+    expect(params.Data.cornerstoneParam.feTraceId).toEqual(expect.any(String))
+    expect(params.Data.cornerstoneParam.consoleSite).toBe('BAILIAN_ALIYUN')
+  })
+})
+
+describe('extractCsrf', () => {
+  it('reads login_aliyunid_csrf or csrf from a cookie header', () => {
+    expect(extractCsrf('a=b; login_aliyunid_csrf=token-1')).toBe('token-1')
+    expect(extractCsrf('a=b; csrf=token-2')).toBe('token-2')
+    expect(extractCsrf('a=b')).toBeUndefined()
+  })
+})
+
+describe('fetchSessionToken', () => {
+  it('reads SEC_TOKEN from the China console HTML', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response('<script>window.CONFIG = { SEC_TOKEN: "cn-sec-token" };</script>'),
+      ),
+    )
+    try {
+      await expect(fetchSessionToken('cn', 'login_aliyunid_ticket=abc')).resolves.toEqual({
+        secToken: 'cn-sec-token',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('reads secToken and accountId from the QwenCloud session JSON', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        Response.json({ code: '200', data: { secToken: 'intl-sec-token', accountId: 'acc-1' } }),
+      ),
+    )
+    try {
+      await expect(fetchSessionToken('intl', 'session_id=test')).resolves.toEqual({
+        secToken: 'intl-sec-token',
+        accountId: 'acc-1',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('returns undefined when the session page has no token', async () => {
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('<html>login</html>')))
+    try {
+      await expect(fetchSessionToken('cn', 'login_aliyunid_ticket=abc')).resolves.toBeUndefined()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('createCookieTransport', () => {
+  it('uses the SEC_TOKEN flow before the legacy direct gateway', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      requests.push({ url, init })
+      if (url.includes('bailian.console.aliyun.com/cn-beijing')) {
+        return Promise.resolve(
+          new Response('<script>window.CONFIG = { SEC_TOKEN: "cn-sec-token" };</script>'),
+        )
+      }
+      return Promise.resolve(
+        Response.json({
+          successResponse: true,
+          data: { DataV2: { data: { data: { per1WeekPercentage: 0.5 } } } },
+        }),
+      )
+    })
+    try {
+      const transport = createCookieTransport('login_aliyunid_ticket=abc', 'cn')
+      const payload = await transport.call('some.api')
+
+      expect(payload).toEqual({ per1WeekPercentage: 0.5 })
+      expect(requests).toHaveLength(2)
+      const gateway = requests[1]
+      expect(gateway?.url).toContain('action=BroadScopeAspnGateway')
+      const gatewayBody =
+        typeof gateway?.init?.body === 'string' ? new URLSearchParams(gateway.init.body) : null
+      expect(gatewayBody?.get('sec_token')).toBe('cn-sec-token')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
 describe('unwrapConsolePayload', () => {
   it('unwraps the three-level data.DataV2.data.data envelope', () => {
     const payload = unwrapConsolePayload({
@@ -329,10 +471,21 @@ describe('parsePersonalUsage', () => {
     expect(parsePersonalUsage({}).weekly).toEqual({ percent: 0, resetTime: 0 })
   })
 
-  it('clamps percentages to 0-100', () => {
-    expect(parsePersonalUsage({ per1WeekPercentage: 1.8 }).weekly.percent).toBe(100)
+  it('treats a value above 1 as an already-scaled percentage', () => {
+    // oh-my-pi 的 parseUsedFraction 同口径：1.8 => 1.8%，而不是 180%
+    expect(parsePersonalUsage({ per1WeekPercentage: 1.8 }).weekly.percent).toBe(1.8)
+    expect(parsePersonalUsage({ per1WeekPercentage: 180 }).weekly.percent).toBe(100)
     expect(parsePersonalUsage({ per1WeekPercentage: -0.03 }).weekly.percent).toBe(0)
     expect(parsePersonalUsage({ per1WeekPercentage: 'x' }).weekly.percent).toBe(0)
+  })
+
+  it('parses the monthly window when the plan reports one', () => {
+    const result = parsePersonalUsage({
+      per1MonthPercentage: 0.4,
+      per1MonthResetTime: 1_789_371_600_000,
+    })
+
+    expect(result.monthly).toEqual({ percent: 40, resetTime: 1_789_371_600_000 })
   })
 
   it('accepts numeric strings returned as ratios', () => {
