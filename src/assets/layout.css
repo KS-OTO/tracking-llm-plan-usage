@@ -338,6 +338,25 @@
 }
 
 /**
+ * 详情弹窗里的读数面 —— 把账号卡的**底色层级**原样搬进弹窗。
+ *
+ * 外部的层次是「账号卡（secondarycontainer）里嵌窗口块（container）」，两块靠底色差
+ * 分开。弹窗底本身就是 container（亮色 #fff / 暗色 #1c1d22），窗口块再用 container
+ * 就与弹窗同色：实测三张窗口块在弹窗里**完全看不见边界**，只剩进度条浮在白底上，
+ * 与卡面上那几张有面的数据卡不是同一套观感。
+ *
+ * 这里给的圆角 / 内边距与 `.account-group` 一致（12px、12/16），
+ * 里面的 `.window-block` 保持自己的 10px / container 不变 —— 两层叠出来的厚度
+ * 与外部逐级相同，不需要为弹窗再维护第二套窗口块样式。
+ * `读数` 网格（t-statistic）也包在其中：外部它们同样坐在账号卡的面里。
+ */
+.detail-panel {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--app-radius-group);
+  padding: var(--td-size-5) var(--td-size-6);
+}
+
+/**
  * 账号卡头：别名 + Key 掩码 + （可选）一个标签 + 「详情」入口。
  *
  * 标签的使用规则（**统一约定，新增平台必须遵守**）——卡头最多挂一个标签，且只允许两种语义：
@@ -767,4 +786,27 @@
 .t-dialog__body {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/**
+ * 5.3 关闭按钮：图标盒与标题字面同高
+ *
+ * TDesign 给 `.t-dialog__close` 的是 `font-size: body-large + 4px`（20px），但同时又给了
+ * `padding: 2px 2px` 与 `box-sizing: border-box` —— 20px 的盒里只剩 16px 给 svg 的
+ * `1em`，图标实际画出来只有 ~8px（viewBox 24 里的 9.9 单位 + 2px 描边），
+ * 在一行 16px/600 的标题旁边显得又小又虚（实测截图对比：标题字面 ~11.5px，× 只有 8px）。
+ *
+ * 所以把按钮盒抬到 24px 并去掉内边距：svg 拿到完整的 24px，× 的笔画高度约 12px，
+ * 与标题的字面高度齐平；同时点击区仍是 24×24（原来 20×20），更接近 44px 触控基线之外的
+ * 桌面档位。font-size 用 `headline-small`（24px）而不是字面量，理由同 §0.1。
+ *
+ * 选择器带 `.t-dialog` 前缀：TDesign 的组件样式（`.t-dialog__close`，同特异性 0-1-0）
+ * 由 `src/tdesign.ts` 在 layout.css **之后**进入模块图，同特异性比不过它们 —— 实测直接写
+ * `.t-dialog__close` 时盒宽仍是 20px/padding 2px，一条都没生效。
+ */
+.t-dialog .t-dialog__close {
+  width: var(--td-font-size-headline-small);
+  height: var(--td-font-size-headline-small);
+  padding: 0;
+  font-size: var(--td-font-size-headline-small);
 }

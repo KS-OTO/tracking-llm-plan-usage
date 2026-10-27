@@ -45,13 +45,19 @@ const alertTheme = (level: AccountDetail['notices'][number]['level']) =>
 
     <!-- ② 读数：W 窗口 + B/其余读数（弹窗里给全部窗口，含 cardFace=false 的） -->
     <DetailSection v-if="detail.windows.length > 0" title="额度窗口">
-      <div :class="windowContainerClass(detail.windows.length)">
-        <UsageBar v-for="window in detail.windows" :key="window.key" :quota="window" />
+      <!-- `.detail-panel` 复刻账号卡的面：弹窗底与窗口块同为 container 色，
+           不垫一层 secondarycontainer 的话每块都看不出边界（见 layout.css）。 -->
+      <div class="detail-panel">
+        <div :class="windowContainerClass(detail.windows.length)">
+          <UsageBar v-for="window in detail.windows" :key="window.key" :quota="window" />
+        </div>
       </div>
     </DetailSection>
     <DetailSection v-if="readings.length > 0" title="读数">
-      <div :class="metricGridClass(readings.length)">
-        <MetricTile v-for="metric in readings" :key="metric.key" :metric="metric" />
+      <div class="detail-panel">
+        <div :class="metricGridClass(readings.length)">
+          <MetricTile v-for="metric in readings" :key="metric.key" :metric="metric" />
+        </div>
       </div>
     </DetailSection>
 
