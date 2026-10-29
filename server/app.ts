@@ -859,13 +859,11 @@ export function createAppHandler(env: EnvGetter) {
       throw new NotConfiguredError('未配置 STEPFUN_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
-      STEPFUN_KEYS.map(
-        (apiKey): AccountEntry<SimpleBalanceInfo> => ({
-          keyHint: maskKey(apiKey),
-          label: labelOf('stepfun', apiKey),
-          run: () => fetchStepFunBalance(apiKey),
-        }),
-      ),
+      STEPFUN_KEYS.map((apiKey): AccountEntry<SimpleBalanceInfo> => ({
+        keyHint: maskKey(apiKey),
+        label: labelOf('stepfun', apiKey),
+        run: () => fetchStepFunBalance(apiKey),
+      })),
     )
     return { accounts }
   }
@@ -875,16 +873,14 @@ export function createAppHandler(env: EnvGetter) {
       throw new NotConfiguredError('未配置 SILICONFLOW_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
-      SILICONFLOW_KEYS.map(
-        (apiKey): AccountEntry<SimpleBalanceInfo> => ({
-          keyHint: maskKey(apiKey),
-          label: labelOf('siliconflow', apiKey),
-          run: () => {
-            const site = normalizeSiliconFlowSite(SILICONFLOW_SITE_BY_KEY.get(apiKey))
-            return fetchSiliconFlowBalance(apiKey, site)
-          },
-        }),
-      ),
+      SILICONFLOW_KEYS.map((apiKey): AccountEntry<SimpleBalanceInfo> => ({
+        keyHint: maskKey(apiKey),
+        label: labelOf('siliconflow', apiKey),
+        run: () => {
+          const site = normalizeSiliconFlowSite(SILICONFLOW_SITE_BY_KEY.get(apiKey))
+          return fetchSiliconFlowBalance(apiKey, site)
+        },
+      })),
     )
     return { accounts }
   }
@@ -894,13 +890,11 @@ export function createAppHandler(env: EnvGetter) {
       throw new NotConfiguredError('未配置 NOVITA_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
-      NOVITA_KEYS.map(
-        (apiKey): AccountEntry<SimpleBalanceInfo> => ({
-          keyHint: maskKey(apiKey),
-          label: labelOf('novita', apiKey),
-          run: () => fetchNovitaBalance(apiKey),
-        }),
-      ),
+      NOVITA_KEYS.map((apiKey): AccountEntry<SimpleBalanceInfo> => ({
+        keyHint: maskKey(apiKey),
+        label: labelOf('novita', apiKey),
+        run: () => fetchNovitaBalance(apiKey),
+      })),
     )
     return { accounts }
   }
@@ -910,13 +904,11 @@ export function createAppHandler(env: EnvGetter) {
       throw new NotConfiguredError('未配置 SUB2API_BASE_URL / SUB2API_API_KEY 环境变量')
     }
     const accounts = await runAccounts(
-      SUB2API_PAIRS.map(
-        (pair): AccountEntry<SimpleBalanceInfo> => ({
-          keyHint: maskKey(pair.secret),
-          label: labelOf('sub2api', pair.key),
-          run: () => fetchSub2ApiUsage(pair.key, pair.secret),
-        }),
-      ),
+      SUB2API_PAIRS.map((pair): AccountEntry<SimpleBalanceInfo> => ({
+        keyHint: maskKey(pair.secret),
+        label: labelOf('sub2api', pair.key),
+        run: () => fetchSub2ApiUsage(pair.key, pair.secret),
+      })),
     )
     return { accounts }
   }

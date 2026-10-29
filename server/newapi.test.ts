@@ -225,24 +225,24 @@ describe('shouldFallbackToBilling', () => {
   })
 })
 
+/** 按路径分发的 fetch 桩：未预期的路径直接抛错，避免测试「静默通过」。 */
+function stubFetch(handlers: Record<string, () => Response>, calls: string[]) {
+  vi.stubGlobal('fetch', (input: string | URL) => {
+    const url = String(input)
+    calls.push(url)
+    for (const [fragment, handler] of Object.entries(handlers)) {
+      if (url.includes(fragment)) {
+        return Promise.resolve(handler())
+      }
+    }
+    return Promise.resolve(jsonResponse({ message: 'unexpected path' }, 404))
+  })
+}
+
 describe('fetchNewApi', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
-
-  /** 按路径分发的 fetch 桩：未预期的路径直接抛错，避免测试「静默通过」。 */
-  function stubFetch(handlers: Record<string, () => Response>, calls: string[]) {
-    vi.stubGlobal('fetch', (input: string | URL) => {
-      const url = String(input)
-      calls.push(url)
-      for (const [fragment, handler] of Object.entries(handlers)) {
-        if (url.includes(fragment)) {
-          return Promise.resolve(handler())
-        }
-      }
-      return Promise.resolve(jsonResponse({ message: 'unexpected path' }, 404))
-    })
-  }
 
   it('订阅模式：周期窗口取订阅周期，用量走 flow 接口', async () => {
     const calls: string[] = []

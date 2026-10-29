@@ -223,6 +223,15 @@ describe('runAccounts', () => {
 
 const StatusBody = z.object({ incomplete: z.array(z.string()) })
 
+async function incompleteOf(vars: Record<string, string>): Promise<string[]> {
+  const handler = createAppHandler(envOf(vars))
+  const res = await handler(new Request('https://app.example.com/api/status'))
+  if (!res) {
+    throw new Error('/api/status 必须返回响应（只有未匹配的路径才会是 null）')
+  }
+  return StatusBody.parse(JSON.parse(await res.text())).incomplete
+}
+
 /**
  * 半配置检测（`/api/status` 的 `incomplete`）。
  *
@@ -232,15 +241,6 @@ const StatusBody = z.object({ incomplete: z.array(z.string()) })
  * 而无声丢卡。这里把它钉住，让「缺哪个变量」由总览页的提示条说出来。
  */
 describe('INCOMPLETE_VARS', () => {
-  async function incompleteOf(vars: Record<string, string>): Promise<string[]> {
-    const handler = createAppHandler(envOf(vars))
-    const res = await handler(new Request('https://app.example.com/api/status'))
-    if (!res) {
-      throw new Error('/api/status 必须返回响应（只有未匹配的路径才会是 null）')
-    }
-    return StatusBody.parse(JSON.parse(await res.text())).incomplete
-  }
-
   it('New API 只配了站点地址、没配令牌时，点名缺的是 NEWAPI_TOKEN', async () => {
     expect(await incompleteOf({ NEWAPI_BASE_URL: 'https://ai.example.com/' })).toStrictEqual([
       'NEWAPI_TOKEN',
