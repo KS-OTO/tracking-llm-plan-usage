@@ -53,8 +53,9 @@ bun run dev               # single process: frontend on 5173 + built-in API (rea
 
 Open <http://localhost:5173>.
 
-**It runs with zero keys configured** — the page renders a neutral "not configured" state for every
-platform instead of failing. Enter one variable and that card lights up; no code edits, no rebuild.
+**It runs with zero keys configured** — it does not fail; it simply shows no platform cards.
+Enter one variable and that card lights up: only platforms with configured keys are rendered,
+unconfigured ones take no space. No code edits, no rebuild.
 
 | What you want to do right now                   | Where to go                                                                                                          |
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |

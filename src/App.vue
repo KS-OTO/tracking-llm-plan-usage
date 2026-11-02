@@ -16,6 +16,7 @@ import PlansSection from './components/PlansSection.vue'
 import TokenPlanSection from './components/TokenPlanSection.vue'
 import VolcPlanSection from './components/VolcPlanSection.vue'
 import ZhipuSection from './components/ZhipuSection.vue'
+import { isZhipuPlanAccount } from './components/ZhipuDetail'
 import { useDashboardStore } from './stores/dashboard'
 import { useThemeStore } from './stores/theme'
 import type { NewApiResponse } from './types'
@@ -146,6 +147,29 @@ const accountCounts = computed(() => ({
 /** 订阅套餐按平台展开：一个平台一个网格单元，卡片标题即平台名。 */
 const plansGroups = computed(() => plans.value.data?.plans ?? [])
 
+/** `/api/usage` 的 plans 切片即使「一个套餐 Key 都没配」也会返回 200，因此不能只看 notConfigured。 */
+const plansConfigured = computed(() => (plans.value.data?.configured ?? 0) > 0)
+
+/**
+ * 智谱「套餐订阅」只收真正有 Coding Plan 的账号。
+ *
+ * 按量付费账号（`noPlan`）不属于套餐订阅，它的余额卡在「余额账户」Tab；
+ * 若这里继续渲染，就会在套餐订阅下出现一张「未订阅（按量付费）」的空卡。
+ */
+const zhipuPlanAccounts = computed(() =>
+  (zhipu.value.data?.accounts ?? []).filter(isZhipuPlanAccount),
+)
+
+/** 有 Coding Plan 账号才出套餐卡；整片查询失败时仍出卡（P0-4：失败平台不能静默蒸发）。 */
+const hasZhipuCodingPlan = computed(
+  () => zhipuPlanAccounts.value.length > 0 || zhipu.value.error !== null,
+)
+
+/** 未配置任何套餐 Key 时不再渲染「未配置订阅套餐密钥」兜底卡；整体失败仍要报错。 */
+const showPlansFallback = computed(
+  () => plansGroups.value.length === 0 && (plans.value.error !== null || plansConfigured.value),
+)
+
 /**
  * New API 按计费模式拆到两个 Tab。
  *
@@ -184,6 +208,8 @@ interface PlatformSection<C extends Component> {
   anchor: string
   component: C
   props: PropsOf<C>
+  /** 未配置密钥（或没有该类账号）：整块不渲染，页面只展示已配置的平台。 */
+  hidden?: boolean
 }
 
 /** 组件公开 props（含 class/key 等 VNodeProps）：由实例类型反推，写错 prop 名能被类型检查拦下。 */
@@ -195,7 +221,7 @@ type PropsOf<C> = C extends abstract new (...args: never) => infer Instance
 
 function platformSection<C extends Component>(
   component: C,
-  meta: { key: string; name: string; count: number; anchor: string },
+  meta: { key: string; name: string; count: number; anchor: string; hidden?: boolean },
   props: PropsOf<C>,
 ): PlatformSection<C> {
   return { ...meta, component, props }
@@ -211,6 +237,7 @@ const subscriptionSections = computed(() =>
         name: '火山方舟 Agent Plan',
         count: accountCounts.value.volcPlan,
         anchor: 'volc-plan',
+        hidden: volcPlan.value.notConfigured,
       },
       {
         data: volcPlan.value.data,
@@ -227,8 +254,9 @@ const subscriptionSections = computed(() =>
       {
         key: 'zhipu',
         name: '智谱 GLM Coding Plan',
-        count: accountCounts.value.zhipu,
+        count: zhipuPlanAccounts.value.length,
         anchor: 'zhipu',
+        hidden: zhipu.value.notConfigured || !hasZhipuCodingPlan.value,
       },
       {
         variant: 'plan',
@@ -245,6 +273,7 @@ const subscriptionSections = computed(() =>
         name: '阿里云百炼 Token Plan',
         count: accountCounts.value.tokenPlan,
         anchor: 'tokenplan',
+        hidden: tokenPlan.value.notConfigured,
       },
       {
         data: tokenPlan.value.data,
@@ -285,8 +314,8 @@ const subscriptionSections = computed(() =>
           ),
         ]
       : []),
-    // 未配置任何订阅套餐密钥时给一张兜底卡（保留 #anchor-plans，总览导航卡仍可跳）
-    ...(plansGroups.value.length === 0
+    // 未配置任何订阅套餐密钥时不再出卡；只有「配了但整片查询失败」才给兜底错误卡
+    ...(showPlansFallback.value
       ? [
           platformSection(
             AccountSection,
@@ -303,7 +332,7 @@ const subscriptionSections = computed(() =>
           ),
         ]
       : []),
-  ]),
+  ]).filter((section) => section.hidden !== true),
 )
 
 /** 余额账户：各平台的余额与资源包。 */
@@ -316,6 +345,7 @@ const balanceSections = computed(() =>
         name: '智谱 GLM 余额',
         count: accountCounts.value.zhipu,
         anchor: 'zhipu-balance',
+        hidden: zhipu.value.notConfigured,
       },
       {
         variant: 'balance',
@@ -332,6 +362,7 @@ const balanceSections = computed(() =>
         name: 'DeepSeek 余额',
         count: accountCounts.value.deepseek,
         anchor: 'deepseek',
+        hidden: deepseek.value.notConfigured,
       },
       {
         data: deepseek.value.data,
@@ -347,6 +378,7 @@ const balanceSections = computed(() =>
         name: '阿里云百炼 资源包',
         count: accountCounts.value.aliyun,
         anchor: 'aliyun',
+        hidden: aliyun.value.notConfigured,
       },
       {
         data: aliyun.value.data,
@@ -362,6 +394,7 @@ const balanceSections = computed(() =>
         name: '模力方舟（Gitee AI）',
         count: accountCounts.value.gitee,
         anchor: 'gitee',
+        hidden: gitee.value.notConfigured,
       },
       {
         data: gitee.value.data,
@@ -372,7 +405,13 @@ const balanceSections = computed(() =>
     ),
     platformSection(
       BaiduSection,
-      { key: 'baidu', name: '百度千帆', count: accountCounts.value.baidu, anchor: 'baidu' },
+      {
+        key: 'baidu',
+        name: '百度千帆',
+        count: accountCounts.value.baidu,
+        anchor: 'baidu',
+        hidden: baidu.value.notConfigured,
+      },
       {
         data: baidu.value.data,
         loading: loading.value && baidu.value.data === null,
@@ -387,6 +426,7 @@ const balanceSections = computed(() =>
         name: 'OpenRouter',
         count: accountCounts.value.openrouter,
         anchor: 'openrouter',
+        hidden: openrouter.value.notConfigured,
       },
       {
         data: openrouter.value.data,
@@ -397,7 +437,13 @@ const balanceSections = computed(() =>
     ),
     platformSection(
       BalanceSection,
-      { key: 'stepfun', name: 'StepFun', count: accountCounts.value.stepfun, anchor: 'stepfun' },
+      {
+        key: 'stepfun',
+        name: 'StepFun',
+        count: accountCounts.value.stepfun,
+        anchor: 'stepfun',
+        hidden: stepfun.value.notConfigured,
+      },
       {
         title: 'StepFun',
         envHint: 'STEPFUN_API_KEY',
@@ -415,6 +461,7 @@ const balanceSections = computed(() =>
         name: 'SiliconFlow',
         count: accountCounts.value.siliconflow,
         anchor: 'siliconflow',
+        hidden: siliconflow.value.notConfigured,
       },
       {
         title: 'SiliconFlow',
@@ -433,6 +480,7 @@ const balanceSections = computed(() =>
         name: 'Novita AI',
         count: accountCounts.value.novita,
         anchor: 'novita',
+        hidden: novita.value.notConfigured,
       },
       {
         title: 'Novita AI',
@@ -446,7 +494,13 @@ const balanceSections = computed(() =>
     ),
     platformSection(
       BalanceSection,
-      { key: 'subapi', name: 'Sub2API', count: accountCounts.value.subapi, anchor: 'subapi' },
+      {
+        key: 'subapi',
+        name: 'Sub2API',
+        count: accountCounts.value.subapi,
+        anchor: 'subapi',
+        hidden: subapi.value.notConfigured,
+      },
       {
         title: 'Sub2API',
         envHint: 'SUB2API_BASE_URL / SUB2API_API_KEY',
@@ -476,7 +530,7 @@ const balanceSections = computed(() =>
           ),
         ]
       : []),
-  ]),
+  ]).filter((section) => section.hidden !== true),
 )
 
 const lastUpdatedText = computed(() => {
@@ -691,10 +745,15 @@ watch(
         <OverviewTab @jump="jumpToAnchor" />
       </div>
       <div v-show="activeTab === 'subscription'">
+        <!-- 未配置密钥的平台整块不渲染；一张卡都没有时给一条中性说明，而不是满屏「未配置」 -->
+        <t-empty
+          v-if="subscriptionSections.length === 0"
+          description="未配置任何订阅平台密钥（火山 Agent Plan / 智谱 Coding Plan / Kimi / MiniMax / OpenCode Go …）"
+        />
         <!-- 区块网格：同一行卡片强制等高、等宽（断点与原语见 assets/layout.css）。
              顺序由 subscriptionSections 决定：Key 多的平台优先，同数按平台名首字母；
              多 Key（≥2）的区块额外加 .grid-span-all 独占整行，让卡内 Key 两两并排 -->
-        <div class="grid-sections">
+        <div v-else class="grid-sections">
           <div
             v-for="section in subscriptionSections"
             :key="section.key"
@@ -713,7 +772,11 @@ watch(
         </div>
       </div>
       <div v-show="activeTab === 'balance'">
-        <div class="grid-sections grid-sections--3">
+        <t-empty
+          v-if="balanceSections.length === 0"
+          description="未配置任何余额平台密钥（DeepSeek / OpenRouter / New API / StepFun …）"
+        />
+        <div v-else class="grid-sections grid-sections--3">
           <div
             v-for="section in balanceSections"
             :key="section.key"

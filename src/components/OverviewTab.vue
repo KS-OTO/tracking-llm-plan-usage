@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { accountTitle, isFailedAccount, sliceData } from '../types'
+import { isZhipuPlanAccount } from './ZhipuDetail'
 import { modelDocsUrl } from '../modelDocs'
 import { useDashboardStore } from '../stores/dashboard'
 import { formatCount, formatCurrency, formatTokens } from '../format'
@@ -245,14 +246,17 @@ const summaries = computed<PlatformSummary[]>(() => {
     )
   }
 
-  // 智谱：Coding Plan 等级 + 最紧窗口
+  // 智谱：有 Coding Plan 才进套餐 Tab；纯按量付费账号的导航卡落到余额 Tab。
+  // 否则导航卡会指向一个已经不再渲染的 #anchor-zhipu（点了没反应）。
   const zhipuAll = zhipu.value.data?.accounts ?? []
   const zhipuAccounts = okAccounts(zhipuAll)
-  if (zhipuAll.length > 0 || zhipu.value.error) {
-    const firstPlan = zhipuAccounts[0]?.codingPlan
+  const zhipuPlanAll = zhipuAll.filter(isZhipuPlanAccount)
+  const zhipuPlanAccounts = okAccounts(zhipuPlanAll)
+  if (zhipuPlanAll.length > 0 || zhipu.value.error) {
+    const firstPlan = zhipuPlanAccounts[0]?.codingPlan
     const level = (firstPlan ? sliceData(firstPlan)?.level : '') || '—'
     let worstPercent = 0
-    for (const account of zhipuAccounts) {
+    for (const account of zhipuPlanAccounts) {
       for (const window of sliceData(account.codingPlan)?.windows ?? []) {
         worstPercent = Math.max(worstPercent, window.percentage)
       }
@@ -263,10 +267,29 @@ const summaries = computed<PlatformSummary[]>(() => {
         name: '智谱 GLM',
         tab: 'subscription',
         anchor: 'zhipu',
-        count: zhipuAll.length,
+        count: zhipuPlanAll.length,
         primary: `${level} · ${formatCount(worstPercent)}%`,
-        secondary: `${zhipuAccounts.length} 账号`,
+        secondary: `${zhipuPlanAll.length} 账号`,
         danger: worstPercent >= 90,
+      },
+      zhipuPlanAccounts.length === 0,
+    )
+  } else if (zhipuAll.length > 0) {
+    const available = zhipuAccounts.reduce(
+      (sum, account) => sum + (sliceData(account.balance)?.availableBalance ?? 0),
+      0,
+    )
+    // 余额子查询失败时不要伪造 0：没有可用读数就给占位
+    const hasBalance = zhipuAccounts.some((account) => sliceData(account.balance) !== null)
+    push(
+      {
+        key: 'zhipu-balance',
+        name: '智谱 GLM',
+        tab: 'balance',
+        anchor: 'zhipu-balance',
+        count: zhipuAll.length,
+        primary: hasBalance ? formatCurrency(available, 'CNY') : '—',
+        secondary: `${zhipuAccounts.length} 账号`,
       },
       zhipuAccounts.length === 0,
     )

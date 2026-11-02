@@ -191,4 +191,47 @@ describe('ZhipuSection', () => {
     })
     expect(wrapper.findComponent({ name: 'TSkeleton' }).exists()).toBe(true)
   })
+
+  it('excludes pay-as-you-go accounts from the plan variant', () => {
+    // 按量付费（noPlan）是服务端确认的分类：它属于余额 Tab，
+    // 在套餐订阅里再出现一张「未订阅（按量付费）」的空卡就是自相矛盾。
+    const wrapper = mountWithTDesign(ZhipuSection, {
+      props: { data: payAsYouGo, loading: false, error: null, variant: 'plan' },
+    })
+    expect(wrapper.findAll('.account-group')).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('未订阅')
+  })
+
+  it('keeps pay-as-you-go accounts in the balance variant with one explicit note', () => {
+    const wrapper = mountWithTDesign(ZhipuSection, {
+      props: { data: payAsYouGo, loading: false, error: null, variant: 'balance' },
+    })
+    expect(wrapper.findAll('.account-group')).toHaveLength(1)
+    expect(wrapper.text()).toContain('可用余额')
+    // Coding Plan 已改成一条独立的弱化说明，不再作为一个读数与「生效资源包 0」并排
+    expect(wrapper.text()).not.toContain('Coding Plan未订阅')
+    const notes = wrapper.findAll('.account-group p.muted').map((node) => node.text())
+    expect(notes).toContain('未订阅（按量付费）')
+  })
 })
+
+/** 纯按量付费账号：codingPlan 返回 noPlan，余额照常。 */
+const payAsYouGo: ZhipuPackagesResponse = {
+  accounts: [
+    {
+      keyHint: 'id4****payg',
+      label: '按量号',
+      codingPlan: { data: { level: '', windows: [], scope: 'personal', noPlan: true } },
+      balance: {
+        data: {
+          availableBalance: 56.7,
+          balance: 56.7,
+          rechargeAmount: 0,
+          giveAmount: 56.7,
+          creditStatus: 'NOT_OPEN',
+        },
+      },
+      packages: { data: [] },
+    },
+  ],
+}

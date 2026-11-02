@@ -111,7 +111,7 @@
 | 套餐        | Command Code | `/alpha/whoami` → 组织 ID；`/alpha/billing/credits`、`/alpha/billing/subscriptions`、`/alpha/usage/summary`；5h / 周滚动窗口 + 计费周期月度池 | `server/commandcode.ts`，`plans` 切片（USD 绝对额度）    |
 | 套餐        | ZenMux       | `GET {ZENMUX_BASE_URL}`（默认 `https://zenmux.ai/api/v1`）；`quota_5_hour` / `quota_7_day` 的 `usage_percentage`(0–1) + USD 额度              | `server/zenmux.ts`，`plans` 切片                         |
 | 套餐        | 智谱团队版   | 同个人版路径 + `?type=2` + `bigmodel-organization` / `bigmodel-project` 请求头                                                                | `ZHIPU_ORGANIZATION_ID` / `ZHIPU_PROJECT_ID` 按 Key 配对 |
-| 状态        | 智谱未订阅   | 按量账户回 HTTP 200 + `code:500 "当前用户不存在coding plan"`，视为**中性状态**而非故障                                                        | 额度卡显示「未订阅（按量付费）」，余额卡照常             |
+| 状态        | 智谱未订阅   | 按量账户回 HTTP 200 + `code:500 "当前用户不存在coding plan"`，视为**中性状态**而非故障                                                        | 套餐卡不出现（按量付费账号归余额 Tab），余额卡照常       |
 
 ### 错误处理 / 字段语义对齐
 

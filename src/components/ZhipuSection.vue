@@ -16,7 +16,7 @@ import { computed } from 'vue'
 
 import type { ZhipuPackagesResponse } from '../types'
 import { cardsOf } from '../detail'
-import { toZhipuDetail } from './ZhipuDetail'
+import { isZhipuPlanAccount, toZhipuDetail } from './ZhipuDetail'
 
 import AccountCard from './ui/AccountCard.vue'
 import AccountSection from './AccountSection.vue'
@@ -30,8 +30,19 @@ const props = defineProps<{
   variant?: 'plan' | 'balance'
 }>()
 
+/**
+ * 套餐变体只保留真正订阅了 Coding Plan 的账号。
+ *
+ * 按量付费账号的 `noPlan` 是服务端确认过的分类，不是「查不到」——它属于余额 Tab，
+ * 不该在套餐订阅里变成一张写着「未订阅」的空卡。余额变体则照常展示全部账号。
+ */
+const accounts = computed(() => {
+  const list = props.data?.accounts ?? []
+  return props.variant === 'balance' ? list : list.filter(isZhipuPlanAccount)
+})
+
 const cards = computed(() =>
-  cardsOf(props.data?.accounts, (account) =>
+  cardsOf(accounts.value, (account) =>
     toZhipuDetail(account, props.variant === 'balance' ? 'balance' : 'plan'),
   ),
 )

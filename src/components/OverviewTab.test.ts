@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import OverviewTab from './OverviewTab.vue'
 import { useDashboardStore } from '../stores/dashboard'
+import type { ZhipuPackagesResponse } from '../types'
 
 import { mountWithTDesign } from '../test-utils/mount'
 
@@ -106,6 +107,70 @@ describe('OverviewTab nav card ordering', () => {
     const names = wrapper.findAll('.nav-card .nav-name').map((node) => node.text())
     // 模力方舟 2 个 Key 优先；其余同为 1 个 Key，按首字母 B（百度千帆）→ D（DeepSeek）
     expect(names).toEqual(['模力方舟', '百度千帆', 'DeepSeek'])
+  })
+})
+
+function zhipuAccount(noPlan: boolean): ZhipuPackagesResponse['accounts'][number] {
+  return {
+    keyHint: noPlan ? 'id4****payg' : 'id1****plan',
+    codingPlan: noPlan
+      ? { data: { level: '', windows: [], scope: 'personal', noPlan: true } }
+      : {
+          data: {
+            level: 'Max',
+            windows: [
+              {
+                window: 'fiveHour',
+                used: 10,
+                total: 100,
+                remaining: 90,
+                percentage: 10,
+                nextResetTime: Date.now() + 3_600_000,
+              },
+            ],
+          },
+        },
+    balance: {
+      data: {
+        availableBalance: 56.7,
+        balance: 56.7,
+        rechargeAmount: 0,
+        giveAmount: 0,
+        creditStatus: 'NOT_OPEN',
+      },
+    },
+    packages: { data: [] },
+  }
+}
+
+function mountWithZhipu(noPlan: boolean) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const store = useDashboardStore()
+  store.zhipu = {
+    data: { accounts: [zhipuAccount(noPlan)] },
+    error: null,
+    notConfigured: false,
+  }
+  store.loading = false
+  return mountWithTDesign(OverviewTab, { global: { plugins: [pinia] } })
+}
+
+describe('OverviewTab 智谱导航卡', () => {
+  it('jumps pay-as-you-go accounts to the balance card, not a missing plan anchor', async () => {
+    const wrapper = mountWithZhipu(true)
+    const card = wrapper.findAll('.nav-card').find((node) => node.text().includes('智谱 GLM'))
+    expect(card?.text()).toContain('56.70')
+    await card?.trigger('click')
+    expect(wrapper.emitted('jump')).toEqual([['balance', 'zhipu-balance']])
+  })
+
+  it('keeps subscribed accounts on the subscription card', async () => {
+    const wrapper = mountWithZhipu(false)
+    const card = wrapper.findAll('.nav-card').find((node) => node.text().includes('智谱 GLM'))
+    expect(card?.text()).toContain('Max · 10%')
+    await card?.trigger('click')
+    expect(wrapper.emitted('jump')).toEqual([['subscription', 'zhipu']])
   })
 })
 

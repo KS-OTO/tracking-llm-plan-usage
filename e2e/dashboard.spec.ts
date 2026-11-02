@@ -1,5 +1,39 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { z } from 'zod'
+
+const EMPTY_ACCOUNTS = { data: { accounts: [] } }
+
+/**
+ * 未配置密钥的平台现在整块隐藏；涉及「有卡布局」的用例需要先伪造一份已配置数据。
+ *
+ * 只给形状最小的空账号列表：区块卡会渲染空态，但宽度/顺序/滚动这些布局断言
+ * 不依赖具体读数，正好不必为每个平台编造完整上游响应。
+ */
+async function mockConfiguredSections(page: Page): Promise<void> {
+  await page.route('**/api/usage*', (route) =>
+    route.fulfill({
+      json: {
+        providers: {
+          deepseek: EMPTY_ACCOUNTS,
+          volcPlan: EMPTY_ACCOUNTS,
+          zhipu: { data: { accounts: [] } },
+          aliyun: EMPTY_ACCOUNTS,
+          tokenPlan: EMPTY_ACCOUNTS,
+          gitee: EMPTY_ACCOUNTS,
+          baidu: EMPTY_ACCOUNTS,
+          openrouter: EMPTY_ACCOUNTS,
+          plans: { data: { plans: [], configured: 0 } },
+          newapi: EMPTY_ACCOUNTS,
+          subapi: EMPTY_ACCOUNTS,
+          stepfun: EMPTY_ACCOUNTS,
+          siliconflow: EMPTY_ACCOUNTS,
+          novita: EMPTY_ACCOUNTS,
+        },
+        fetchedAt: Date.now(),
+      },
+    }),
+  )
+}
 
 /**
  * E2E 冒烟（Seam C）：无任何 provider key 的 vp dev 上验证
@@ -58,8 +92,8 @@ test.describe('dashboard smoke', () => {
 
     for (const [name, slice] of Object.entries(body.providers)) {
       if (name === 'plans') {
-        // 套餐类没有「未配置」错误态：空列表 + configured=0 就是中性空态，
-        // 前端据此渲染「未配置订阅套餐密钥」而不是错误墙
+        // 套餐类没有「未配置」错误态：空列表 + configured=0 就是中性空态；
+        // 前端据此整块不渲染，而不是画一张「未配置」卡
         expect(slice.data).toEqual({ plans: [], configured: 0 })
         continue
       }
@@ -82,24 +116,26 @@ test.describe('dashboard smoke', () => {
     expect(body.error.code).toBe('NOT_CONFIGURED')
   })
 
-  test('subscription tab hosts the plan-type credentials (OpenCode Go)', async ({ page }) => {
+  test('subscription tab hides platforms that have no configured key', async ({ page }) => {
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
-    await expect(page.getByText('未配置订阅套餐密钥').first()).toBeVisible({ timeout: 30_000 })
-    await expect(
-      page
-        .locator('#anchor-plans')
-        .getByText(/OPENCODE_GO/)
-        .first(),
-    ).toBeVisible()
+    await expect(page.getByText('未配置任何订阅平台密钥').first()).toBeVisible({
+      timeout: 30_000,
+    })
+    // 未配置的订阅平台不再出卡（连兜底空态卡也不渲染）
+    await expect(page.locator('#anchor-plans')).toHaveCount(0)
+    await expect(page.locator('#anchor-volc-plan')).toHaveCount(0)
   })
 
-  test('扩展平台 Tab 已移除，余额账户直接给出 OpenRouter', async ({ page }) => {
+  test('扩展平台 Tab 已移除，未配置的余额平台也不出卡', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('.t-menu__item', { hasText: '扩展平台' })).toHaveCount(0)
 
     await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
-    await expect(page.locator('#anchor-openrouter')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('未配置任何余额平台密钥').first()).toBeVisible({
+      timeout: 30_000,
+    })
+    await expect(page.locator('#anchor-openrouter')).toHaveCount(0)
     await expect(page.locator('#anchor-extras')).toHaveCount(0)
   })
 
@@ -125,16 +161,34 @@ test.describe('dashboard smoke', () => {
   })
 
   test('platform cards offer a new-tab 可用模型 docs link', async ({ page }) => {
-    await page.goto('/')
-    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
-    await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
-      { timeout: 30_000 },
+    await page.route('**/api/usage*', (route) =>
+      route.fulfill({
+        json: {
+          providers: {
+            deepseek: {
+              data: {
+                accounts: [
+                  {
+                    keyHint: 'sk-1****6421',
+                    isAvailable: true,
+                    balances: [{ currency: 'CNY', total: 7.97, granted: 0, toppedUp: 7.97 }],
+                  },
+                ],
+              },
+            },
+          },
+          fetchedAt: Date.now(),
+        },
+      }),
     )
-    // 未配置密钥也出卡（中性空态），链接按平台名自动解析，不依赖有没有数据
-    const link = page.locator('#anchor-volc-plan a.models-link')
-    await expect(link).toBeVisible()
+
+    await page.goto('/')
+    await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
+    // 链接按平台名自动解析，不依赖有没有读数
+    const link = page.locator('#anchor-deepseek a.models-link')
+    await expect(link).toBeVisible({ timeout: 30_000 })
     await expect(link).toHaveAttribute('target', '_blank')
-    await expect(link).toHaveAttribute('href', /volcengine/)
+    await expect(link).toHaveAttribute('href', /deepseek/)
   })
 
   test('nav card click jumps to anchored section in the right tab', async () => {
@@ -147,10 +201,10 @@ test.describe('dashboard smoke', () => {
     await expect(page.getByText('套餐订阅')).toBeVisible()
     // 默认总览 Tab；切到套餐订阅验证区块空态
     await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
-    // 未配置密钥 → 区块展示未配置提示（VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY）
-    await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
-      { timeout: 30_000 },
-    )
+    // 未配置密钥 → 不出平台卡，只保留一条中性说明
+    await expect(page.getByText('未配置任何订阅平台密钥').first()).toBeVisible({
+      timeout: 30_000,
+    })
   })
   /**
    * 页脚的仓库外链是新用户唯一的「找源码」出口。
@@ -167,10 +221,12 @@ test.describe('dashboard smoke', () => {
     await expect(repo).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
-  test('tab switching exposes balance sections', async ({ page }) => {
+  test('tab switching exposes the balance tab empty state', async ({ page }) => {
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
-    await expect(page.getByText('未配置 DEEPSEEK_API_KEY')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('未配置任何余额平台密钥').first()).toBeVisible({
+      timeout: 30_000,
+    })
   })
 
   test('new provider cards render mocked Command Code and Sub2API slices', async ({ page }) => {
@@ -254,6 +310,55 @@ test.describe('dashboard smoke', () => {
     await expect(page.locator('#anchor-subapi')).toContainText('Ultra（不限量）')
   })
 
+  test('pay-as-you-go Zhipu account stays out of the subscription tab', async ({ page }) => {
+    await page.route('**/api/usage*', (route) =>
+      route.fulfill({
+        json: {
+          providers: {
+            zhipu: {
+              data: {
+                accounts: [
+                  {
+                    keyHint: 'befd****k5bv',
+                    codingPlan: {
+                      data: { level: '', windows: [], scope: 'personal', noPlan: true },
+                    },
+                    balance: {
+                      data: {
+                        availableBalance: 56.7,
+                        balance: 56.7,
+                        rechargeAmount: 0,
+                        giveAmount: 56.7,
+                        creditStatus: 'NOT_OPEN',
+                      },
+                    },
+                    packages: { data: [] },
+                  },
+                ],
+              },
+            },
+          },
+          fetchedAt: Date.now(),
+        },
+      }),
+    )
+
+    await page.goto('/')
+    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
+    // 没有 Coding Plan 账号 → 套餐卡整块不出现，只剩 Tab 级空态
+    await expect(page.getByText('未配置任何订阅平台密钥').first()).toBeVisible({
+      timeout: 30_000,
+    })
+    await expect(page.locator('#anchor-zhipu')).toHaveCount(0)
+
+    await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
+    const card = page.locator('#anchor-zhipu-balance')
+    await expect(card).toBeVisible()
+    // 文案只有一份「未订阅（按量付费）」，不再作为读数与「生效资源包 0」并排
+    await expect(card.getByText('未订阅（按量付费）')).toBeVisible()
+    await expect(card.getByText('Coding Plan', { exact: true })).toHaveCount(0)
+  })
+
   test('dark mode toggle switches root theme attribute and persists', async ({ page }) => {
     await page.goto('/')
     const html = page.locator('html')
@@ -282,11 +387,10 @@ test.describe('dashboard smoke', () => {
    *    同一屏里同时出现满宽卡 / 2-3 卡 / 2 卡，且同排卡片宽度对不齐。
    */
   test('responsive: shell fills viewport and same-row cards share one width', async ({ page }) => {
+    await mockConfiguredSections(page)
     await page.goto('/')
     await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
-    await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
-      { timeout: 30_000 },
-    )
+    await expect(page.locator('#anchor-volc-plan')).toBeVisible({ timeout: 30_000 })
 
     const shell = page.locator('.app-main')
     /**
@@ -319,9 +423,7 @@ test.describe('dashboard smoke', () => {
 
     // 平板 1024：两列，仍然等宽
     await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
-    await expect(
-      page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first(),
-    ).toBeVisible()
+    await expect(page.locator('#anchor-volc-plan')).toBeVisible()
     await page.setViewportSize({ width: 1024, height: 900 })
     const tablet = await cellWidths()
     expect(new Set(tablet).size).toBe(1)
@@ -441,12 +543,12 @@ test.describe('dashboard smoke', () => {
   })
 
   test('back-to-top appears after scrolling and returns to top', async ({ page }) => {
+    await mockConfiguredSections(page)
     await page.goto('/')
     await page.setViewportSize({ width: 375, height: 667 })
-    await page.locator('.t-menu__item', { hasText: '套餐订阅' }).click()
-    await expect(page.getByText('未配置 VOLC_ACCESS_KEY_ID / VOLC_SECRET_KEY').first()).toBeVisible(
-      { timeout: 30_000 },
-    )
+    // 余额 Tab 的平台多，足够把页面撑到可滚动高度
+    await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
+    await expect(page.locator('#anchor-deepseek')).toBeVisible({ timeout: 30_000 })
     await page.mouse.wheel(0, 2000)
     const backTop = page.locator('.t-back-top')
     await expect(backTop).toBeVisible({ timeout: 10_000 })

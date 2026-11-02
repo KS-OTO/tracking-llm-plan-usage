@@ -10,6 +10,7 @@
  */
 import type {
   AccountDetail,
+  AccountEnvelope,
   AccountIdentity,
   Metric,
   ZhipuAccountBalance,
@@ -18,6 +19,7 @@ import type {
   ZhipuQuotaWindow,
   ZhipuTokenPackage,
 } from '../types'
+import { isFailedAccount } from '../types'
 import {
   countMetric,
   field,
@@ -27,12 +29,30 @@ import {
   moneyMetric,
   notice,
   table,
-  textMetric,
   windowQuota,
 } from '../detail'
 import { formatTokens } from '../format'
 
 type ZhipuAccount = ZhipuPackagesData & AccountIdentity
+type ZhipuAccountEnvelope = AccountEnvelope<ZhipuPackagesData>
+
+/** 「未订阅 Coding Plan」的唯一文案：卡面 / 弹窗共用，避免两个 Tab 出现两种写法。 */
+const NO_PLAN_TEXT = '未订阅（按量付费）'
+
+/**
+ * 该账号是否属于「套餐订阅」。
+ *
+ * `noPlan` 是服务端确认的「按量付费」：这种账号只该出现在余额 Tab。
+ * 查询失败的账号没有 `codingPlan` 数据（无法判断），仍归入套餐 Tab，
+ * 否则一个配置错误会被静默藏进余额 Tab 里。
+ */
+export function isZhipuPlanAccount(account: ZhipuAccountEnvelope): boolean {
+  if (isFailedAccount(account)) {
+    return true
+  }
+  const codingPlan = account.codingPlan
+  return !('data' in codingPlan && codingPlan.data.noPlan === true)
+}
 
 const WINDOW_LABELS: Record<string, string> = {
   fiveHour: '5 小时窗口',
@@ -119,7 +139,6 @@ export function toZhipuDetail(account: ZhipuAccount, variant: 'plan' | 'balance'
     windows: codingPlan ? codingWindows(codingPlan, planCard) : [],
     balances: balance ? balanceMetrics(balance, !planCard) : [],
     metrics: [
-      ...(noPlan ? [textMetric('coding-plan', 'Coding Plan', '未订阅（按量付费）')] : []),
       {
         ...countMetric('packages', '生效资源包', activePackages(packages).length),
         ...(planCard ? { cardFace: false as const } : {}),
@@ -141,9 +160,8 @@ export function toZhipuDetail(account: ZhipuAccount, variant: 'plan' | 'balance'
     // 失败告警只在**属于这张卡**的时候出现（套餐卡的弹窗里不该有余额接口的错误）；
     // 卡面负责的那一半失败时必须上卡面 —— 否则用户看到的是「空卡 + 没有解释」。
     notices: [
-      ...(noPlan && planCard
-        ? [{ ...notice('info', '当前账户未订阅 Coding Plan，按量计费'), cardFace: true }]
-        : []),
+      // 按量付费账号不再进套餐 Tab；余额卡上保留一条中性说明，文案只有这一份
+      ...(noPlan ? [{ ...notice('info', NO_PLAN_TEXT), cardFace: true }] : []),
       ...('error' in account.codingPlan && planCard
         ? [
             {
