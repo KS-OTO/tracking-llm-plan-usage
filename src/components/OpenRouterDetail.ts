@@ -2,7 +2,8 @@
  * OpenRouter → 统一展示模型（issue #20）。
  */
 import type { AccountDetail, AccountIdentity, OpenRouterDetailData } from '../types'
-import { field, flag, identityFields, link, moneyField, moneyMetric } from '../detail'
+import { field, flag, identityFields, moneyField, moneyMetric } from '../detail'
+import { consoleLinks } from '../consoleLinks'
 import { currencySymbol } from '../format'
 
 type OpenRouterAccount = OpenRouterDetailData & AccountIdentity
@@ -36,7 +37,7 @@ export function toOpenRouterDetail(account: OpenRouterAccount): AccountDetail {
   // 限额余量低于 1 美元标红：这是**危险读数**，卡面与弹窗一致
   const lowLimit = account.limitRemaining !== null && account.limitRemaining <= 1
   return {
-    identity: identityFields(account, 'OPENROUTER_LABEL / OPENROUTER_LABEL_N'),
+    identity: identityFields(account),
     balances: [
       {
         key: 'balance',
@@ -65,7 +66,7 @@ export function toOpenRouterDetail(account: OpenRouterAccount): AccountDetail {
       moneyField('本月用量', account.usageMonthly, CURRENCY),
       field('Key 有效期', expiryLabel(account.expiresAt)),
     ],
-    links: [link('控制台', 'https://openrouter.ai/credits', 'console')],
+    links: consoleLinks('OpenRouter'),
     notices: [],
   }
 }

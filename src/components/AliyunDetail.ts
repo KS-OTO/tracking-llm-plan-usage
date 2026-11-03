@@ -11,6 +11,7 @@ import type {
   Metric,
 } from '../types'
 import { countMetric, identityFields, table } from '../detail'
+import { consoleLinks } from '../consoleLinks'
 
 /** 服务端把「资源包列表 + 总数」作为一个整体下发。 */
 export interface AliyunPackagesData {
@@ -68,7 +69,7 @@ export function toAliyunDetail(account: AliyunAccount): AccountDetail {
     countMetric('available', '可用实例', available),
   ]
   return {
-    identity: identityFields(account, 'ALIYUN_LABEL / ALIYUN_LABEL_N'),
+    identity: identityFields(account),
     metrics,
     balances: [],
     windows: [],
@@ -77,7 +78,7 @@ export function toAliyunDetail(account: AliyunAccount): AccountDetail {
       // 「适用产品」是逐包属性，不适合塞进全局字段区，取所有包的去重并集
       { label: '适用产品', value: productsOf(account.packages), span: 2 },
     ],
-    links: [],
+    links: consoleLinks('Aliyun'),
     notices: [],
   }
 }

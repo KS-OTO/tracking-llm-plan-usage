@@ -63,11 +63,7 @@ const alertTheme = (level: AccountDetail['notices'][number]['level']) =>
 
     <!-- ③ 平台特有字段（唯一允许自由发挥的区）+ 明细表 -->
     <DetailFields v-if="detail.meta.length > 0" :fields="detail.meta" />
-    <DetailTable v-for="(item, index) in detail.tables" :key="item.title" :table="item">
-      <template #actions>
-        <slot name="table-actions" :table="item" :index="index" />
-      </template>
-    </DetailTable>
+    <DetailTable v-for="item in detail.tables" :key="item.title" :table="item" />
 
     <!-- ④ 附加：告警与外链统一沉底 -->
     <t-alert

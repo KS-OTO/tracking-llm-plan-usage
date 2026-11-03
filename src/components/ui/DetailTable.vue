@@ -48,7 +48,5 @@ const summary = computed(() => props.table.summary ?? [])
         </t-tag>
       </template>
     </t-table>
-    <!-- 平台专属的表格工具（如火山推理用量的模型过滤）；最多一个平台用得上 -->
-    <slot name="actions" />
   </DetailSection>
 </template>

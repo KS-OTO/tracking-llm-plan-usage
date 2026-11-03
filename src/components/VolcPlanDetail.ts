@@ -26,17 +26,13 @@ import {
   windowQuota,
 } from '../detail'
 import { formatCount, formatTokens } from '../format'
+import { consoleLinks } from '../consoleLinks'
 import { PLAN_WINDOW_LABELS, formatDateTime, ratioOf } from '../utils'
 
 type VolcAccount = VolcPlanData & AccountIdentity
 
-/** 推理用量表的名字（Section 用它决定要不要挂模型过滤控件，避免按下标猜）。 */
+/** 推理用量表的名字。 */
 export const INFERENCE_TABLE_TITLE = '推理用量'
-
-/** 表名带区间（`推理用量（2026-09-01 ~ 2026-09-17）`），因此按前缀判定。 */
-export function isInferenceTable(title: string): boolean {
-  return title.startsWith(INFERENCE_TABLE_TITLE)
-}
 
 interface InferenceTotals {
   input: number
@@ -239,7 +235,7 @@ function inferenceTable(inference: InferenceView): DataTable {
 export function toVolcPlanDetail(account: VolcAccount, inference: InferenceView): AccountDetail {
   const plan = account.personalPlan
   return {
-    identity: identityFields(account, 'VOLC_LABEL / VOLC_LABEL_N'),
+    identity: identityFields(account),
     windows: [...agentWindows(account), ...codingWindows(account)],
     balances: [],
     metrics: [],
@@ -255,7 +251,7 @@ export function toVolcPlanDetail(account: VolcAccount, inference: InferenceView)
       field('Coding Plan 状态', account.codingPlan.status || null),
       field('调用明细合计', totalUsage(account)),
     ],
-    links: [],
+    links: consoleLinks('Volcengine'),
     notices: inference.ok
       ? []
       : [

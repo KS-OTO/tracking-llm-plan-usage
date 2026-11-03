@@ -329,7 +329,7 @@ const UsageDetailsResult = z
  *   （`MissingParameter.QueryInterval` / `MissingParameter.Filter`）。
  * - `Filter.StartTime` / `Filter.EndTime` 是**真过滤**（传单日只回单日）。
  * - `Filter` **没有 `ObjectName` 字段** —— 传了报 400 `InvalidParameter.Filter.ObjectName`。
- *   所以「按模型过滤」只能在客户端做（Section 的模型输入框就是这么做的）。
+ *   但 `GetInferenceUsage` 的 `Filters: [{key:'ModelName'}]` 可用；页面不再提供模型过滤输入框。
  * - **区间上限 31 天**：超了 400 `InvalidParameter.StartTime/EndTime: date range must not exceed 31 days`
  *   （实测 32 天可过、90 天 400）。调用方必须自己收口，见 `app.ts` 的 `VOLC_MAX_RANGE_DAYS`。
  * - `QueryInterval: 'Hour'` 可用，此时 `Time` 落在整点小时桶上。

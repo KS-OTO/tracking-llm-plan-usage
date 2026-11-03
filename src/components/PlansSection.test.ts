@@ -89,7 +89,12 @@ describe('PlansSection', () => {
     const detail = await openDetail(wrapper)
     expect(detail).toContain('别名')
     expect(detail).toContain('OpenCode Go')
-    expect(detail).toContain('opencode.ai/zen/go/v1/usage')
+    expect(detail).toContain('控制台')
+    expect(
+      Array.from(document.body.querySelectorAll<HTMLAnchorElement>('.detail-links a')).some(
+        (a) => a.href === 'https://opencode.ai/console/go',
+      ),
+    ).toBe(true)
     expect(detail).toContain('重置时间')
     // 三个窗口在弹窗里同时以用量条（额度窗口）与明细表（窗口明细）出现：
     // 前者回答「用了多少」，后者被抄去做对账（含上游状态与具体重置时刻）

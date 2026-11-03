@@ -32,6 +32,7 @@ import {
   withSite,
 } from '../detail'
 import { formatCount, formatMoney } from '../format'
+import { consoleLinks } from '../consoleLinks'
 import { formatDateTime } from '../utils'
 
 type NewApiAccount = NewApiAccountData & AccountIdentity
@@ -139,7 +140,7 @@ export function toNewApiDetail(account: NewApiAccount): AccountDetail {
   const subscription = account.subscription
   const quotaRemain = account.wallet?.quotaRemain
   return {
-    identity: withSite(identityFields(account, 'NEWAPI_LABEL / NEWAPI_LABEL_N'), account.baseUrl),
+    identity: withSite(identityFields(account), account.baseUrl),
     // 卡头标签只表达「这张卡为什么归当前 Tab」：订阅 / 钱包是跨平台同义的分类
     badge: {
       label: subscription ? '订阅' : '钱包',
@@ -153,10 +154,6 @@ export function toNewApiDetail(account: NewApiAccount): AccountDetail {
       field('用户名', account.username),
       field('分组', account.group),
       field('计费模式', modeLabel(account)),
-      field(
-        '数据来源',
-        account.source === 'api' ? '管理接口（系统访问令牌）' : '账单接口（API Key）',
-      ),
       field('额度单位', currencyLabel(account.currency)),
       field('统计窗口', `${dateTime(account.windowStart)} → ${dateTime(account.windowEnd)}`),
       ...(subscription
@@ -183,7 +180,7 @@ export function toNewApiDetail(account: NewApiAccount): AccountDetail {
         : []),
     ],
     links: [
-      link('控制台', account.consoleUrl, 'console'),
+      ...consoleLinks('New API', account.consoleUrl),
       link('可用模型', account.modelsUrl, 'models'),
     ],
     notices: account.currency

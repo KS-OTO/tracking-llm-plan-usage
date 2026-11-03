@@ -65,11 +65,8 @@ export function flag(label: string, value: boolean | null | undefined): Field {
  * 曾经的三种叫法（「别名 / 密钥名」OpenRouter、「用户名」New API）让人以为
  * 是三种不同的东西；平台自己的叫法放 `meta` 里保留。
  */
-export function identityFields(account: AccountIdentity, envHint: string): Field[] {
-  return [
-    field('别名', account.label || `未配置（用 ${envHint} 设置）`),
-    field('Key', account.keyHint),
-  ]
+export function identityFields(account: AccountIdentity): Field[] {
+  return [field('别名', account.label || '未配置'), field('Key', account.keyHint)]
 }
 
 /** 追加「站点」等身份项（自托管平台的主身份其实是站点域名）。 */

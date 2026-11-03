@@ -41,6 +41,8 @@ export interface BalanceDetail {
 /** 通用余额视图：StepFun / SiliconFlow / Novita AI / Sub2API 共用。 */
 export interface SimpleBalanceInfo {
   provider: string
+  /** 平台控制台地址（自托管站点按实际站点下发；静态平台缺省）。 */
+  consoleUrl?: string
   /** 订阅型网关可能只回套餐名（不限量），没有可展示的数字余额。 */
   balance: number | null
   total?: number

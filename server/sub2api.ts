@@ -33,12 +33,16 @@ const Sub2ApiBody = z.object({
 })
 
 /** 站点地址归一化：去掉尾部 `/` 与 `/v1`，保证两种写法得到同一个端点。 */
-export function sub2ApiUsageUrl(baseUrl: string): string {
+export function sub2ApiBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim()
   if (trimmed === '') {
     throw new BalanceApiError('InvalidConfig', 'SUB2API_BASE_URL 不能为空')
   }
-  return `${trimmed.replace(/\/+$/, '').replace(/\/v1$/, '')}/v1/usage`
+  return trimmed.replace(/\/+$/, '').replace(/\/v1$/, '')
+}
+
+export function sub2ApiUsageUrl(baseUrl: string): string {
+  return `${sub2ApiBaseUrl(baseUrl)}/v1/usage`
 }
 
 export function parseSub2ApiUsage(body: unknown): SimpleBalanceInfo {

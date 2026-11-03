@@ -107,6 +107,11 @@ const CONSOLE_PROFILES: Record<AliyunTokenPlanRegion, ConsoleProfile> = {
   },
 }
 
+/** Token Plan 控制台入口：国内百炼 / QwenCloud 国际站各有一个地址。 */
+export function aliyunTokenPlanConsoleUrl(region: AliyunTokenPlanRegion): string {
+  return CONSOLE_PROFILES[region].dashboardUrl
+}
+
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
 /** 控制台页面通道（会话 Cookie 鉴权）。 */

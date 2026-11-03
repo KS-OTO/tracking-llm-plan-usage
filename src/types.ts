@@ -629,6 +629,8 @@ export interface TokenPlanAccount {
 }
 
 export interface TokenPlanData {
+  /** 控制台地址：国内百炼 / QwenCloud 国际站由服务端按区域下发。 */
+  consoleUrl?: string
   /** 组织信息；仅配置会话 Cookie（无 AK/SK）时为 null。 */
   account: TokenPlanAccount | null
   seats: { items: TokenPlanSeat[]; total: number } | null
@@ -742,6 +744,8 @@ export interface PlanWindowUsage {
 
 export interface PlanAccountUsage {
   provider: string
+  /** 平台控制台地址（可换区的平台由服务端按账号下发）。 */
+  consoleUrl?: string
   /** 套餐标识 / 等级（上游返回时展示在详情里）。 */
   plan?: string
   /** 账户级余额（如 Command Code 的 credit balance）。 */
@@ -770,6 +774,8 @@ export interface PlansResponse {
 /** 通用余额视图：StepFun / SiliconFlow / Novita AI / Sub2API。 */
 export interface SimpleBalanceData {
   provider: string
+  /** 平台控制台地址（自托管的 Sub2API 由服务端按站点地址下发）。 */
+  consoleUrl?: string
   /** 订阅型网关可能只回套餐名（不限量），此时为 null。 */
   balance: number | null
   total?: number

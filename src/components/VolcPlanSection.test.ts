@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vite-plus/test'
-import { nextTick } from 'vue'
 import { mountWithTDesign, openDetail } from '../test-utils/mount'
 
 import VolcPlanSection from './VolcPlanSection.vue'
@@ -99,7 +98,7 @@ const inference: InferenceUsageResponse = {
 }
 
 function baseProps() {
-  return { data: fixture, loading: false, error: null, inference, inferenceError: null, model: '' }
+  return { data: fixture, loading: false, error: null, inference, inferenceError: null }
 }
 
 describe('VolcPlanSection', () => {
@@ -213,20 +212,6 @@ describe('VolcPlanSection', () => {
     expect(detail).toContain('总 Token')
     expect(detail).toContain('5.0K')
     expect(detail).toContain('2026-08-14')
-  })
-
-  it('forwards the model filter change out of the dialog', async () => {
-    const wrapper = mountWithTDesign(VolcPlanSection, { props: baseProps() })
-    await openDetail(wrapper)
-
-    const input = document.body.querySelector<HTMLInputElement>('.t-dialog__ctx input')
-    expect(input?.getAttribute('placeholder')).toBe('模型过滤（留空 = 全部）')
-    if (input) {
-      input.value = 'doubao-pro'
-      input.dispatchEvent(new Event('input'))
-    }
-    await nextTick()
-    expect(wrapper.emitted('update:model')).toBeTruthy()
   })
 
   it('explains the missing inference slice inside the dialog instead of hiding it', async () => {
