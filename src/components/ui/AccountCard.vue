@@ -8,15 +8,24 @@
  *
  * 详情弹窗的标题/副标题规则也在这里：**别名优先**，无别名退化为 Key 掩码；
  * 副标题只在「别名与 Key 都要显示」时才给（避免同一串 Key 出现两次）。
+ * 控制台入口由适配器写在 `detail.links` 的 `console` 角色上，这里取出来交给标题行。
  */
+import { computed } from 'vue'
+
 import type { AccountCard } from '../../types'
 import { accountTitle } from '../../types'
+import { linkOf } from '../../detail'
 
 import AccountCardBody from './AccountCardBody.vue'
 import AccountDetailPanel from './AccountDetailPanel.vue'
 import DetailDialog from '../DetailDialog.vue'
 
-defineProps<{ card: AccountCard }>()
+const props = defineProps<{ card: AccountCard }>()
+
+/** 控制台入口由详情弹窗标题行承载；正文与卡片外部都不再重复。 */
+const consoleUrl = computed(() =>
+  props.card.detail ? linkOf(props.card.detail, 'console') : undefined,
+)
 </script>
 
 <template>
@@ -36,6 +45,7 @@ defineProps<{ card: AccountCard }>()
         v-if="card.detail"
         :title="accountTitle(card)"
         :subtitle="card.label ? card.keyHint : undefined"
+        :console-url="consoleUrl"
       >
         <AccountDetailPanel :detail="card.detail" />
       </DetailDialog>

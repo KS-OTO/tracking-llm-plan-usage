@@ -6,7 +6,7 @@
  *   ① 身份（`identity`）
  *   ② 读数（`windows` 用用量条 · `balances` + `metrics` 用读数瓦片）
  *   ③ 明细（`meta` 扩展字段 · `tables` 明细表，空表自动空态）
- *   ④ 附加（`notices` 告警 + `links` 外链，统一沉底）
+ *   ④ 附加（`notices` 告警 + 非控制台外链，统一沉底；控制台入口在弹窗标题行）
  *
  * 告警放最后而不是贴着出问题的分节：弹窗是用来**核对数据**的，
  * 把红色告警插在表格旁会让人以为这份数据本身是坏的。卡面上的告警已经负责
@@ -33,6 +33,9 @@ const props = defineProps<{ detail: AccountDetail }>()
  * 组件侧没有任何 if。
  */
 const readings = computed(() => [...props.detail.balances, ...props.detail.metrics])
+
+/** 控制台已在标题行展示；正文只保留「可用模型」这类辅助外链。 */
+const extraLinks = computed(() => props.detail.links.filter((item) => item.role !== 'console'))
 
 const alertTheme = (level: AccountDetail['notices'][number]['level']) =>
   level === 'error' ? 'error' : 'warning'
@@ -73,9 +76,9 @@ const alertTheme = (level: AccountDetail['notices'][number]['level']) =>
       :message="item.text"
       :max-line="5"
     />
-    <p v-if="detail.links.length > 0" class="detail-links">
+    <p v-if="extraLinks.length > 0" class="detail-links">
       <a
-        v-for="item in detail.links"
+        v-for="item in extraLinks"
         :key="item.url"
         :href="item.url"
         target="_blank"

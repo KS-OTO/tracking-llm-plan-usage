@@ -3,6 +3,7 @@
  * 通用余额区块（StepFun / SiliconFlow / Novita AI / Sub2API）。
  *
  * 一个平台一张卡；卡面只显示剩余额度，总额 / 已用 / 现金 / 赠金等维度进详情弹窗。
+ * 控制台入口统一在各账号详情弹窗的标题行，卡片外部不重复。
  */
 import { computed } from 'vue'
 
@@ -17,8 +18,6 @@ const props = defineProps<{
   title: string
   /** 未配置时提示的环境变量名。 */
   envHint: string
-  /** 控制台地址（可选）。 */
-  consoleUrl?: string
   data: SimpleBalanceResponse | null
   loading: boolean
   error: string | null
@@ -38,10 +37,6 @@ const cards = computed(() => cardsOf(props.data?.accounts, toBalanceDetail))
     :empty="cards.length === 0"
     :empty-text="`未配置 ${envHint}`"
   >
-    <template v-if="consoleUrl" #actions>
-      <a class="muted" :href="consoleUrl" target="_blank" rel="noreferrer">控制台 ↗</a>
-    </template>
-
     <div class="grid-cards grid-cards--wide">
       <AccountCard v-for="card in cards" :key="card.keyHint" :card="card" />
     </div>

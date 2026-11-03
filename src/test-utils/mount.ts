@@ -34,8 +34,8 @@ export function mountWithTDesign<T extends Component>(
  * 每个用例都会留下一个未关闭的弹窗，读取前先清掉前序用例残留的弹窗上下文，
  * 否则跨用例的文案会互相污染断言。
  *
- * **顺带断言身份区两项都在**（`#20` 词汇表：别名 / Key），并且详情弹窗底部有控制台入口。
- * 放在这里而不是 10 个 Section 测试里各写一遍：「每个弹窗都有统一身份区与控制台链接」
+ * **顺带断言身份区两项都在**（`#20` 词汇表：别名 / Key），并且控制台入口在弹窗标题行。
+ * 放在这里而不是 10 个 Section 测试里各写一遍：「每个弹窗都有统一身份区与标题行控制台链接」
  * 是一条不变量，断言写一次、10 个平台一起覆盖；某个适配器漏掉时，任意一个弹窗用例当场失败。
  */
 export async function openDetail(wrapper: VueWrapper, index = 0): Promise<string> {
@@ -57,8 +57,12 @@ export async function openDetail(wrapper: VueWrapper, index = 0): Promise<string
   // 不写自定义失败文案：vitest 的 valid-expect 规则只许 1 个参数。
   expect(text).toContain('别名')
   expect(text).toContain('Key')
-  // 每个平台的详情弹窗都必须有控制台入口：这是“统一详情”的不变量，
-  // 任何适配器漏掉 links 时，覆盖它的 Section 用例会当场失败。
-  expect(text).toContain('控制台')
+  // 每个平台的详情弹窗都必须有控制台入口，且必须在标题行；正文只放数据。
+  const headerLink = dialog?.querySelector<HTMLAnchorElement>('.t-dialog__header-content a')
+  expect(headerLink?.textContent).toContain('控制台')
+  const bodyConsoleLinks = Array.from(
+    dialog?.querySelectorAll('.account-detail .detail-links a') ?? [],
+  ).filter((link) => link.textContent?.includes('控制台'))
+  expect(bodyConsoleLinks).toHaveLength(0)
   return text
 }

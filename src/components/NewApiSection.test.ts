@@ -110,7 +110,7 @@ describe('NewApiSection', () => {
     expect(text).not.toContain('重置于')
   })
 
-  it('单站点时卡片标题旁给出按站点拼接的外链', () => {
+  it('单站点时卡片标题旁只给出按站点拼接的「可用模型」外链', () => {
     const wrapper = mountWithTDesign(NewApiSection, {
       props: {
         data: response([{ ...account, keyHint: 'eJ****OLM=' }]),
@@ -121,9 +121,8 @@ describe('NewApiSection', () => {
     const modelsLink = wrapper.get('a.models-link')
     expect(modelsLink.attributes('href')).toBe('https://ai.example.com/pricing')
     expect(modelsLink.attributes('target')).toBe('_blank')
-    // 右上角「控制台」指向自托管站点的 dashboard
-    const consoleLink = wrapper.findAll('a').find((a) => a.text().includes('控制台'))
-    expect(consoleLink?.attributes('href')).toBe('https://ai.example.com/dashboard')
+    // 控制台入口已统一到详情弹窗标题行，卡片外部不再出现
+    expect(wrapper.findAll('a').some((a) => a.text().includes('控制台'))).toBe(false)
   })
 
   it('多站点时不给出卡片级外链（避免一个链接指向不了两个站点）', () => {
@@ -166,7 +165,7 @@ describe('NewApiSection', () => {
     expect(detail).toContain('窗口内按模型用量（1）')
     expect(detail).toContain('gpt-6-astra')
     expect(detail).toContain('3,473 次')
-    // 外链在弹窗里保留一份：卡片级只在单站点时给
+    // 控制台只在详情弹窗标题行保留一份，可用模型外链仍在弹窗正文
     expect(detail).toContain('控制台')
     expect(detail).toContain('可用模型')
   })

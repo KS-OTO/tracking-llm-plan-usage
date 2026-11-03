@@ -1,31 +1,22 @@
 /**
- * 套餐类订阅平台（Kimi For Coding / MiniMax / OpenCode Go）→ 统一展示模型（issue #20）。
+ * 套餐类订阅平台（Kimi For Coding / MiniMax / OpenCode Go / Command Code / ZenMux）
+ * → 统一展示模型（issue #20）。
  *
- * 三家都只有「窗口 + 百分比」，没有余额与明细表，因此模型里只有 W 语义 +
- * 一张窗口明细表。平台差异（窗口叫法、用量端点）收在下面两张映射表里。
+ * 所有额度信息都落在窗口条上：窗口名、百分比、绝对额度、上游状态、重置倒计时与
+ * 具体时刻。窗口条本身已经是一张明细表，不再额外生成「窗口明细」表。
+ * 平台差异（窗口叫法）收在映射表里。
  */
 import type {
   AccountDetail,
   AccountIdentity,
-  DataTable,
   Metric,
   PlanAccountUsage,
   WindowQuota,
 } from '../types'
-import {
-  countMetric,
-  identityFields,
-  field,
-  moneyMetric,
-  notice,
-  resetAtNote,
-  resetNote,
-  table,
-  windowQuota,
-} from '../detail'
-import { currencySymbol, formatCurrency, formatNumber } from '../format'
+import { countMetric, identityFields, field, moneyMetric, notice, windowQuota } from '../detail'
+import { currencySymbol } from '../format'
 import { consoleLinks } from '../consoleLinks'
-import { PLAN_WINDOW_LABELS, windowStatusLabel } from '../utils'
+import { PLAN_WINDOW_LABELS } from '../utils'
 
 type PlansAccount = PlanAccountUsage & AccountIdentity
 
@@ -53,15 +44,6 @@ function isMoneyUnit(unit: string): boolean {
   return MONEY_UNIT[unit.toUpperCase()] === true
 }
 
-/** 绝对额度文本：货币两侧带符号；credits 等计数单位只出现一次。 */
-function amountText(used: number, total: number, unit: string | undefined): string {
-  if (unit && isMoneyUnit(unit)) {
-    return `${formatCurrency(used, unit)} / ${formatCurrency(total, unit)}`
-  }
-  const pair = `${formatNumber(used)} / ${formatNumber(total)}`
-  return unit ? `${pair} ${unit}` : pair
-}
-
 export function windowLabelOf(provider: string, window: string): string {
   return PROVIDER_WINDOW_LABELS[provider]?.[window] ?? PLAN_WINDOW_LABELS[window] ?? window
 }
@@ -87,37 +69,6 @@ function windowsOf(account: PlansAccount, provider: string): WindowQuota[] {
   )
 }
 
-function windowTable(account: PlansAccount, provider: string): DataTable {
-  const hasAmounts = account.windows.some((window) => window.used !== undefined)
-  return table(
-    '窗口明细',
-    [
-      { key: 'window', label: '窗口' },
-      { key: 'percent', label: '已用', align: 'right' },
-      ...(hasAmounts ? [{ key: 'amount', label: '额度', align: 'right' as const }] : []),
-      { key: 'status', label: '上游状态', kind: 'status' },
-      { key: 'reset', label: '重置倒计时' },
-      { key: 'resetAt', label: '重置时间' },
-    ],
-    account.windows.map((window) => ({
-      _key: window.window,
-      window: windowLabelOf(provider, window.window),
-      percent: `${formatNumber(window.percent)}%`,
-      ...(hasAmounts
-        ? {
-            amount:
-              window.used !== undefined && window.total !== undefined
-                ? amountText(window.used, window.total, window.unit)
-                : '—',
-          }
-        : {}),
-      status: window.status ? windowStatusLabel(window.status) : '正常',
-      reset: resetNote(window.resetTime),
-      resetAt: resetAtNote(window.resetTime),
-    })),
-  )
-}
-
 function balanceMetrics(account: PlansAccount): Metric[] {
   const balance = account.balance
   if (!balance) {
@@ -135,8 +86,8 @@ export function toPlansDetail(account: PlansAccount, provider: string): AccountD
     windows: windowsOf(account, provider),
     balances: balanceMetrics(account),
     metrics: [],
-    tables: [windowTable(account, provider)],
-    meta: [field('平台', provider), ...(account.plan ? [field('套餐', account.plan)] : [])],
+    tables: [],
+    meta: account.plan ? [field('套餐', account.plan)] : [],
     links: consoleLinks(provider, account.consoleUrl),
     // 账号级用量错误（不是鉴权失败）也算故障信号：卡片上给告警，弹窗里沉底
     notices: account.error ? [notice('warn', account.error)] : [],

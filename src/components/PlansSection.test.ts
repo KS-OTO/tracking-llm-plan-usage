@@ -88,17 +88,17 @@ describe('PlansSection', () => {
 
     const detail = await openDetail(wrapper)
     expect(detail).toContain('别名')
-    expect(detail).toContain('OpenCode Go')
     expect(detail).toContain('控制台')
     expect(
-      Array.from(document.body.querySelectorAll<HTMLAnchorElement>('.detail-links a')).some(
-        (a) => a.href === 'https://opencode.ai/console/go',
-      ),
+      Array.from(
+        document.body.querySelectorAll<HTMLAnchorElement>('.t-dialog__header-content a'),
+      ).some((a) => a.href === 'https://opencode.ai/console/go'),
     ).toBe(true)
-    expect(detail).toContain('重置时间')
-    // 三个窗口在弹窗里同时以用量条（额度窗口）与明细表（窗口明细）出现：
-    // 前者回答「用了多少」，后者被抄去做对账（含上游状态与具体重置时刻）
-    expect(detail).toContain('窗口明细（3）')
+    expect(detail).toContain('重置于')
+    // 额度窗口条已经包含窗口名、百分比、状态与重置时刻；不再重复一张「窗口明细」表
+    expect(detail).not.toContain('窗口明细')
+    // 卡片标题就是平台名，详情里不再重复「平台: OpenCode Go」
+    expect(detail).not.toContain('平台')
     expect(detail).toContain('每周窗口')
     expect(detail).toContain('30 天窗口')
   })

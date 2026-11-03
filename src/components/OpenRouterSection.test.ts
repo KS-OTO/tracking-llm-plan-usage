@@ -60,6 +60,8 @@ describe('OpenRouterSection', () => {
     // 密钥元数据与周月用量已移出卡片
     expect(text).not.toContain('每月重置')
     expect(text).not.toContain('10.25')
+    // 控制台入口已统一到详情弹窗标题行，卡片外部不再出现
+    expect(text).not.toContain('控制台')
   })
 
   it('moves key metadata and weekly/monthly usage into the detail dialog', async () => {

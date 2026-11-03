@@ -445,7 +445,6 @@ const balanceSections = computed(() =>
       {
         title: 'StepFun',
         envHint: 'STEPFUN_API_KEY',
-        consoleUrl: 'https://platform.stepfun.com/',
         data: stepfun.value.data,
         loading: loading.value && stepfun.value.data === null,
         error: stepfun.value.error,
@@ -464,7 +463,6 @@ const balanceSections = computed(() =>
       {
         title: 'SiliconFlow',
         envHint: 'SILICONFLOW_API_KEY',
-        consoleUrl: 'https://cloud.siliconflow.cn/',
         data: siliconflow.value.data,
         loading: loading.value && siliconflow.value.data === null,
         error: siliconflow.value.error,
@@ -483,7 +481,6 @@ const balanceSections = computed(() =>
       {
         title: 'Novita AI',
         envHint: 'NOVITA_API_KEY',
-        consoleUrl: 'https://novita.ai/',
         data: novita.value.data,
         loading: loading.value && novita.value.data === null,
         error: novita.value.error,

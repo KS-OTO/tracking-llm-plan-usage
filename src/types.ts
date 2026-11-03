@@ -296,15 +296,15 @@ export interface Notice {
   cardFace?: boolean
 }
 
-/** 外链（④ 附加区）。 */
+/** 外链（`console` 由详情弹窗标题行取用；其余在 ④ 附加区）。 */
 export interface LinkField {
   label: string
   url: string
   /**
-   * 用途标记。`console` 是主控制台入口（卡片操作区要用它）、`models` 是可用模型页
+   * 用途标记。`console` 是主控制台入口（详情弹窗标题行用它）、`models` 是可用模型页
    * （区块卡标题旁的「可用模型」外链用它）；缺省为普通外链。
    *
-   * 用标记而不是按出现顺序取：顺序一旦被新链接插队，卡片操作区就会指到别处，
+   * 用标记而不是按出现顺序取：顺序一旦被新链接插队，标题行就会指到别处，
    * 而按标签字符串匹配同样脆弱（改文案就断了）。
    */
   role?: 'console' | 'models'

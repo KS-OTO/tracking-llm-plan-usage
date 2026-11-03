@@ -1,5 +1,5 @@
 /**
- * 各平台控制台地址（详情弹窗 ④ 的「控制台」外链）。
+ * 各平台控制台地址（详情弹窗标题行的「控制台」外链）。
  *
  * 统一收在这一张表里，而不是散落到 10 个适配器：同一个平台在“套餐订阅”和
  * “余额账户”两个 Tab 可能各有一张卡，但控制台入口只能是同一个地址。
@@ -32,7 +32,7 @@ const CONSOLE_URLS: Record<string, string> = {
   ZenMux: 'https://zenmux.ai/',
 }
 
-/** 详情弹窗底部的「控制台」外链；没有地址时返回空数组（保持 `links` 恒为数组）。 */
+/** 详情弹窗标题行的「控制台」外链；没有地址时返回空数组（保持 `links` 恒为数组）。 */
 export function consoleLinks(provider: string, url?: string | null): LinkField[] {
   const target = url?.trim() || CONSOLE_URLS[provider]
   return target ? [link('控制台', target, 'console')] : []
