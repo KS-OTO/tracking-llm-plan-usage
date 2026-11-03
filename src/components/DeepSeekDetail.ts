@@ -6,6 +6,7 @@
  */
 import type { AccountDetail, AccountIdentity, BalanceEntry, DeepSeekBalance, Field } from '../types'
 import { identityFields, moneyField, moneyMetric, field } from '../detail'
+import { consoleLinks } from '../consoleLinks'
 
 type DeepSeekAccount = DeepSeekBalance & AccountIdentity
 
@@ -27,7 +28,7 @@ function breakdownFields(entry: BalanceEntry): Field[] {
 
 export function toDeepSeekDetail(account: DeepSeekAccount): AccountDetail {
   return {
-    identity: identityFields(account, 'DEEPSEEK_LABEL / DEEPSEEK_LABEL_N'),
+    identity: identityFields(account),
     // 卡头标签只表达**异常态**：正常态人人可用，挂满「可用」只会稀释信息
     ...(account.isAvailable ? {} : { badge: { label: '不可用', theme: 'warning' as const } }),
     balances: account.balances.map(balanceMetric),
@@ -38,7 +39,7 @@ export function toDeepSeekDetail(account: DeepSeekAccount): AccountDetail {
       field('可用状态', account.isAvailable ? '可用' : '不可用'),
       ...account.balances.flatMap(breakdownFields),
     ],
-    links: [],
+    links: consoleLinks('DeepSeek'),
     notices: [],
   }
 }

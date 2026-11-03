@@ -192,8 +192,8 @@ Vite 的 `loadEnv()`（`vite.config.ts` 用的就是它）**行为完全一致**
 ### 双通道设计
 
 `fetchAliyunPersonalPlan({ cookie?, credentials? })`：**Cookie 优先**，AK/SK 兜底；
-两者都无则抛 `InvalidCredentials`。前端在「个人版套餐用量」标题旁标注数据来源
-（`会话 Cookie` / `AK/SK`）。
+两者都无则抛 `InvalidCredentials`。页面不再单独列出「数据来源」字段；
+仅配置 Cookie 时，详情里的「凭据」字段会说明没有组织/座席视图。
 
 账号来源列表 = AK/SK 账号 ∪ 仅有 Cookie 的账号，按序号配对
 （同一账号的 AK/SK 管组织/座席，Cookie 管个人版用量）；

@@ -105,13 +105,13 @@ export const api = {
   /**
    * 火山推理用量：**唯一的按需端点**。
    *
-   * 它带用户输入的 `model` / `modelEndpoint` 过滤，合并进 `/api/usage` 会让
-   * 「换一个模型」退化成「全量重拉所有平台」。
+   * 它只随首屏 / 手动刷新一起拉取，不并入 `/api/usage`，避免一次刷新连带
+   * 拉取明细级数据。服务端仍接受可选的 `model` / `modelEndpoint` 过滤，
+   * 供其他调用方使用；页面本身不提供过滤入口。
    */
-  volcInference: (days: number, model?: string, refresh = false) =>
+  volcInference: (days: number, refresh = false) =>
     get<InferenceUsageResponse>('/api/volc/inference-usage', {
       days,
-      ...(model ? { model } : {}),
       ...(refresh ? { refresh: 1 } : {}),
     }),
 }

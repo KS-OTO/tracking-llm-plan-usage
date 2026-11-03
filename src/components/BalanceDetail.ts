@@ -6,13 +6,14 @@
  */
 import type { AccountDetail, AccountIdentity, SimpleBalanceData } from '../types'
 import { field, identityFields, moneyField, moneyMetric, textMetric } from '../detail'
+import { consoleLinks } from '../consoleLinks'
 import { currencySymbol } from '../format'
 
 type BalanceAccount = SimpleBalanceData & AccountIdentity
 
 export function toBalanceDetail(account: BalanceAccount): AccountDetail {
   return {
-    identity: identityFields(account, '*_LABEL / *_LABEL_N'),
+    identity: identityFields(account),
     windows: [],
     balances:
       account.balance === null
@@ -46,7 +47,7 @@ export function toBalanceDetail(account: BalanceAccount): AccountDetail {
       ),
       ...(account.meta ?? []).map((item) => field(item.label, item.value)),
     ],
-    links: [],
+    links: consoleLinks(account.provider, account.consoleUrl),
     notices: [],
   }
 }

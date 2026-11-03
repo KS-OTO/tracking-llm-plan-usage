@@ -15,6 +15,7 @@ import type {
   Metric,
 } from '../types'
 import { identityFields, moneyMetric, table, tokenMetric } from '../detail'
+import { consoleLinks } from '../consoleLinks'
 import { formatCurrency } from '../format'
 
 type GiteeAccount = GiteePackageBalance & AccountIdentity
@@ -88,7 +89,7 @@ export function toGiteeDetail(account: GiteeAccount): AccountDetail {
   const voucher = account.voucher
   const voucherOk = voucher !== undefined && 'data' in voucher
   return {
-    identity: identityFields(account, 'GITEE_LABEL / GITEE_LABEL_N'),
+    identity: identityFields(account),
     balances: [
       moneyMetric('balance', '剩余余额', account.balance, CURRENCY),
       moneyMetric('used', '已使用', account.usedAmount, CURRENCY),
@@ -98,7 +99,7 @@ export function toGiteeDetail(account: GiteeAccount): AccountDetail {
     windows: [],
     tables: [resourceTable(account.details), ...(voucherOk ? [voucherTable(voucher.data)] : [])],
     meta: voucherOk ? [{ label: '代金券命名空间', value: voucher.data.namespace }] : [],
-    links: [],
+    links: consoleLinks('Gitee'),
     notices:
       voucher !== undefined && 'error' in voucher
         ? [{ level: 'warn' as const, text: `代金券查询失败：${voucher.error}` }]

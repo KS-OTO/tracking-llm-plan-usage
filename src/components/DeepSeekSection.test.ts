@@ -90,6 +90,28 @@ describe('DeepSeekSection', () => {
     expect(detail).toContain('主力号')
   })
 
+  it('shows plain 未配置 when the alias is missing', async () => {
+    const wrapper = mountWithTDesign(DeepSeekSection, {
+      props: {
+        data: {
+          accounts: [
+            {
+              keyHint: 'sk-2****none',
+              isAvailable: true,
+              balances: [{ currency: 'CNY', total: 1, granted: 0, toppedUp: 1 }],
+            },
+          ],
+        },
+        loading: false,
+        error: null,
+      },
+    })
+    const detail = await openDetail(wrapper)
+    expect(detail).toContain('未配置')
+    // 不再把环境变量名塞进别名值里
+    expect(detail).not.toContain('DEEPSEEK_LABEL')
+  })
+
   it('shows an alert for a failed account while keeping others rendered', () => {
     const wrapper = mountWithTDesign(DeepSeekSection, {
       props: { data: fixture, loading: false, error: null },

@@ -51,11 +51,10 @@ const {
   lastUpdated,
   nextRefreshAt,
   autoRefresh,
-  modelFilter,
   site,
   refreshIntervalSeconds,
 } = storeToRefs(dashboard)
-const { refresh, onFilterInput } = dashboard
+const { refresh } = dashboard
 
 const theme = useThemeStore()
 const { isDark } = storeToRefs(theme)
@@ -243,7 +242,6 @@ const subscriptionSections = computed(() =>
         data: volcPlan.value.data,
         inference: volcInference.value.data,
         inferenceError: volcInference.value.error,
-        model: modelFilter.value,
         loading: loading.value && volcPlan.value.data === null,
         error: volcPlan.value.error,
         notConfigured: volcPlan.value.notConfigured,
@@ -763,11 +761,7 @@ watch(
               'section-compact': isCompactAccounts(section.count),
             }"
           >
-            <component
-              :is="section.component"
-              v-bind="section.props"
-              @update:model="onFilterInput"
-            />
+            <component :is="section.component" v-bind="section.props" />
           </div>
         </div>
       </div>

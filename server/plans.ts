@@ -43,6 +43,8 @@ export interface TokenPlanWindow {
 
 export interface TokenPlanInfo {
   provider: string
+  /** 平台控制台地址（可换区的平台由服务端按账号下发）。 */
+  consoleUrl?: string
   /** 套餐标识 / 等级（上游返回时展示在详情里，如 Command Code 的 planId）。 */
   plan?: string
   /** 账户级余额（如 Command Code 的 credit balance），与窗口额度分开。 */
@@ -216,9 +218,16 @@ export async function fetchMiniMaxPlan(
   apiKey: string,
   site: MiniMaxSite = 'cn',
 ): Promise<TokenPlanInfo> {
+  const consoleUrl =
+    site === 'cn'
+      ? 'https://platform.minimax.cn/console/home'
+      : 'https://platform.minimax.io/console/home'
   const [primary, fallback] = miniMaxUsageUrls(site)
   try {
-    return parseMiniMaxPlan(await planGet(primary, apiKey, 'MiniMax'))
+    return {
+      ...parseMiniMaxPlan(await planGet(primary, apiKey, 'MiniMax')),
+      consoleUrl,
+    }
   } catch (cause) {
     // 只有路由不存在才回落到旧接口；鉴权/业务错误直接透出，避免重复打上游
     const code = cause instanceof PlanApiError ? cause.code : ''
@@ -226,7 +235,10 @@ export async function fetchMiniMaxPlan(
       throw cause
     }
   }
-  return parseMiniMaxPlan(await planGet(fallback, apiKey, 'MiniMax'))
+  return {
+    ...parseMiniMaxPlan(await planGet(fallback, apiKey, 'MiniMax')),
+    consoleUrl,
+  }
 }
 
 const MiniMaxBody = z.object({

@@ -132,5 +132,9 @@ export async function fetchZenMuxPlan(
           : `ZenMux 请求失败（HTTP ${res.status}）：${text.slice(0, 200)}`
     throw new PlanApiError(`ZenMux_HTTP_${res.status}`, message)
   }
-  return parseZenMuxPlan(json)
+  return {
+    ...parseZenMuxPlan(json),
+    // 控制台与 API 同源；自定义 base URL 时入口就是该站点根地址
+    consoleUrl: new URL(trimmed).origin,
+  }
 }

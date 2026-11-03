@@ -18,10 +18,14 @@ import {
 } from './balances.ts'
 import { cachedQuery } from './cache.ts'
 import { fetchCommandCodePlan } from './commandcode.ts'
-import { fetchSub2ApiUsage } from './sub2api.ts'
+import { fetchSub2ApiUsage, sub2ApiBaseUrl } from './sub2api.ts'
 import { fetchZenMuxPlan, ZENMUX_DEFAULT_BASE_URL } from './zenmux.ts'
 import { queryResourcePackageInstances, type AliyunCredentials } from './aliyun.ts'
-import { fetchAliyunPersonalPlan, type AliyunPersonalPlan } from './aliyun-console.ts'
+import {
+  aliyunTokenPlanConsoleUrl,
+  fetchAliyunPersonalPlan,
+  type AliyunPersonalPlan,
+} from './aliyun-console.ts'
 import { fetchDeepSeekBalance } from './deepseek.ts'
 import { fetchQianfanData, type BaiduCredentials } from './baidu.ts'
 import { fetchGiteePackageBalance, fetchGiteeVoucher } from './gitee.ts'
@@ -799,6 +803,7 @@ export function createAppHandler(env: EnvGetter) {
           labelOf('tokenplan-cookie', cookie ?? '') ||
           undefined,
         run: async () => {
+          const consoleUrl = aliyunTokenPlanConsoleUrl(ALIYUN_TOKENPLAN_REGION)
           const [account, seats, sharedPackages, personal] = await Promise.all([
             // 组织 / 座席 / 共享包依赖 AK/SK；仅有会话 Cookie 时跳过（置 null，展示层隐藏）
             credentials ? getTokenPlanAccount(credentials) : Promise.resolve(null),
@@ -819,7 +824,7 @@ export function createAppHandler(env: EnvGetter) {
               }),
             ),
           ])
-          return { account, seats, sharedPackages, personal }
+          return { account, seats, sharedPackages, personal, consoleUrl }
         },
       })),
     )
@@ -907,7 +912,11 @@ export function createAppHandler(env: EnvGetter) {
       SUB2API_PAIRS.map((pair): AccountEntry<SimpleBalanceInfo> => ({
         keyHint: maskKey(pair.secret),
         label: labelOf('sub2api', pair.key),
-        run: () => fetchSub2ApiUsage(pair.key, pair.secret),
+        run: async () => ({
+          ...(await fetchSub2ApiUsage(pair.key, pair.secret)),
+          // 自托管站点没有固定控制台域名，入口就是配置的站点地址
+          consoleUrl: sub2ApiBaseUrl(pair.key),
+        }),
       })),
     )
     return { accounts }
@@ -947,9 +956,9 @@ export function createAppHandler(env: EnvGetter) {
   /**
    * 火山推理用量：**保留独立端点**。
    *
-   * 它是唯一带用户输入的读数接口（`model` / `modelEndpoint` 过滤），并入 `/api/usage`
-   * 会让「改一个模型过滤」退化成「全量重拉所有平台」—— 反而更贵。
-   * 缓存按参数分 key，因此在同一组过滤条件上来回切换不会重复打上游。
+   * 它带可选的 `model` / `modelEndpoint` 过滤参数（供 API 调用方使用），页面本身
+   * 不再提供过滤入口；并入 `/api/usage` 会让一次明细刷新连带拉取全部平台，反而更贵。
+   * 缓存按参数分 key，因此同一组过滤条件重复请求不会重复打上游。
    */
   async function handleVolcInference(requestUrl: URL): Promise<Response> {
     const days = requestUrl.searchParams.get('days')

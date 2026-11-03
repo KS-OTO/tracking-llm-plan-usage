@@ -206,16 +206,25 @@ describe('TokenPlanSection', () => {
     expect(wrapper.findComponent({ name: 'TSkeleton' }).exists()).toBe(true)
   })
 
-  it('labels the personal usage data source inside the dialog', async () => {
+  it('omits the data source field and links to the console inside the dialog', async () => {
     const fromCookie = mountWithTDesign(TokenPlanSection, {
       props: { data: personalData({ source: 'cookie' }), loading: false, error: null },
     })
-    expect(await openDetail(fromCookie)).toContain('会话 Cookie')
+    const cookieDetail = await openDetail(fromCookie)
+    expect(cookieDetail).not.toContain('数据来源')
+    expect(cookieDetail).toContain('控制台')
+    expect(
+      Array.from(document.body.querySelectorAll<HTMLAnchorElement>('.detail-links a')).some((a) =>
+        a.href.startsWith('https://bailian.console.aliyun.com/'),
+      ),
+    ).toBe(true)
 
     const fromCli = mountWithTDesign(TokenPlanSection, {
       props: { data: personalData({ source: 'cli' }), loading: false, error: null },
     })
-    expect(await openDetail(fromCli)).toContain('AK/SK')
+    const cliDetail = await openDetail(fromCli)
+    expect(cliDetail).not.toContain('数据来源')
+    expect(cliDetail).toContain('控制台')
   })
 
   it('renders reset cards with their nearest expiry inside the dialog', async () => {

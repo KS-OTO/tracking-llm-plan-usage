@@ -13,6 +13,7 @@ import type {
   QianfanTpmQuota,
 } from '../types'
 import { countMetric, identityFields, table, tokenMetric } from '../detail'
+import { consoleLinks } from '../consoleLinks'
 import { formatCount } from '../format'
 
 type BaiduAccount = QianfanData & AccountIdentity
@@ -85,13 +86,13 @@ export function toBaiduDetail(account: BaiduAccount): AccountDetail {
     countMetric('usage-services', '活跃服务', account.usage.serviceCount),
   ]
   return {
-    identity: identityFields(account, 'BAIDU_LABEL / BAIDU_LABEL_N'),
+    identity: identityFields(account),
     metrics,
     balances: [],
     windows: [],
     tables: [packageTable(account.packages), tpmTable(account.tpmQuotas)],
     meta: [],
-    links: [],
+    links: consoleLinks('Baidu'),
     notices: [],
   }
 }

@@ -24,6 +24,7 @@ import {
   windowQuota,
 } from '../detail'
 import { currencySymbol, formatCurrency, formatNumber } from '../format'
+import { consoleLinks } from '../consoleLinks'
 import { PLAN_WINDOW_LABELS, windowStatusLabel } from '../utils'
 
 type PlansAccount = PlanAccountUsage & AccountIdentity
@@ -46,15 +47,6 @@ const PROVIDER_WINDOW_LABELS: Record<string, Record<string, string>> = {
   'OpenCode Go': { monthly: '30 天窗口' },
   'Command Code': { monthly: '计费周期' },
   ZenMux: { weekly: '7 天窗口' },
-}
-
-/** 各平台用量端点（详情弹窗里的「数据来源」，排障时用得上）。 */
-const PROVIDER_ENDPOINTS: Record<string, string> = {
-  'Kimi For Coding': 'GET api.kimi.com/coding/v1/usages',
-  MiniMax: 'GET api.minimax.io/v1/token_plan/remains',
-  'OpenCode Go': 'GET opencode.ai/zen/go/v1/usage',
-  'Command Code': 'GET api.commandcode.ai/alpha/billing/credits',
-  ZenMux: 'GET {ZENMUX_BASE_URL}',
 }
 
 function isMoneyUnit(unit: string): boolean {
@@ -139,17 +131,13 @@ function balanceMetrics(account: PlansAccount): Metric[] {
 
 export function toPlansDetail(account: PlansAccount, provider: string): AccountDetail {
   return {
-    identity: identityFields(account, '*_LABEL / *_LABEL_N'),
+    identity: identityFields(account),
     windows: windowsOf(account, provider),
     balances: balanceMetrics(account),
     metrics: [],
     tables: [windowTable(account, provider)],
-    meta: [
-      field('平台', provider),
-      ...(account.plan ? [field('套餐', account.plan)] : []),
-      field('数据来源', PROVIDER_ENDPOINTS[provider] ?? null),
-    ],
-    links: [],
+    meta: [field('平台', provider), ...(account.plan ? [field('套餐', account.plan)] : [])],
+    links: consoleLinks(provider, account.consoleUrl),
     // 账号级用量错误（不是鉴权失败）也算故障信号：卡片上给告警，弹窗里沉底
     notices: account.error ? [notice('warn', account.error)] : [],
   }

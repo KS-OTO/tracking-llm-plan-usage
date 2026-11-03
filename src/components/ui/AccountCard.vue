@@ -9,7 +9,7 @@
  * 详情弹窗的标题/副标题规则也在这里：**别名优先**，无别名退化为 Key 掩码；
  * 副标题只在「别名与 Key 都要显示」时才给（避免同一串 Key 出现两次）。
  */
-import type { AccountCard, DataTable } from '../../types'
+import type { AccountCard } from '../../types'
 import { accountTitle } from '../../types'
 
 import AccountCardBody from './AccountCardBody.vue'
@@ -17,15 +17,6 @@ import AccountDetailPanel from './AccountDetailPanel.vue'
 import DetailDialog from '../DetailDialog.vue'
 
 defineProps<{ card: AccountCard }>()
-
-/**
- * 平台专属的表格工具插槽：目前只有火山推理用量的「模型过滤」用得上。
- * 显式声明类型 + 逐字段转发（不用 `v-bind="slotProps"`）—— 两层 `v-bind` 透传时
- * vue-tsc 推不出插槽属性的类型，模板里取 `table` 会变成 any。
- */
-defineSlots<{
-  'table-actions'?: (props: { table: DataTable; index: number }) => unknown
-}>()
 </script>
 
 <template>
@@ -46,11 +37,7 @@ defineSlots<{
         :title="accountTitle(card)"
         :subtitle="card.label ? card.keyHint : undefined"
       >
-        <AccountDetailPanel :detail="card.detail">
-          <template #table-actions="{ table, index }">
-            <slot name="table-actions" :table="table" :index="index" />
-          </template>
-        </AccountDetailPanel>
+        <AccountDetailPanel :detail="card.detail" />
       </DetailDialog>
     </div>
 

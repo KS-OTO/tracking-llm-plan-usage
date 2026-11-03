@@ -104,8 +104,8 @@ test.describe('dashboard smoke', () => {
   })
 
   /**
-   * 带用户输入的读数接口**故意不合入** `/api/usage`：并入会让「改一个模型过滤」退化成
-   * 「全量重拉 10 家平台」。它保留独立端点，因此未配置时仍是端点级 503（不是切片）。
+   * 明细级读数接口**故意不合入** `/api/usage`：并入会让一次明细刷新连带拉取
+   * 全部平台。它保留独立端点，因此未配置时仍是端点级 503（不是切片）。
    */
   test('volc inference endpoint reports NOT_CONFIGURED without erroring out', async ({
     request,

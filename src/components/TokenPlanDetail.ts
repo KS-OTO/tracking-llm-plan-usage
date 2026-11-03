@@ -20,11 +20,14 @@ import type {
   WindowQuota,
 } from '../types'
 import { countMetric, field, identityFields, notice, table, windowQuota } from '../detail'
+import { consoleLinks } from '../consoleLinks'
 import { formatTokens } from '../format'
 import { formatDateTime } from '../utils'
 
 /** 服务端下发的账号数据（`personal` 是独立容错切片）。 */
 export interface TokenPlanData {
+  /** 控制台地址：国内百炼 / QwenCloud 国际站由服务端按区域下发。 */
+  consoleUrl?: string
   account: TokenPlanAccount | null
   seats: { items: TokenPlanSeat[]; total: number } | null
   sharedPackages: { items: TokenPlanSharedPackage[]; total: number } | null
@@ -70,11 +73,9 @@ function personalWindow(key: string, label: string, window: TokenPlanPersonalWin
   return windowQuota({ key, label, percent: window.percent, resetAt: window.resetTime })
 }
 
-/** 个人版套餐元信息（订阅 / 数据来源 / 重置卡 / 加购包）。 */
+/** 个人版套餐元信息（订阅 / 重置卡 / 加购包）。 */
 function personalMeta(personal: TokenPlanPersonalPlan): Field[] {
-  const fields: Field[] = [
-    field('数据来源', personal.source === 'cookie' ? '会话 Cookie' : 'AK/SK'),
-  ]
+  const fields: Field[] = []
   if (personal.accountId) {
     fields.push(field('账号 ID', personal.accountId))
   }
@@ -182,7 +183,7 @@ export function toTokenPlanDetail(account: TokenPlanAccountData): AccountDetail 
     tables.push(packageTable(account.sharedPackages.items))
   }
   return {
-    identity: identityFields(account, 'ALIYUN_LABEL / ALIYUN_TOKENPLAN_LABEL'),
+    identity: identityFields(account),
     windows: personal ? personalWindows(personal) : [],
     balances: [],
     metrics: personal?.subscription
@@ -203,7 +204,7 @@ export function toTokenPlanDetail(account: TokenPlanAccountData): AccountDetail 
           ]),
       ...(personal ? personalMeta(personal) : []),
     ],
-    links: [],
+    links: consoleLinks('Aliyun Token Plan', account.consoleUrl),
     notices:
       'error' in account.personal
         ? [

@@ -2,11 +2,10 @@
  * 仪表盘数据 store：统一拉取全部 `/api/*`，逐区块独立容错。
  *
  * - refresh 不清空已有数据：失败时保留上次成功值，仅更新 error
- * - 模型过滤带防抖，避免每次击键全量拉取
  * - 自动刷新感知页面可见性，隐藏时暂停
  *
  * 请求形状（issue #23）：每刷新 **2 个**（`/api/status` + `/api/usage`），
- * 火山推理是唯一的按需第三路（首屏与手动刷新带上，改模型过滤时单独重拉）。
+ * 火山推理是唯一的按需第三路（首屏与手动刷新带上）。
  * 合并端点减少的是边缘节点的唤醒次数，**容错粒度不变** —— 信封里每格仍是独立切片。
  */
 import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
@@ -39,7 +38,6 @@ export interface Slice<T> {
   notConfigured: boolean
 }
 
-const FILTER_DEBOUNCE_MS = 400
 const VOLC_DETAILS_DAYS = 7
 
 /**
@@ -158,7 +156,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
   /** 下一次自动刷新的时刻；自动刷新关闭或页面隐藏时为 null（此时没有「下次」）。 */
   const nextRefreshAt = ref<Date | null>(null)
   const autoRefresh = ref(true)
-  const modelFilter = ref('')
 
   /**
    * 站点自定义：缺字段一律用兜底值补齐。
@@ -178,7 +175,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   let inFlight = false
   let pending = false
-  let filterTimer: ReturnType<typeof setTimeout> | undefined
   let refreshTimer: ReturnType<typeof setInterval> | undefined
 
   /**
@@ -223,7 +219,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     }
     inFlight = true
     loading.value = true
-    const model = modelFilter.value.trim() || undefined
     const withInference = force || needsInference
     needsInference = false
     // 先起 status：它决定品牌与刷新节奏，要尽早落地（见 loadStatus 注释）
@@ -231,7 +226,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     // 用 `Promise<null>` 占位而不是条件拼数组：三个结果的类型不会被合并成联合，
     // 下面的解构因此仍然精确（`inference` 为 null 就代表「这轮不刷它」）。
     const inferencePromise: Promise<InferenceUsageResponse | null> = withInference
-      ? api.volcInference(VOLC_DETAILS_DAYS, model, force)
+      ? api.volcInference(VOLC_DETAILS_DAYS, force)
       : Promise.resolve(null)
     const [statusOutcome, usageOutcome, inferenceOutcome] = await Promise.allSettled([
       statusPromise,
@@ -301,27 +296,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
     if (statusOk || usageOutcome.status === 'fulfilled') {
       lastUpdated.value = new Date()
     }
-  }
-
-  function onFilterInput(value: string): void {
-    modelFilter.value = value
-    clearTimeout(filterTimer)
-    filterTimer = setTimeout(() => {
-      void refreshInference()
-    }, FILTER_DEBOUNCE_MS)
-  }
-
-  let inferenceSeq = 0
-
-  /** 模型过滤局部刷新：只重拉火山推理接口，不打扰其余平台。序号守卫丢弃乱序响应。 */
-  async function refreshInference(): Promise<void> {
-    const seq = ++inferenceSeq
-    const model = modelFilter.value.trim() || undefined
-    const result = await Promise.allSettled([api.volcInference(VOLC_DETAILS_DAYS, model)])
-    if (seq !== inferenceSeq) {
-      return
-    }
-    applyResult(result[0], volcInference)
   }
 
   /**
@@ -395,7 +369,6 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
   onUnmounted(() => {
     clearInterval(refreshTimer)
-    clearTimeout(filterTimer)
     document.removeEventListener('visibilitychange', onVisibilityChange)
   })
 
@@ -420,12 +393,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     lastUpdated,
     nextRefreshAt,
     autoRefresh,
-    modelFilter,
     site,
     refreshIntervalMs,
     refreshIntervalSeconds,
     refresh,
-    refreshInference,
-    onFilterInput,
   }
 })

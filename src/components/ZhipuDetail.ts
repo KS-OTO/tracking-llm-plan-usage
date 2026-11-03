@@ -24,7 +24,6 @@ import {
   countMetric,
   field,
   identityFields,
-  link,
   moneyField,
   moneyMetric,
   notice,
@@ -32,6 +31,7 @@ import {
   windowQuota,
 } from '../detail'
 import { formatTokens } from '../format'
+import { consoleLinks } from '../consoleLinks'
 
 type ZhipuAccount = ZhipuPackagesData & AccountIdentity
 type ZhipuAccountEnvelope = AccountEnvelope<ZhipuPackagesData>
@@ -135,7 +135,7 @@ export function toZhipuDetail(account: ZhipuAccount, variant: 'plan' | 'balance'
   const packages = 'data' in account.packages ? account.packages.data : []
   const noPlan = codingPlan?.noPlan === true
   return {
-    identity: identityFields(account, 'ZHIPU_LABEL / ZHIPU_LABEL_N'),
+    identity: identityFields(account),
     windows: codingPlan ? codingWindows(codingPlan, planCard) : [],
     balances: balance ? balanceMetrics(balance, !planCard) : [],
     metrics: [
@@ -156,7 +156,7 @@ export function toZhipuDetail(account: ZhipuAccount, variant: 'plan' | 'balance'
           ]
         : []),
     ],
-    links: [link('控制台用量页', 'https://www.bigmodel.cn/coding-plan/personal/usage', 'console')],
+    links: consoleLinks('Zhipu'),
     // 失败告警只在**属于这张卡**的时候出现（套餐卡的弹窗里不该有余额接口的错误）；
     // 卡面负责的那一半失败时必须上卡面 —— 否则用户看到的是「空卡 + 没有解释」。
     notices: [

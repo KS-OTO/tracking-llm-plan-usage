@@ -78,7 +78,7 @@ describe('ZhipuSection', () => {
     const detail = await openDetail(wrapper)
     expect(detail).toContain('Coding Plan 等级')
     expect(detail).toContain('Max')
-    expect(detail).toContain('控制台用量页')
+    expect(detail).toContain('控制台')
     expect(detail).toContain('GLM 资源包 A')
     expect(detail).toContain('付费')
     expect(detail).toContain('5.00M')
