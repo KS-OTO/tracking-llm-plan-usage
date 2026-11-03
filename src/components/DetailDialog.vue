@@ -14,6 +14,8 @@ defineProps<{
   title: string
   /** 副标题：通常是 Key 掩码，用于在多个同名别名之间消歧。 */
   subtitle?: string
+  /** 平台控制台地址：放在标题行右侧，与关闭按钮同级。 */
+  consoleUrl?: string
 }>()
 
 const visible = ref(false)
@@ -36,12 +38,26 @@ const visible = ref(false)
   <t-dialog
     v-if="visible"
     v-model:visible="visible"
-    :header="title"
     :footer="false"
     width="720px"
     placement="center"
     attach="body"
   >
+    <!-- 控制台入口必须贴着标题行：弹窗正文只放数据，外链不跟着滚动内容走 -->
+    <template #header>
+      <div class="detail-dialog-header">
+        <span class="detail-dialog-title">{{ title }}</span>
+        <a
+          v-if="consoleUrl"
+          class="detail-dialog-console"
+          :href="consoleUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          控制台 ↗
+        </a>
+      </div>
+    </template>
     <div v-if="subtitle" class="muted detail-subtitle">Key {{ subtitle }}</div>
     <slot />
   </t-dialog>
@@ -51,5 +67,36 @@ const visible = ref(false)
 .detail-trigger {
   margin-left: auto;
   flex-shrink: 0;
+}
+
+/* TDesign 的 header 插槽渲染在 .t-dialog__header-content 内：
+ * 让标题与「控制台」同一行，链接靠右，紧邻关闭按钮。 */
+.detail-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: var(--td-size-4);
+  width: 100%;
+  min-width: 0;
+}
+
+.detail-dialog-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-dialog-console {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--td-text-color-brand);
+  font-size: var(--td-font-size-body-small);
+  font-weight: normal;
+  text-decoration: none;
+}
+
+.detail-dialog-console:hover,
+.detail-dialog-console:focus-visible {
+  text-decoration: underline;
 }
 </style>

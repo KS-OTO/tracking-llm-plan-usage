@@ -40,7 +40,6 @@ export function toBalanceDetail(account: BalanceAccount): AccountDetail {
     ],
     tables: [],
     meta: [
-      field('平台', account.provider),
       ...(account.plan ? [field('套餐', account.plan)] : []),
       ...(account.details ?? []).map((detail) =>
         moneyField(detail.label, detail.value, detail.unit),

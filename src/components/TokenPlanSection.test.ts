@@ -214,9 +214,9 @@ describe('TokenPlanSection', () => {
     expect(cookieDetail).not.toContain('数据来源')
     expect(cookieDetail).toContain('控制台')
     expect(
-      Array.from(document.body.querySelectorAll<HTMLAnchorElement>('.detail-links a')).some((a) =>
-        a.href.startsWith('https://bailian.console.aliyun.com/'),
-      ),
+      Array.from(
+        document.body.querySelectorAll<HTMLAnchorElement>('.t-dialog__header-content a'),
+      ).some((a) => a.href.startsWith('https://bailian.console.aliyun.com/')),
     ).toBe(true)
 
     const fromCli = mountWithTDesign(TokenPlanSection, {

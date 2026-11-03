@@ -287,6 +287,7 @@ test.describe('dashboard smoke', () => {
                   {
                     keyHint: 'sub****key',
                     provider: 'Sub2API',
+                    consoleUrl: 'https://sub.example.com',
                     balance: null,
                     unit: 'USD',
                     plan: 'Ultra',
@@ -305,9 +306,29 @@ test.describe('dashboard smoke', () => {
     await expect(page.locator('#anchor-plans-command-code')).toBeVisible({ timeout: 30_000 })
     await expect(page.locator('#anchor-plans-command-code')).toContainText('1 / 10 credits')
 
+    // 控制台入口在详情弹窗标题行；窗口条已含明细，不再重复「窗口明细」表
+    await page.locator('#anchor-plans-command-code .detail-trigger').first().click()
+    const commandDialog = page.locator('.t-dialog__ctx:visible').last()
+    await expect(commandDialog.locator('.t-dialog__header-content a')).toHaveAttribute(
+      'href',
+      'https://commandcode.ai/settings/billing',
+    )
+    await expect(commandDialog).not.toContainText('窗口明细')
+    await expect(commandDialog).not.toContainText('平台')
+    await commandDialog.locator('.t-dialog__close').click()
+
     await page.locator('.t-menu__item', { hasText: '余额账户' }).click()
     await expect(page.locator('#anchor-subapi')).toBeVisible()
     await expect(page.locator('#anchor-subapi')).toContainText('Ultra（不限量）')
+
+    // Sub2API 是自托管站点：控制台地址由服务端下发，仍落在标题行
+    await page.locator('#anchor-subapi .detail-trigger').first().click()
+    const subDialog = page.locator('.t-dialog__ctx:visible').last()
+    await expect(subDialog.locator('.t-dialog__header-content a')).toHaveAttribute(
+      'href',
+      'https://sub.example.com',
+    )
+    await subDialog.locator('.t-dialog__close').click()
   })
 
   test('pay-as-you-go Zhipu account stays out of the subscription tab', async ({ page }) => {
