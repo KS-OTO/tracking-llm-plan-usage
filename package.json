@@ -48,18 +48,18 @@
   },
   "dependencies": {
     "pinia": "^4.1.0",
-    "tdesign-icons-vue-next": "^0.4.11",
-    "tdesign-vue-next": "^1.20.10",
-    "vue": "^3.5.44",
+    "tdesign-icons-vue-next": "^0.4.12",
+    "tdesign-vue-next": "^1.20.11",
+    "vue": "^3.5.45",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@tsconfig/node24": "^24.0.5",
     "@types/bun": "^1.4.4",
     "@types/connect": "^3.4.38",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/test-utils": "^2.5.1",
     "@vue/tsconfig": "^0.9.1",
@@ -70,9 +70,9 @@
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
     "vite-plugin-vue-devtools": "^8.1.5",
     "vite-plus": "1.4.0",
-    "vue-eslint-parser": "^10.4.1",
-    "vue-tsc": "^3.3.13",
-    "wrangler": "^4.152.0"
+    "vue-eslint-parser": "^10.4.2",
+    "vue-tsc": "^3.3.14",
+    "wrangler": "^4.158.0"
   },
   "engines": {
     "node": "^22.18.0 || >=24.12.0"
