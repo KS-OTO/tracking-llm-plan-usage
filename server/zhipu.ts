@@ -34,11 +34,11 @@ function parseZhipuBody<T>(schema: z.ZodType<T>, json: unknown): T {
 }
 
 export class ZhipuApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
+  code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
   }
 }
 
@@ -49,7 +49,6 @@ const ErrorEnvelope = z.object({
 async function zhipuRequest(
   url: string,
   headers: Record<string, string>,
-  apiKey: string,
   label: string,
 ): Promise<unknown> {
   let res: Response
@@ -188,7 +187,6 @@ export async function getZhipuCodingPlanQuota(
   const json = await zhipuRequest(
     `${ZHIPU_OPEN_BASE_URL}/api/monitor/usage/quota/limit${query}`,
     headers,
-    apiKey,
     'Coding Plan 额度查询',
   )
   const body = parseZhipuBody(ZhipuQuotaBody, json)
@@ -270,7 +268,6 @@ export async function getZhipuAccountBalance(apiKey: string): Promise<ZhipuAccou
   const json = await zhipuRequest(
     `${ZHIPU_BIZ_BASE_URL}/account/query-customer-account-report`,
     { authorization: `Bearer ${apiKey}`, 'user-agent': 'llm-usage-monitor/1.0' },
-    apiKey,
     '账户余额查询',
   )
   const body = parseZhipuBody(ZhipuBalanceBody, json)
@@ -331,7 +328,6 @@ export async function getZhipuTokenPackages(apiKey: string): Promise<ZhipuTokenP
   const json = await zhipuRequest(
     `${ZHIPU_BIZ_BASE_URL}/tokenAccounts/list/my?pageNum=1&pageSize=50&filterEnabled=false`,
     { authorization: `Bearer ${apiKey}`, 'user-agent': 'llm-usage-monitor/1.0' },
-    apiKey,
     '资源包查询',
   )
   const body = parseZhipuBody(ZhipuPackagesBody, json)

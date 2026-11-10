@@ -512,16 +512,6 @@ function jumpFromAlert(alert: { platform: string }): void {
   emit('jump', 'subscription', 'volc-plan')
 }
 
-/** t-statistic 文本值：重置倒计时。 */
-function resetDisplayValue(reset: {
-  platform: string
-  account: string
-  window: string
-  resetTime: number
-}): string {
-  return formatReset(reset.resetTime)
-}
-
 function jump(tab: string, anchor: string): void {
   emit('jump', tab, anchor)
 }

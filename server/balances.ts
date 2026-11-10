@@ -13,11 +13,11 @@
 import { z } from 'zod'
 
 export class BalanceApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
+  code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
   }
 }
 

@@ -1,11 +1,11 @@
 import type { InferenceUsageResponse, StatusResponse, UsageResponse } from './types'
 
 export class ApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
+  code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
   }
 }
 

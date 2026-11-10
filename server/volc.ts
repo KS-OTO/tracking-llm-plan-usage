@@ -36,12 +36,13 @@ export interface VolcCredentials {
 }
 
 export class VolcApiError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string,
-  ) {
+  status: number
+  code: string
+
+  constructor(status: number, code: string, message: string) {
     super(message)
+    this.status = status
+    this.code = code
   }
 }
 
