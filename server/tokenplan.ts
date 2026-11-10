@@ -19,11 +19,11 @@ const ENDPOINT = 'https://modelstudio.cn-beijing.aliyuncs.com'
 const VERSION = '2026-02-10'
 
 export class TokenPlanApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
+  code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
   }
 }
 

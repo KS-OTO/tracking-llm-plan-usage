@@ -7,6 +7,14 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     // Extra safety for array and object lookups, but may have false positives.
     "noUncheckedIndexedAccess": true,
+    // 显式 override / 返回值 / switch 贯穿 / 未使用变量：全部按错误处理。
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    // 只允许可被类型擦除的语法（无 enum / namespace / 参数属性）。
+    "erasableSyntaxOnly": true,
 
     // Path mapping for cleaner imports.
     "paths": {

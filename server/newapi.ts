@@ -59,13 +59,14 @@
 import { z } from 'zod'
 
 export class NewApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    /** HTTP 状态码；鉴权失败（401/403）由调用方用于决定回落。 */
-    public status?: number,
-  ) {
+  code: string
+  /** HTTP 状态码；鉴权失败（401/403）由调用方用于决定回落。 */
+  status?: number
+
+  constructor(code: string, message: string, status?: number) {
     super(message)
+    this.code = code
+    this.status = status
   }
 }
 

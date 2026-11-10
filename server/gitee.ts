@@ -19,11 +19,11 @@ import { z } from 'zod'
 const GITEE_AI_BASE_URL = 'https://ai.gitee.com/v1'
 
 export class GiteeAiApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
+  code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
   }
 }
 

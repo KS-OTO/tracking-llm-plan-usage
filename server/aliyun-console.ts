@@ -133,11 +133,11 @@ const PERSONAL_COMMODITY_CODE = 'sfm_tokenplansolo_public_cn'
 const TOKEN_TTL_MS = 10 * 60_000
 
 export class AliyunConsoleApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
+  code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
   }
 }
 

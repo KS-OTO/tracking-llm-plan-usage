@@ -31,7 +31,6 @@ import {
 
 const dashboard = useDashboardStore()
 const {
-  status,
   deepseek,
   volcPlan,
   volcInference,

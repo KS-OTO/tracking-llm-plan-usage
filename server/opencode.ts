@@ -25,11 +25,11 @@ export const OPENCODE_GO_USAGE_URL = 'https://opencode.ai/zen/go/v1/usage'
 const OPENCODE_SESSION_ID = crypto.randomUUID()
 
 export class OpenCodeApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
+  code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
   }
 }
 
