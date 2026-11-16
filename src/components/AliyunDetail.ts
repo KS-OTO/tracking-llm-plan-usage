@@ -10,7 +10,7 @@ import type {
   DataTable,
   Metric,
 } from '../types'
-import { countMetric, identityFields, table } from '../detail'
+import { countMetric, identityFields, sortByTime, table } from '../detail'
 import { consoleLinks } from '../consoleLinks'
 
 /** 服务端把「资源包列表 + 总数」作为一个整体下发。 */
@@ -49,7 +49,8 @@ function packageTable(packages: AliyunResourcePackage[]): DataTable {
       { key: 'period', label: '有效期' },
       { key: 'status', label: '状态', kind: 'status' },
     ],
-    packages.map((pkg) => ({
+    // 到期升序：先到期的资源包先处理；无有效期的沉底
+    sortByTime(packages, (pkg) => pkg.expiryTime, { direction: 'asc' }).map((pkg) => ({
       _key: pkg.instanceId,
       name: packageName(pkg),
       total: amountText(pkg.totalAmount, pkg.totalAmountUnit),

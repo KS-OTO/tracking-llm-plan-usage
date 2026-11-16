@@ -163,6 +163,51 @@ export function table(
   }
 }
 
+/**
+ * 明细表统一的时间排序。
+ *
+ * 行序由适配器**定死**，不依赖上游返回顺序（火山 Agent Plan 的模型调用明细实测就是
+ * 乱序的）。方向按数据语义分两种：
+ * - `desc`（默认）：事件流水 —— 最新的一条在最上；
+ * - `asc`：到期 / 期限 —— 先到期的先处理。
+ *
+ * `timeOf` 可返回毫秒数或可解析的时间文本；空串 / 0 / 解析失败视为「无时间」，
+ * **无论方向都沉底**，不能把「永久有效」排到「明天到期」前面。
+ * 同一时刻保持传入顺序（`toSorted` 稳定），需要二级规则时用 `tieBreak`。
+ */
+export function sortByTime<T>(
+  items: readonly T[],
+  timeOf: (item: T) => string | number | null | undefined,
+  options: {
+    direction?: 'asc' | 'desc'
+    tieBreak?: (a: T, b: T) => number
+  } = {},
+): T[] {
+  const sign = (options.direction ?? 'desc') === 'asc' ? 1 : -1
+  return items.toSorted((a, b) => {
+    const left = timeValue(timeOf(a))
+    const right = timeValue(timeOf(b))
+    if (left === null || right === null) {
+      return left === right ? (options.tieBreak?.(a, b) ?? 0) : left === null ? 1 : -1
+    }
+    return (left - right) * sign || (options.tieBreak?.(a, b) ?? 0)
+  })
+}
+
+/** 时间字段 → 毫秒；0 / 空串 / 非法文本一律 `null`（会沉到表尾）。 */
+export function timeValue(value: string | number | null | undefined): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+  if (!value) {
+    return null
+  }
+  // 上游有时给 'YYYY-MM-DD HH:mm:ss'（空格分隔）：Safari 不认这种写法，
+  // 换成 ISO 的 'T' 再解析，避免整张表被当成「无时间」而退回上游乱序。
+  const ms = Date.parse(value.includes(' ') ? value.replace(' ', 'T') : value)
+  return Number.isNaN(ms) ? null : ms
+}
+
 /** 告警（④ 附加区）。 */
 export function notice(level: Notice['level'], text: string): Notice {
   return { level, text }

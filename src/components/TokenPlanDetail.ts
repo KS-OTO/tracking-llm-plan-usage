@@ -19,7 +19,15 @@ import type {
   TokenPlanSharedPackage,
   WindowQuota,
 } from '../types'
-import { countMetric, field, identityFields, notice, table, windowQuota } from '../detail'
+import {
+  countMetric,
+  field,
+  identityFields,
+  notice,
+  sortByTime,
+  table,
+  windowQuota,
+} from '../detail'
 import { consoleLinks } from '../consoleLinks'
 import { formatTokens } from '../format'
 import { formatDateTime } from '../utils'
@@ -134,7 +142,11 @@ function seatTable(seats: TokenPlanSeat[]): DataTable {
       { key: 'remaining', label: '剩余 (CREDITS)', align: 'right' },
       { key: 'status', label: '状态', kind: 'status' },
     ],
-    seats.map((seat) => {
+    // 订阅到期升序：先到期的座席先处理；同一到期时刻按实例名，行序不依赖上游
+    sortByTime(seats, (seat) => seat.endTime, {
+      direction: 'asc',
+      tieBreak: (a, b) => a.instanceCode.localeCompare(b.instanceCode),
+    }).map((seat) => {
       const equity = seat.equityList[0]
       return {
         _key: seat.seatId,
@@ -159,7 +171,11 @@ function packageTable(packages: TokenPlanSharedPackage[]): DataTable {
       { key: 'remaining', label: '剩余 (CREDITS)', align: 'right' },
       { key: 'status', label: '状态', kind: 'status' },
     ],
-    packages.map((pkg) => {
+    // 额度周期结束升序（上游给的是秒）；无周期的沉底，同一时刻按实例名
+    sortByTime(packages, (pkg) => pkg.equityList[0]?.cycleEndTime, {
+      direction: 'asc',
+      tieBreak: (a, b) => a.instanceCode.localeCompare(b.instanceCode),
+    }).map((pkg) => {
       const equity = pkg.equityList[0]
       return {
         _key: pkg.instanceCode,

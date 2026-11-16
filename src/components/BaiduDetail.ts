@@ -12,7 +12,7 @@ import type {
   QianfanPackage,
   QianfanTpmQuota,
 } from '../types'
-import { countMetric, identityFields, table, tokenMetric } from '../detail'
+import { countMetric, identityFields, sortByTime, table, tokenMetric } from '../detail'
 import { consoleLinks } from '../consoleLinks'
 import { formatCount } from '../format'
 
@@ -46,7 +46,8 @@ function packageTable(packages: QianfanPackage[]): DataTable {
       { key: 'expiredTime', label: '到期时间' },
       { key: 'status', label: '状态', kind: 'status' },
     ],
-    packages.map((pkg) => ({
+    // 到期升序：先到期的量包先处理；无到期时间的沉底
+    sortByTime(packages, (pkg) => pkg.expiredTime, { direction: 'asc' }).map((pkg) => ({
       _key: pkg.packageId,
       serviceName: pkg.serviceName,
       specification: pkg.specification,
@@ -68,13 +69,16 @@ function tpmTable(quotas: QianfanTpmQuota[]): DataTable {
       { key: 'paymentTiming', label: '付费' },
       { key: 'status', label: '状态', kind: 'status' },
     ],
-    quotas.map((quota) => ({
-      _key: quota.instanceId,
-      model: quota.model,
-      tpm: formatCount(quota.tpm),
-      paymentTiming: quota.paymentTiming === 'Postpaid' ? '后付费' : quota.paymentTiming,
-      status: statusLabel(quota.status),
-    })),
+    // 没有时间字段：按配额降序、模型名升序，行序同样不依赖上游
+    quotas
+      .toSorted((a, b) => b.tpm - a.tpm || a.model.localeCompare(b.model))
+      .map((quota) => ({
+        _key: quota.instanceId,
+        model: quota.model,
+        tpm: formatCount(quota.tpm),
+        paymentTiming: quota.paymentTiming === 'Postpaid' ? '后付费' : quota.paymentTiming,
+        status: statusLabel(quota.status),
+      })),
   )
 }
 

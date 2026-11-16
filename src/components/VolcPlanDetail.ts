@@ -21,6 +21,7 @@ import {
   field,
   identityFields,
   notice,
+  sortByTime,
   table,
   tokenMetric,
   windowQuota,
@@ -98,7 +99,8 @@ export function buildInferenceView(
       }),
       EMPTY_TOTALS,
     ),
-    rows: rows.toSorted((a, b) => (a.day < b.day ? 1 : -1)),
+    // 推理用量按天：日期倒序（最新一天在上），与模型调用明细同一个方向
+    rows: sortByTime(rows, (row) => row.day, { direction: 'desc' }),
     theme: 'warning',
     message: '',
   }
@@ -194,7 +196,12 @@ function detailsTable(account: VolcAccount): DataTable {
       { key: 'usage', label: '用量', align: 'right' },
       { key: 'billingType', label: '计费类型', kind: 'status' },
     ],
-    account.details.map((entry) => ({
+    // 行序在适配器里定死：上游的明细顺序实测是乱的。
+    // 同一天会出多条（不同模型）→ 用量降序、模型名升序，保证同日行序也稳定。
+    sortByTime(account.details, (entry) => entry.time, {
+      direction: 'desc',
+      tieBreak: (a, b) => b.usage - a.usage || a.objectName.localeCompare(b.objectName),
+    }).map((entry) => ({
       _key: `${entry.time}-${entry.objectName}`,
       time: formatDateTime(entry.time),
       objectName: entry.objectName,

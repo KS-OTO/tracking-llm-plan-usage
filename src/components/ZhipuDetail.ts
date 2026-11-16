@@ -27,6 +27,7 @@ import {
   moneyField,
   moneyMetric,
   notice,
+  sortByTime,
   table,
   windowQuota,
 } from '../detail'
@@ -114,7 +115,8 @@ function packageTable(packages: ZhipuTokenPackage[]) {
       { key: 'remaining', label: '剩余', align: 'right' },
       { key: 'expire', label: '到期时间' },
     ],
-    rows.map((pkg) => ({
+    // 到期升序：先到期的资源包先处理；无到期时间的沉底
+    sortByTime(rows, (pkg) => pkg.packageExpirationTime, { direction: 'asc' }).map((pkg) => ({
       _key: String(pkg.id),
       // 场景后缀进括号：同一类资源包会按场景拆成多条，只显示名字看不出差别
       name: pkg.suitableScene

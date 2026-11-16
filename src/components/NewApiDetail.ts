@@ -126,12 +126,15 @@ function modelTable(account: NewApiAccount, unit: string | undefined): DataTable
       { key: 'quota', label: '额度', align: 'right' },
       { key: 'usage', label: '请求 / Tokens', align: 'right' },
     ],
-    account.models.map((model) => ({
-      _key: model.model,
-      model: model.model,
-      quota: formatMoney(model.quota, unit),
-      usage: `${formatCount(model.requests)} 次 · ${formatCount(model.tokens)} tokens`,
-    })),
+    // 没有时间字段：按 Tokens 降序、模型名升序，行序不依赖上游
+    account.models
+      .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
+      .map((model) => ({
+        _key: model.model,
+        model: model.model,
+        quota: formatMoney(model.quota, unit),
+        usage: `${formatCount(model.requests)} 次 · ${formatCount(model.tokens)} tokens`,
+      })),
   )
 }
 

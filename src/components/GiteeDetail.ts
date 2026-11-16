@@ -14,7 +14,7 @@ import type {
   GiteeVoucherCoupon,
   Metric,
 } from '../types'
-import { identityFields, moneyMetric, table, tokenMetric } from '../detail'
+import { identityFields, moneyMetric, sortByTime, table, tokenMetric } from '../detail'
 import { consoleLinks } from '../consoleLinks'
 import { formatCurrency } from '../format'
 
@@ -50,12 +50,15 @@ function resourceTable(details: GiteePackageDetail[]) {
       { key: 'amount', label: '总金额', align: 'right' },
       { key: 'balance', label: '余额', align: 'right' },
     ],
-    details.map((detail) => ({
-      _key: detail.ident,
-      name: detail.name || detail.ident || '未命名资源包',
-      amount: formatCurrency(detail.amount, CURRENCY),
-      balance: formatCurrency(detail.balance, CURRENCY),
-    })),
+    // 没有时间字段：按余额降序、资源包名升序，行序不依赖上游
+    details
+      .toSorted((a, b) => b.balance - a.balance || a.name.localeCompare(b.name))
+      .map((detail) => ({
+        _key: detail.ident,
+        name: detail.name || detail.ident || '未命名资源包',
+        amount: formatCurrency(detail.amount, CURRENCY),
+        balance: formatCurrency(detail.balance, CURRENCY),
+      })),
   )
 }
 
@@ -69,18 +72,21 @@ function voucherTable(voucher: GiteeVoucher) {
       { key: 'expiredAt', label: '过期时间' },
       { key: 'status', label: '状态', kind: 'status' },
     ],
-    voucher.coupons.map((coupon) => ({
-      _key: coupon.id,
-      // 券名后面缀上服务类型：同一张券适用多种服务时，只显示券名看不出用途
-      catalog:
-        coupon.serviceTypes.length > 0
-          ? `${coupon.catalog}（${coupon.serviceTypes.join(' / ')}）`
-          : coupon.catalog,
-      amount: formatCurrency(coupon.amount, CURRENCY),
-      balance: formatCurrency(coupon.balance, CURRENCY),
-      expiredAt: formatDate(coupon.expiredAt),
-      status: couponStatus(coupon),
-    })),
+    // 到期升序：先过期的券先处理；expiredAt 为 0（无期限）的沉底
+    sortByTime(voucher.coupons, (coupon) => coupon.expiredAt, { direction: 'asc' }).map(
+      (coupon) => ({
+        _key: coupon.id,
+        // 券名后面缀上服务类型：同一张券适用多种服务时，只显示券名看不出用途
+        catalog:
+          coupon.serviceTypes.length > 0
+            ? `${coupon.catalog}（${coupon.serviceTypes.join(' / ')}）`
+            : coupon.catalog,
+        amount: formatCurrency(coupon.amount, CURRENCY),
+        balance: formatCurrency(coupon.balance, CURRENCY),
+        expiredAt: formatDate(coupon.expiredAt),
+        status: couponStatus(coupon),
+      }),
+    ),
     { summary: voucherSummary(voucher) },
   )
 }
