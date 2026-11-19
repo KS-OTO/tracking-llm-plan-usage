@@ -18,6 +18,58 @@ import { resetTimeToMillis, type TokenPlanInfo, type TokenPlanWindow } from './p
 export const OPENCODE_GO_USAGE_URL = 'https://opencode.ai/zen/go/v1/usage'
 
 /**
+ * 单次尝试的超时（毫秒）。健康上游实测 0.3–1.5s，10s 已足够宽松；比原来的 15s 短，
+ * 是为了让「3 次尝试 + 退避」在 cloud-functions 的 maxDuration（60s，见 edgeone.json）
+ * 之内留出余量。
+ */
+const ATTEMPT_TIMEOUT_MS = 10_000
+
+/**
+ * 传输层失败的重试退避基准值（毫秒）；实际等待 = 基准值 × (1 + [0,1) 抖动)。
+ *
+ * 只在 fetch 抛错时重试：`TypeError: fetch failed` 是**连接层面**的瞬时故障
+ * （EdgeOne 边缘出网偶发，实测约 0.3–0.8% 概率失败），换一条新连接重发几乎必然
+ * 成功；而 401/403/4xx/5xx 是上游给出的确定答复，重试只会拿到同一个答案，还会把
+ * 「Key 失效」拖成 3 倍延迟。
+ */
+const RETRY_BACKOFF_MS = [250, 750] as const
+
+/**
+ * 可等待的退避等待。用 `new Promise` 而不是 `Promise.withResolvers()`：后者要求
+ * `lib: es2024`，而 tsconfig.node 继承 @tsconfig/node24 的 lib 设置（不含该 API）。
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+/**
+ * 把 undici 的失败链摊平成一行。
+ *
+ * `TypeError: fetch failed` 自身不含任何线索：真正的错误码在 `cause` 链里
+ * （`ECONNRESET` / `ETIMEDOUT` / `UND_ERR_CONNECT_TIMEOUT` / `EAI_AGAIN` …）。
+ * 线上只能通过这条 message 观察（EdgeOne 日志分析只有日志文本），所以 `String(cause)`
+ * 等于把唯一线索丢掉；另外 `AggregateError`（autoSelectFamily 的多地址尝试全部失败）
+ * 的 message 是空串，只有 `code` 有信息量。
+ */
+function describeFetchFailure(cause: unknown): string {
+  const parts: string[] = []
+  let current: unknown = cause
+  for (let depth = 0; depth < 4 && current !== undefined && current !== null; depth++) {
+    const err = current as { message?: unknown; code?: unknown; cause?: unknown }
+    const message = typeof err.message === 'string' ? err.message : ''
+    const code = typeof err.code === 'string' ? err.code : ''
+    const text = [message, code && `(${code})`].filter(Boolean).join(' ')
+    if (text && !parts.includes(text)) {
+      parts.push(text)
+    }
+    current = err.cause
+  }
+  return parts.length > 0 ? parts.join(' <- ') : String(cause)
+}
+
+/**
  * upstream 从 2026-09-06 起要求带上 `x-opencode-session`（用于把后台轮询
  * 与普通推理请求区分开）；缺失会被当作异常客户端。进程/isolate 内复用同一个
  * 随机 ID 即可，不需要持久化。
@@ -122,21 +174,47 @@ export function parseOpenCodeGoUsage(body: unknown): TokenPlanInfo {
   return { provider: 'OpenCode Go', windows }
 }
 
-/** OpenCode Go 订阅额度。 */
-export async function fetchOpenCodeGoUsage(apiKey: string): Promise<TokenPlanInfo> {
-  let res: Response
+/** 单次尝试：连接层失败时按 `RETRY_BACKOFF_MS` 退避后递归重试，用尽则抛出原始错误。 */
+async function fetchUsageWithRetry(apiKey: string, attempt: number): Promise<Response> {
   try {
-    res = await fetch(OPENCODE_GO_USAGE_URL, {
+    return await fetch(OPENCODE_GO_USAGE_URL, {
       headers: {
         authorization: `Bearer ${apiKey}`,
         accept: 'application/json',
         'user-agent': 'llm-usage-monitor/1.0',
         'x-opencode-session': OPENCODE_SESSION_ID,
       },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
     })
   } catch (cause) {
-    throw new OpenCodeApiError('NetworkError', `OpenCode Go 请求失败: ${String(cause)}`)
+    const backoff = RETRY_BACKOFF_MS[attempt]
+    if (backoff === undefined) {
+      throw cause
+    }
+    console.warn(
+      `[opencode] usage fetch failed (attempt ${attempt + 1}/${RETRY_BACKOFF_MS.length + 1}), retrying: ${describeFetchFailure(cause)}`,
+    )
+    await delay(backoff * (1 + Math.random()))
+    return fetchUsageWithRetry(apiKey, attempt + 1)
+  }
+}
+
+/**
+ * OpenCode Go 订阅额度。
+ *
+ * 连接层失败会重试 `RETRY_BACKOFF_MS.length` 次：多个 Key 并行查询时，边缘出网会在
+ * 一次调用内同时开十几条新连接，偶发 1–2 条被重置/超时（实测约 0.3% 失败，且与 Key
+ * 无关），重试即恢复 —— 机制见 `describeFetchFailure`。
+ */
+export async function fetchOpenCodeGoUsage(apiKey: string): Promise<TokenPlanInfo> {
+  const attempts = RETRY_BACKOFF_MS.length + 1
+  let res: Response
+  try {
+    res = await fetchUsageWithRetry(apiKey, 0)
+  } catch (cause) {
+    const detail = describeFetchFailure(cause)
+    console.error(`[opencode] usage fetch failed after ${attempts} attempts: ${detail}`)
+    throw new OpenCodeApiError('NetworkError', `OpenCode Go 请求失败（已尝试 ${attempts} 次）: ${detail}`)
   }
 
   const text = await res.text()

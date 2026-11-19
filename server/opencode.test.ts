@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vite-plus/test'
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 
-import { OpenCodeApiError, parseOpenCodeGoUsage } from './opencode.ts'
+import { fetchOpenCodeGoUsage, OpenCodeApiError, parseOpenCodeGoUsage } from './opencode.ts'
 
 // 契约来源：cc-switch PR #6547 —— GET {baseUrl}/usage → usage.rolling/weekly/monthly，
 // 每窗口 { percent, resetsAt }；percent 直接是「已用百分比」。
@@ -152,5 +152,85 @@ describe('parseOpenCodeGoUsage window status', () => {
     })
 
     expect(result.windows.map((item) => item.status)).toEqual([undefined, undefined])
+  })
+})
+
+// 来源：线上 EdgeOne 多 Key 并发查询时偶发 `TypeError: fetch failed`（实测约 0.3%，
+// 与 Key 无关；cause 链为 AggregateError/ETIMEDOUT，即连接建立失败）。重试是修复手段，
+// 因此「重试后成功」与「重试耗尽」两条路径都必须能被驱动。
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+
+/** undici 的错误链形态：TypeError('fetch failed') → { cause: Error { code } }。 */
+function networkFailure(code: string): TypeError {
+  return Object.assign(new TypeError('fetch failed'), {
+    cause: Object.assign(new Error(''), { code }),
+  })
+}
+
+describe('fetchOpenCodeGoUsage transport retry', () => {
+  const okBody = {
+    usage: {
+      rolling: { percent: 10, resetsAt: ISO_ROLLING },
+      weekly: { percent: 20, resetsAt: ISO_WEEKLY },
+    },
+  }
+
+  it('retries a connection-level failure and returns the recovered payload', async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls += 1
+      return calls === 1
+        ? Promise.reject(networkFailure('ECONNRESET'))
+        : Promise.resolve(Response.json(okBody))
+    })
+
+    const pending = fetchOpenCodeGoUsage('oc-key')
+    await vi.advanceTimersByTimeAsync(2_000)
+    const result = await pending
+
+    expect(calls).toBe(2)
+    expect(result.windows.map((window) => window.percent)).toEqual([10, 20])
+  })
+
+  it('gives up after the retry budget and reports the whole cause chain', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls += 1
+      return Promise.reject(networkFailure('ETIMEDOUT'))
+    })
+
+    const pending = fetchOpenCodeGoUsage('oc-key').catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(5_000)
+    const error = await pending
+
+    // 错误文本是线上唯一可见的线索（EdgeOne 日志分析只有日志文本），必须带全 cause 链
+    if (!(error instanceof OpenCodeApiError)) {
+      throw new Error(`expected OpenCodeApiError, got ${String(error)}`)
+    }
+    expect(error.message).toMatch(/已尝试 3 次/)
+    expect(error.message).toContain('fetch failed <- (ETIMEDOUT)')
+
+    expect(calls).toBe(3)
+  })
+
+  it('does not retry a deterministic HTTP error', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls += 1
+      return Promise.resolve(Response.json({ error: { message: 'Unauthorized' } }, { status: 401 }))
+    })
+
+    await expect(fetchOpenCodeGoUsage('oc-key')).rejects.toThrow(
+      'OpenCode Go API Key 无效或已失效（HTTP 401）',
+    )
+    expect(calls).toBe(1)
   })
 })
