@@ -41,6 +41,9 @@ bun run check
 `vp check` 放最后是有原因的：它连 **Markdown 表格对齐**都管，会让前面刚改过的文件
 再次变动。它报格式问题时用 `bunx vp check --fix`，然后**再跑一次确认 0/0**。
 
+`bun run lint` 等同 `vp check --fix`，两者规则集一致。**不要只跑 `vp lint` / `bunx vp lint`**：
+它只含 oxlint，不含 oxfmt 格式，CI 的第 4 道会用 2 个文件的格式差异把你拦下来。
+
 > 改了任意 `.vue` 文件，`build` 这道是**必须**跑的 —— `vp check` 不做模板类型检查，
 > 只靠它会把类型错误放进仓库。
 

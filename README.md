@@ -204,6 +204,9 @@ bunx vp check          # 4. Oxfmt + Oxlint + tsgolint —— 必须最后跑
 > 改了任意 `.vue` 文件，`build` 这道**必须**跑 —— `vp check` 不做模板类型检查。
 > `bunx vp check --fix` 能自动修格式，但修完要**再跑一遍**确认 0 error / 0 warning。
 
+> `bun run lint` 就是 `vp check --fix`（与第 4 道门禁同一套规则）。**别只跑 `vp lint`**：
+> 它只有 oxlint，不含 oxfmt 格式检查，CI 会因此挂掉。
+
 动手前请读 [`CONTRIBUTING.md`](CONTRIBUTING.md)（代码铁律、PR 流程、凭据纪律），
 设计决策写进 [`docs/design-baseline.md`](docs/design-baseline.md)，
 开发环境的完整说明见 [开发指南](https://github.com/KS-OTO/tracking-llm-plan-usage/wiki/Development)。

@@ -43,7 +43,7 @@
     "check": "bun run test:unit && bun run build && bun run test:e2e && vp check",
     "build-only": "vp build",
     "type-check": "vue-tsc --build",
-    "lint": "vp lint . --fix",
+    "lint": "vp check --fix",
     "format": "vp fmt"
   },
   "dependencies": {
