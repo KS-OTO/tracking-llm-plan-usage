@@ -25,7 +25,7 @@ const MODEL_DOC_LINKS: readonly ModelDocLink[] = [
   { match: /openrouter/, url: 'https://openrouter.ai/models' },
   {
     match: /opencode/,
-    url: 'https://opencode.ai/docs/zh-cn/go/#%E9%A2%84%E4%BC%B0%E8%AF%B7%E6%B1%82%E6%95%B0',
+    url: 'https://opencode.ai/console/go#models',
   },
   { match: /kimi/, url: 'https://www.kimi.com/code/docs/kimi-code/models.html' },
   { match: /minimax/, url: 'https://platform.minimaxi.com/docs/guides/models-intro' },

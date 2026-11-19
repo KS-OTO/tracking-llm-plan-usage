@@ -92,7 +92,7 @@ describe('PlansSection', () => {
     expect(
       Array.from(
         document.body.querySelectorAll<HTMLAnchorElement>('.t-dialog__header-content a'),
-      ).some((a) => a.href === 'https://opencode.ai/console/go'),
+      ).some((a) => a.href === 'https://opencode.ai/console/workspace'),
     ).toBe(true)
     expect(detail).toContain('重置于')
     // 额度窗口条已经包含窗口名、百分比、状态与重置时刻；不再重复一张「窗口明细」表

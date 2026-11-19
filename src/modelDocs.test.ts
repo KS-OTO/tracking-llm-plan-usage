@@ -11,7 +11,7 @@ const DEEPSEEK = 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/'
 const GITEE = 'https://ai.gitee.com/serverless-api'
 const BAIDU = 'https://cloud.baidu.com/doc/qianfan-docs/s/7m95lyy43'
 const OPENROUTER = 'https://openrouter.ai/models'
-const OPENCODE = 'https://opencode.ai/docs/zh-cn/go/#%E9%A2%84%E4%BC%B0%E8%AF%B7%E6%B1%82%E6%95%B0'
+const OPENCODE = 'https://opencode.ai/console/go#models'
 const KIMI = 'https://www.kimi.com/code/docs/kimi-code/models.html'
 const MINIMAX = 'https://platform.minimaxi.com/docs/guides/models-intro'
 

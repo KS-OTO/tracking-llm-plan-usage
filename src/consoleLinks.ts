@@ -27,7 +27,7 @@ const CONSOLE_URLS: Record<string, string> = {
   'Novita AI': 'https://novita.ai/billing',
   'Kimi For Coding': 'https://platform.kimi.com/console',
   MiniMax: 'https://platform.minimax.cn/console/home',
-  'OpenCode Go': 'https://opencode.ai/console/go',
+  'OpenCode Go': 'https://opencode.ai/console/workspace',
   'Command Code': 'https://commandcode.ai/settings/billing',
   ZenMux: 'https://zenmux.ai/',
 }
