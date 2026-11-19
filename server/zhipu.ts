@@ -15,6 +15,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 const ZHIPU_OPEN_BASE_URL = 'https://open.bigmodel.cn'
 const ZHIPU_BIZ_BASE_URL = 'https://bigmodel.cn/api/biz'
 
@@ -53,12 +55,13 @@ async function zhipuRequest(
 ): Promise<unknown> {
   let res: Response
   try {
-    res = await fetch(url, {
-      headers: { ...headers, accept: 'application/json' },
-      signal: AbortSignal.timeout(15_000),
-    })
+    res = await fetchWithRetry(
+      url,
+      { headers: { ...headers, accept: 'application/json' } },
+      { label: `zhipu:${label}` },
+    )
   } catch (cause) {
-    throw new ZhipuApiError('NetworkError', `${label}失败: ${String(cause)}`)
+    throw new ZhipuApiError('NetworkError', describeTransportError(cause, `${label}失败`))
   }
 
   const text = await res.text()

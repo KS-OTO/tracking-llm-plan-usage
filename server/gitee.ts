@@ -16,6 +16,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 const GITEE_AI_BASE_URL = 'https://ai.gitee.com/v1'
 
 export class GiteeAiApiError extends Error {
@@ -62,14 +64,18 @@ const GiteeResponse = z.object({
 export async function fetchGiteePackageBalance(apiKey: string): Promise<GiteePackageBalance> {
   let res: Response
   try {
-    res = await fetch(`${GITEE_AI_BASE_URL}/tokens/packages/balance`, {
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        accept: 'application/json',
+    res = await fetchWithRetry(
+      `${GITEE_AI_BASE_URL}/tokens/packages/balance`,
+      {
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          accept: 'application/json',
+        },
       },
-    })
+      { label: 'gitee:packages' },
+    )
   } catch (cause) {
-    throw new GiteeAiApiError('NetworkError', `请求模力方舟失败: ${String(cause)}`)
+    throw new GiteeAiApiError('NetworkError', describeTransportError(cause, '请求模力方舟失败'))
   }
 
   const text = await res.text()
@@ -177,12 +183,16 @@ export function parseGiteeVoucher(
 async function giteeInternalGet(url: string, cookie: string): Promise<unknown> {
   let res: Response
   try {
-    res = await fetch(url, {
-      headers: { accept: 'application/json', cookie },
-      signal: AbortSignal.timeout(15_000),
-    })
+    res = await fetchWithRetry(
+      url,
+      { headers: { accept: 'application/json', cookie } },
+      { label: 'gitee:internal' },
+    )
   } catch (cause) {
-    throw new GiteeAiApiError('NetworkError', `请求模力方舟内部接口失败: ${String(cause)}`)
+    throw new GiteeAiApiError(
+      'NetworkError',
+      describeTransportError(cause, '请求模力方舟内部接口失败'),
+    )
   }
 
   if (res.status === 401 || res.status === 403) {

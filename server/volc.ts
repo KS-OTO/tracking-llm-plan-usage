@@ -15,6 +15,8 @@ import { z } from 'zod'
 
 import { signVolcRequest } from './sign.ts'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 const textEncoder = new TextEncoder()
 
 async function sha256Hex(input: string): Promise<string> {
@@ -88,16 +90,20 @@ async function arkCall(
     const queryString = Object.entries(query)
       .map(([key, value]) => `${key}=${value}`)
       .join('&')
-    res = await fetch(`https://${host}/?${queryString}`, {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'content-type': 'application/json; charset=UTF-8',
+    res = await fetchWithRetry(
+      `https://${host}/?${queryString}`,
+      {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'content-type': 'application/json; charset=UTF-8',
+        },
+        body: bodyText,
       },
-      body: bodyText,
-    })
+      { label: 'volc:ark' },
+    )
   } catch (cause) {
-    throw new VolcApiError(0, 'NetworkError', `请求火山方舟失败: ${String(cause)}`)
+    throw new VolcApiError(0, 'NetworkError', describeTransportError(cause, '请求火山方舟失败'))
   }
 
   const text = await res.text()

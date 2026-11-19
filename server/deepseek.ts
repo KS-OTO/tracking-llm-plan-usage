@@ -6,6 +6,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 export interface DeepSeekBalanceEntry {
   currency: string
   total: number
@@ -50,15 +52,18 @@ const DeepSeekResponse = z.object({
 export async function fetchDeepSeekBalance(apiKey: string): Promise<DeepSeekBalance> {
   let res: Response
   try {
-    res = await fetch('https://api.deepseek.com/user/balance', {
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        accept: 'application/json',
+    res = await fetchWithRetry(
+      'https://api.deepseek.com/user/balance',
+      {
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          accept: 'application/json',
+        },
       },
-      signal: AbortSignal.timeout(15_000),
-    })
+      { label: 'deepseek' },
+    )
   } catch (cause) {
-    throw new DeepSeekApiError(0, 'NetworkError', `DeepSeek 请求失败: ${String(cause)}`)
+    throw new DeepSeekApiError(0, 'NetworkError', describeTransportError(cause, 'DeepSeek 请求失败'))
   }
   const text = await res.text()
 

@@ -12,6 +12,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 export class BalanceApiError extends Error {
   code: string
 
@@ -62,9 +64,6 @@ const ErrorEnvelope = z.object({
   msg: z.string().optional(),
 })
 
-/** 统一超时：与 CC-Switch 的 15s 对齐，避免一段悬挂连接拖住整轮刷新。 */
-const REQUEST_TIMEOUT_MS = 15_000
-
 /** 非 2xx 的人类可读原因；鉴权失败单独给明确文案。 */
 function httpErrorMessage(provider: string, status: number, detail: string): string {
   if (status === 401) {
@@ -79,12 +78,13 @@ function httpErrorMessage(provider: string, status: number, detail: string): str
 async function balanceGet(url: string, apiKey: string, provider: string): Promise<unknown> {
   let res: Response
   try {
-    res = await fetch(url, {
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
+    res = await fetchWithRetry(
+      url,
+      { headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } },
+      { label: `balances:${provider}` },
+    )
   } catch (cause) {
-    throw new BalanceApiError('NetworkError', `${provider} 请求失败: ${String(cause)}`)
+    throw new BalanceApiError('NetworkError', describeTransportError(cause, `${provider} 请求失败`))
   }
 
   const text = await res.text()

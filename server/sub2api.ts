@@ -14,7 +14,7 @@ import { z } from 'zod'
 
 import { BalanceApiError, type SimpleBalanceInfo } from './balances.ts'
 
-const REQUEST_TIMEOUT_MS = 15_000
+import { describeTransportError, fetchWithRetry } from './transport.ts'
 
 const Sub2ApiBody = z.object({
   isValid: z.boolean().nullish(),
@@ -93,12 +93,13 @@ export async function fetchSub2ApiUsage(
   const url = sub2ApiUsageUrl(baseUrl)
   let res: Response
   try {
-    res = await fetch(url, {
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
+    res = await fetchWithRetry(
+      url,
+      { headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } },
+      { label: 'balances:Sub2API' },
+    )
   } catch (cause) {
-    throw new BalanceApiError('NetworkError', `Sub2API 请求失败: ${String(cause)}`)
+    throw new BalanceApiError('NetworkError', describeTransportError(cause, 'Sub2API 请求失败'))
   }
 
   const text = await res.text()

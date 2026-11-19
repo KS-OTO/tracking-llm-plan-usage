@@ -16,6 +16,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 const HOST = 'qianfan.baidubce.com'
 
 export interface BaiduCredentials {
@@ -132,18 +134,21 @@ async function qianfanCall(
 
   let res: Response
   try {
-    res = await fetch(`https://${HOST}${path}?Action=${action}`, {
-      method: 'POST',
-      headers: {
-        Authorization: authorization,
-        'x-bce-date': xBceDate,
-        'Content-Type': 'application/json',
+    res = await fetchWithRetry(
+      `https://${HOST}${path}?Action=${action}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: authorization,
+          'x-bce-date': xBceDate,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body ?? {}),
       },
-      body: JSON.stringify(body ?? {}),
-      signal: AbortSignal.timeout(15_000),
-    })
+      { label: 'baidu:qianfan' },
+    )
   } catch (cause) {
-    throw new BaiduApiError('NetworkError', `请求百度千帆失败: ${String(cause)}`)
+    throw new BaiduApiError('NetworkError', describeTransportError(cause, '请求百度千帆失败'))
   }
 
   const text = await res.text()

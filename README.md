@@ -97,6 +97,22 @@ bun run dev               # 单进程：前端 5173 + 内置 API（读取 .env�
 配之前请先读 [Cookie 怎么填](https://github.com/KS-OTO/tracking-llm-plan-usage/wiki/Credentials)。
 改完变量**必须重新部署**才对已运行的实例生效。
 
+### 出网策略（新增平台必读）
+
+所有上游调用都走 `server/transport.ts` 的 `fetchWithRetry`，不要直接写 `fetch`：
+
+- **每次尝试 10s 超时，最多 3 次**；两次重试之间是 0–250ms / 0–750ms 的满抖动退避，
+  单次调用的总预算 25s（云函数 `maxDuration` 为 60s）。
+- **只重试连接层失败**（`fetch` 抛错：`ECONNRESET` / `ETIMEDOUT` / `UND_ERR_CONNECT_TIMEOUT` …）。
+  401/403/4xx/5xx 是上游的确定答复，重试只会拿到同一个答案，还会把「Key 失效」拖成 3 倍延迟。
+- **全局在途闸门 8 条**：一次渲染会同时查询十几家平台 × 多 Key，边缘出口在突发建连下偶发丢连接
+  （实测 0.25–0.8%/请求，与 Key、鉴权无关）；闸门把突发压到实测安全的并发，重试只作兜底。
+- 失败文案用 `describeTransportError(cause, 'X 请求失败')`：它把 undici 的 cause 链
+  （`fetch failed <- (ETIMEDOUT)`）和尝试次数带进 message —— 线上只能靠日志文本定位，
+  `String(cause)` 等于丢掉唯一线索。
+
+多 Key 之间本来就是并联、各自捕获错误（`runAccounts`），一家失败不会拖垮同组的其他 Key。
+
 > ⚠️ 部署到公网前先读 [安全](#安全)：本项目**没有**内建访问控制。
 
 ## 配置

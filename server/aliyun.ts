@@ -9,6 +9,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 const textEncoder = new TextEncoder()
 
 async function hmacSha1(key: string, input: string): Promise<Uint8Array> {
@@ -194,13 +196,17 @@ export async function queryResourcePackageInstances(
 
   let res: Response
   try {
-    res = await fetch('https://business.aliyuncs.com/', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ ...params, Signature: signature }).toString(),
-    })
+    res = await fetchWithRetry(
+      'https://business.aliyuncs.com/',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ ...params, Signature: signature }).toString(),
+      },
+      { label: 'aliyun:bss' },
+    )
   } catch (cause) {
-    throw new AliyunApiError('NetworkError', `请求阿里云 BSS 失败: ${String(cause)}`)
+    throw new AliyunApiError('NetworkError', describeTransportError(cause, '请求阿里云 BSS 失败'))
   }
 
   const text = await res.text()

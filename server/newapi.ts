@@ -58,6 +58,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 export class NewApiError extends Error {
   code: string
   /** HTTP 状态码；鉴权失败（401/403）由调用方用于决定回落。 */
@@ -360,9 +362,9 @@ async function newApiGet(
 
   let res: Response
   try {
-    res = await fetch(url, { headers })
+    res = await fetchWithRetry(url, { headers }, { label: 'newapi' })
   } catch (cause) {
-    throw new NewApiError('NetworkError', `New API 请求失败: ${String(cause)}`)
+    throw new NewApiError('NetworkError', describeTransportError(cause, 'New API 请求失败'))
   }
 
   const text = await res.text()

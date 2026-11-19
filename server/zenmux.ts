@@ -18,9 +18,9 @@ import {
   type TokenPlanWindow,
 } from './plans.ts'
 
-export const ZENMUX_DEFAULT_BASE_URL = 'https://zenmux.ai/api/v1'
+import { describeTransportError, fetchWithRetry } from './transport.ts'
 
-const REQUEST_TIMEOUT_MS = 15_000
+export const ZENMUX_DEFAULT_BASE_URL = 'https://zenmux.ai/api/v1'
 
 const ZenMuxWindow = z.object({
   usage_percentage: z.coerce.number().nullish(),
@@ -104,12 +104,13 @@ export async function fetchZenMuxPlan(
 
   let res: Response
   try {
-    res = await fetch(trimmed, {
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
+    res = await fetchWithRetry(
+      trimmed,
+      { headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } },
+      { label: 'plans:ZenMux' },
+    )
   } catch (cause) {
-    throw new PlanApiError('NetworkError', `ZenMux 请求失败: ${String(cause)}`)
+    throw new PlanApiError('NetworkError', describeTransportError(cause, 'ZenMux 请求失败'))
   }
 
   const text = await res.text()

@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 import { signAliyunRoa, type AliyunCredentials } from './aliyun.ts'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 /**
  * 阿里云 Model Studio Token Plan 客户端（ROA 风格 OpenAPI）。
  *
@@ -62,19 +64,23 @@ async function tokenPlanGet(
   let res: Response
   try {
     const queryString = new URLSearchParams(query ?? {}).toString()
-    res = await fetch(`${ENDPOINT}${path}${queryString ? `?${queryString}` : ''}`, {
-      method: 'GET',
-      headers: {
-        accept: 'application/json',
-        date,
-        ...xAcsHeaders,
-        authorization: `acs ${creds.accessKey}:${signature}`,
+    res = await fetchWithRetry(
+      `${ENDPOINT}${path}${queryString ? `?${queryString}` : ''}`,
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          date,
+          ...xAcsHeaders,
+          authorization: `acs ${creds.accessKey}:${signature}`,
+        },
       },
-    })
+      { label: 'tokenplan:modelstudio' },
+    )
   } catch (cause) {
     throw new TokenPlanApiError(
       'NetworkError',
-      `请求 Model Studio Token Plan 失败: ${String(cause)}`,
+      describeTransportError(cause, '请求 Model Studio Token Plan 失败'),
     )
   }
 

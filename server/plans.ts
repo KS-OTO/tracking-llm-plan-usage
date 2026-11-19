@@ -12,6 +12,8 @@
  */
 import { z } from 'zod'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 export class PlanApiError extends Error {
   code: string
 
@@ -76,12 +78,13 @@ const ErrorEnvelope = z.object({
 async function planGet(url: string, apiKey: string, provider: string): Promise<unknown> {
   let res: Response
   try {
-    res = await fetch(url, {
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(15_000),
-    })
+    res = await fetchWithRetry(
+      url,
+      { headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } },
+      { label: `plans:${provider}` },
+    )
   } catch (cause) {
-    throw new PlanApiError('NetworkError', `${provider} 请求失败: ${String(cause)}`)
+    throw new PlanApiError('NetworkError', describeTransportError(cause, `${provider} 请求失败`))
   }
 
   const text = await res.text()

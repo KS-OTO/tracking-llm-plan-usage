@@ -38,6 +38,8 @@ import { z } from 'zod'
 import type { AliyunCredentials } from './aliyun.ts'
 import { resetTimeToMillis } from './plans.ts'
 
+import { describeTransportError, fetchWithRetry } from './transport.ts'
+
 const MODELSTUDIO_HOST = 'modelstudio.cn-beijing.aliyuncs.com'
 const ACCESS_TOKEN_PATH = '/modelstudio/cli/generateAccessToken'
 const ACCESS_TOKEN_ACTION = 'GenerateCLIAccessToken'
@@ -324,14 +326,18 @@ export async function generateCliAccessToken(
 
   let res: Response
   try {
-    res = await fetch(`https://${MODELSTUDIO_HOST}${ACCESS_TOKEN_PATH}`, {
-      method: 'POST',
-      headers,
-    })
+    res = await fetchWithRetry(
+      `https://${MODELSTUDIO_HOST}${ACCESS_TOKEN_PATH}`,
+      {
+        method: 'POST',
+        headers,
+      },
+      { label: 'aliyun-console:access-token' },
+    )
   } catch (cause) {
     throw new AliyunConsoleApiError(
       'NetworkError',
-      `请求 Model Studio GenerateCLIAccessToken 失败: ${String(cause)}`,
+      describeTransportError(cause, '请求 Model Studio GenerateCLIAccessToken 失败'),
     )
   }
 
@@ -497,19 +503,22 @@ export async function fetchSessionToken(
   const profile = CONSOLE_PROFILES[region]
   let res: Response
   try {
-    res = await fetch(profile.sessionUrl, {
-      headers: {
-        accept:
-          region === 'cn'
-            ? 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8'
-            : 'application/json, text/plain, */*',
-        cookie,
-        referer: `${profile.origin}/`,
-        'user-agent': BROWSER_USER_AGENT,
+    res = await fetchWithRetry(
+      profile.sessionUrl,
+      {
+        headers: {
+          accept:
+            region === 'cn'
+              ? 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8'
+              : 'application/json, text/plain, */*',
+          cookie,
+          referer: `${profile.origin}/`,
+          'user-agent': BROWSER_USER_AGENT,
+        },
+        redirect: 'manual',
       },
-      redirect: 'manual',
-      signal: AbortSignal.timeout(15_000),
-    })
+      { label: 'aliyun-console:session' },
+    )
   } catch {
     return undefined
   }
@@ -642,14 +651,20 @@ export function parseGatewayResponse(status: number, text: string): unknown {
 async function postConsoleGateway(req: ConsoleGatewayRequest): Promise<unknown> {
   let res: Response
   try {
-    res = await fetch(req.url, {
-      method: 'POST',
-      headers: req.headers,
-      body: req.body,
-      signal: AbortSignal.timeout(15_000),
-    })
+    res = await fetchWithRetry(
+      req.url,
+      {
+        method: 'POST',
+        headers: req.headers,
+        body: req.body,
+      },
+      { label: 'aliyun-console:gateway' },
+    )
   } catch (cause) {
-    throw new AliyunConsoleApiError('NetworkError', `控制台网关请求失败: ${String(cause)}`)
+    throw new AliyunConsoleApiError(
+      'NetworkError',
+      describeTransportError(cause, '控制台网关请求失败'),
+    )
   }
 
   return parseGatewayResponse(res.status, await res.text())

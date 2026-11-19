@@ -25,9 +25,9 @@ import {
   type TokenPlanWindow,
 } from './plans.ts'
 
-export const COMMAND_CODE_API_BASE = 'https://api.commandcode.ai'
+import { describeTransportError, fetchWithRetry } from './transport.ts'
 
-const REQUEST_TIMEOUT_MS = 15_000
+export const COMMAND_CODE_API_BASE = 'https://api.commandcode.ai'
 
 const ErrorEnvelope = z.object({
   error: z.object({ message: z.string().optional() }).optional(),
@@ -46,12 +46,13 @@ async function commandCodeGet(
 
   let res: Response
   try {
-    res = await fetch(url, {
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
+    res = await fetchWithRetry(
+      url,
+      { headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } },
+      { label: 'plans:Command Code' },
+    )
   } catch (cause) {
-    throw new PlanApiError('NetworkError', `Command Code 请求失败: ${String(cause)}`)
+    throw new PlanApiError('NetworkError', describeTransportError(cause, 'Command Code 请求失败'))
   }
 
   const text = await res.text()
