@@ -102,7 +102,7 @@ bun run dev               # 单进程：前端 5173 + 内置 API（读取 .env�
 所有上游调用都走 `server/transport.ts` 的 `fetchWithRetry`，不要直接写 `fetch`：
 
 - **每次尝试 10s 超时，最多 3 次**；两次重试之间是 0–250ms / 0–750ms 的满抖动退避，
-  单次调用的总预算 25s（云函数 `maxDuration` 为 60s）。
+  退避预算 25s（超出后不再发起新尝试；云函数 `maxDuration` 为 60s）。
 - **只重试连接层失败**（`fetch` 抛错：`ECONNRESET` / `ETIMEDOUT` / `UND_ERR_CONNECT_TIMEOUT` …）。
   401/403/4xx/5xx 是上游的确定答复，重试只会拿到同一个答案，还会把「Key 失效」拖成 3 倍延迟。
 - **全局在途闸门 8 条**：一次渲染会同时查询十几家平台 × 多 Key，边缘出口在突发建连下偶发丢连接

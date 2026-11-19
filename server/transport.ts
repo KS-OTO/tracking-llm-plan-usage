@@ -26,8 +26,9 @@ export const ATTEMPT_TIMEOUT_MS = 10_000
 export const MAX_ATTEMPTS = 3
 
 /**
- * 单次调用（含重试与退避）的总预算。cloud-functions 的 maxDuration 是 60s
- * （见 edgeone.json），单次查询必须远低于它，否则一次抖动会把整页拖死。
+ * 单次调用的退避预算：超出后不再发起**新的**尝试（已在途的尝试另计）。
+ * cloud-functions 的 maxDuration 是 60s（见 edgeone.json），
+ * 3 × 10s 尝试 + 两段退避 ≈ 上限 31.5s，留足余量。
  */
 export const TOTAL_BUDGET_MS = 25_000
 
