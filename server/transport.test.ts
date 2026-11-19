@@ -55,9 +55,9 @@ describe('describeFetchFailure', () => {
 
 describe('describeTransportError', () => {
   it('reports attempts for exhausted retries and the chain for anything else', () => {
-    expect(describeTransportError(new TransportError(3, 'fetch failed <- (ECONNRESET)'), 'X 请求失败')).toBe(
-      'X 请求失败（已尝试 3 次）: fetch failed <- (ECONNRESET)',
-    )
+    expect(
+      describeTransportError(new TransportError(3, 'fetch failed <- (ECONNRESET)'), 'X 请求失败'),
+    ).toBe('X 请求失败（已尝试 3 次）: fetch failed <- (ECONNRESET)')
     expect(describeTransportError(new Error('bad json'), 'X 请求失败')).toBe('X 请求失败: bad json')
   })
 })
@@ -149,7 +149,6 @@ describe('fetchWithRetry', () => {
     expect(started).toHaveLength(8)
 
     await drainWaves(started)
-
 
     expect(await results).toHaveLength(20)
     expect(peak).toBe(8)

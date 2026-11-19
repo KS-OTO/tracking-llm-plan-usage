@@ -63,7 +63,11 @@ export async function fetchDeepSeekBalance(apiKey: string): Promise<DeepSeekBala
       { label: 'deepseek' },
     )
   } catch (cause) {
-    throw new DeepSeekApiError(0, 'NetworkError', describeTransportError(cause, 'DeepSeek 请求失败'))
+    throw new DeepSeekApiError(
+      0,
+      'NetworkError',
+      describeTransportError(cause, 'DeepSeek 请求失败'),
+    )
   }
   const text = await res.text()
 
