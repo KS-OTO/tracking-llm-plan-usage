@@ -121,10 +121,11 @@ function accountCount(slice: { data: { accounts: readonly unknown[] } | null }):
 }
 
 /**
- * 各区块的账号数：决定卡片是否需要**独占整行**。
+ * 各区块的账号数：决定卡片是否需要**独占整行**、是否要**密排**。
  *
  * 半宽单元格放不下两张账号卡（1440 视口下每格约 676px，卡内可用约 628px < 2×360px），
  * 于是 2 个 Key 会被挤成「一行一个 + 换行」；整行后卡内 .grid-cards 自然排成两列。
+ * 5 个 Key 起还要密排（.section-compact，一行最多 5 个），否则整行也只能排 3–4 个。
  */
 const accountCounts = computed(() => ({
   volcPlan: accountCount(volcPlan.value),
@@ -746,7 +747,8 @@ watch(
         />
         <!-- 区块网格：同一行卡片强制等高、等宽（断点与原语见 assets/layout.css）。
              顺序由 subscriptionSections 决定：Key 多的平台优先，同数按平台名首字母；
-             多 Key（≥2）的区块额外加 .grid-span-all 独占整行，让卡内 Key 两两并排 -->
+             多 Key（≥2）的区块额外加 .grid-span-all 独占整行，让卡内 Key 并排；
+             其中 ≥5 个 Key 的区块再加 .section-compact：收窄轨道，一行排满 5 个 -->
         <div v-else class="grid-sections">
           <div
             v-for="section in subscriptionSections"

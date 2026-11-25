@@ -200,16 +200,17 @@ export function shouldSpanFullRow(accountCount: number): boolean {
 }
 
 /**
- * 卡内 Key（账号）数是否多到该**停止加列**、改「一行一个 Key」的紧凑行式（#18）。
+ * 卡内 Key（账号）数是否多到该**收窄轨道**、一行排满 5 个（#18 的既有策略）。
  *
- * 为什么要有这条：`.grid-cards--wide` 的轨道下限是 360px，独占整行后一行最多排 3 列，
- * 5 个 Key 就变成「3 + 2」的残行；而格子越窄，卡内读数越容易撞上 `.grid-metrics`
- * 的容器查询（160px 降一号字），于是同一个平台在 4 个 Key 与 5 个 Key 下字号不同。
- * 到 5 个 Key 时加列的边际收益已经很小（每格只剩约 450px，放不下两个读数并排），
- * 改成一行一个后每个 Key 都用满整行宽度，读数回到正常字号。
+ * `.grid-cards--wide` 的轨道下限是 360px —— 够放下并排读数，但独占整行时
+ * 1440 视口只能排 3 列、1920 视口 4 列，5 个 Key 就成了「4 + 1」的残行。
+ * 达到阈值后由 App.vue 加 `.section-compact`，轨道下限收到 250px：
+ * 桌面端一行最多 5 列（6 列需要的 1560px 超过卡内最大可用宽度 1502px），
+ * 超出的 Key 换行、最后一行左对齐。窄屏按 4 / 3 / 2 / 1 列自然降级。
  *
- * 与 `shouldSpanFullRow` 同源：都由 App.vue 按「这一节有几个 Key」决定，
- * 10 个 Section 自己不判断 —— 各写一遍必然漂。
+ * 阈值取 5：**只有 5 个 Key 起才需要这么窄的卡**；4 个 Key 用 360px 的卡
+ * 仍有 4 列可排，没必要把卡压窄。与 `shouldSpanFullRow` 同源：都由 App.vue
+ * 按「这一节有几个 Key」决定，10 个 Section 自己不判断 —— 各写一遍必然漂。
  */
 export const COMPACT_ACCOUNTS_THRESHOLD = 5
 

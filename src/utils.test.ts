@@ -240,7 +240,7 @@ describe('账号卡网格的列策略（#18）', () => {
     expect(shouldSpanFullRow(2)).toBe(true)
   })
 
-  it('5 个 Key 起切紧凑行式（停止加列）', () => {
+  it('5 个 Key 起切密排（一行最多 5 个，不再一行一个）', () => {
     expect(isCompactAccounts(4)).toBe(false)
     expect(isCompactAccounts(5)).toBe(true)
   })
@@ -261,6 +261,11 @@ describe('账号卡网格的列策略（#18）', () => {
     // 只有谓词、没有规则 = 静默失效
     expect(css).toContain('.grid-span-all {')
     expect(css).toContain('.section-compact .grid-cards {')
-    expect(css).toContain('.section-compact .window-block {')
+    // 密排的轨道下限必须窄到能让 5 个并排：5×240 + 4×12 = 1248 ≤ 卡内最大 1502；
+    // 同时必须宽到 6 个放不下（6×240 + 5×12 = 1500 也放得下，所以下限是 250 而不是 240）。
+    expect(css).toMatch(/\.section-compact \.grid-cards \{\s*--card-min: 250px;/)
+    // 「一行一个」的旧口径不得复活：那会把 5 个 Key 排成 5 行
+    expect(css).not.toContain('.section-compact .window-block {')
+    expect(css).not.toContain('.section-compact .grid-cards {\n  grid-template-columns')
   })
 })
