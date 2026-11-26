@@ -141,7 +141,8 @@ describe('fetchWithRetry', () => {
 
     const results = Promise.all(
       Array.from({ length: 20 }, (_, index) =>
-        fetchWithRetry(`https://example.test/${String(index)}`),
+        // 不同 host，单看全局上限；同 host 的上限由下一条用例覆盖
+        fetchWithRetry(`https://h${String(index)}.example.test/usage`),
       ),
     )
     await flushMicrotasks(5)
@@ -152,5 +153,68 @@ describe('fetchWithRetry', () => {
 
     expect(await results).toHaveLength(20)
     expect(peak).toBe(8)
+  })
+
+  it('caps same-host in-flight requests at 2 so one platform cannot open 5 sockets', async () => {
+    const started: (() => void)[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            started.push(() => {
+              resolve(okResponse())
+            })
+          }),
+      ),
+    )
+
+    // OpenCode Go 的 5 个 Key 就是这样同时发起的：同 host 只放行 2 条
+    const results = Promise.all(
+      Array.from({ length: 5 }, () => fetchWithRetry('https://opencode.test/zen/go/v1/usage')),
+    )
+    await flushMicrotasks(5)
+    expect(started).toHaveLength(2)
+
+    await drainWaves(started)
+
+    expect(await results).toHaveLength(5)
+    // 5 次建连全部发出，只是被分成 2 + 2 + 1 三波
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(5)
+  })
+
+  it('does not let a saturated host starve the other hosts', async () => {
+    const started: (() => void)[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            started.push(() => {
+              resolve(okResponse())
+            })
+          }),
+      ),
+    )
+
+    const busy = Promise.all(
+      Array.from({ length: 5 }, () => fetchWithRetry('https://busy.test/usage')),
+    )
+    await flushMicrotasks(5)
+    // 同 host 上限 2：剩下 3 条在排队
+    expect(started).toHaveLength(2)
+
+    const others = Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        fetchWithRetry(`https://idle${String(index)}.test/u`),
+      ),
+    )
+    await flushMicrotasks(5)
+    // 排队中的 busy 请求不该占住全局槽：2 + 6 = 8，别的 host 一个都不挨饿
+    expect(started).toHaveLength(8)
+
+    await drainWaves(started)
+
+    expect(await Promise.all([busy, others])).toHaveLength(2)
   })
 })

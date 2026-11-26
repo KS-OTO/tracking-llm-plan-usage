@@ -100,10 +100,12 @@ describe('UsageBar', () => {
     expect(mountBar({ note: '周期 30 天' }).find('.window-foot').text()).toContain('周期 30 天')
   })
 
-  it('上游限流状态同时给标题标签与脚注说明', () => {
+  it('上游限流只在标题给标签，脚注不再重复解释同一件事', () => {
     const bar = mountBar({ status: 'rate-limited' })
     expect(bar.find('.window-head .t-tag').text()).toBe('上游限流中')
-    expect(bar.find('.window-foot').text()).toContain('已被上游限流')
+    // 标签已经把话说完了；脚注只留剩余与重置时刻，别把同一句解释再写一遍
+    expect(bar.find('.window-foot').text()).not.toContain('限流')
+    expect(bar.find('.window-foot').text()).toContain('重置于')
   })
 
   it('四段齐全时 DOM 顺序固定：标题 → 进度 → 数值 → 脚注', () => {

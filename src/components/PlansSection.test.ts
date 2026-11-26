@@ -128,7 +128,8 @@ describe('PlansSection', () => {
 
     const text = wrapper.text()
     expect(text).toContain('上游限流中')
-    expect(text).toContain('该窗口已被上游限流')
+    // 标签之外的重复解释已删除：页面里只出现这一次「限流」
+    expect(text).not.toContain('该窗口已被上游限流')
   })
 
   it('renders no status tag for a normal window', () => {
@@ -228,7 +229,7 @@ describe('PlansSection', () => {
   })
 
   it('wraps the stacked windows in .window-list so parallel accounts line up', () => {
-    // 两个账号各 3 个窗口：其中一个多一行「上游限流」说明
+    // 两个账号各 3 个窗口：其中一个窗口带「上游限流中」标签，高度仍需对齐
     const group: PlanGroup = {
       provider: 'OpenCode Go',
       accounts: [
