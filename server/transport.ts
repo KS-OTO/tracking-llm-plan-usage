@@ -155,9 +155,10 @@ function leaveSlot(host: string): void {
   } else {
     inFlightPerHost.delete(host)
   }
-  const index = waiters.findIndex((waiter) => tryEnter(waiter.host))
-  if (index >= 0) {
-    waiters.splice(index, 1)[0].admit()
+  const admitted = waiters.find((waiter) => tryEnter(waiter.host))
+  if (admitted) {
+    waiters.splice(waiters.indexOf(admitted), 1)
+    admitted.admit()
   }
 }
 
