@@ -114,8 +114,10 @@ const footText = computed(() => {
   if (resetAt !== null && resetAt > 0) {
     parts.push(`重置于 ${formatDateTime(resetAt)}`)
   }
-  if (status) {
-    parts.push(windowStatusNote(status))
+  // `rate-limited` 不产生脚注文案（标签已说明），其余未知状态仍原样交代
+  const statusNote = status ? windowStatusNote(status) : null
+  if (statusNote) {
+    parts.push(statusNote)
   }
   if (note) {
     // 平台专属说明随窗口从模型里来（`WindowQuota.note`），不由调用方另外传 prop

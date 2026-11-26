@@ -13,8 +13,11 @@
  * 1. 每次尝试独立超时（`AbortSignal.timeout`）：请求不会无限挂住；
  * 2. **仅**在 fetch 抛错（连接层）时退避重试：401/403/4xx/5xx 是上游的确定答复，
  *    重试只会拿到同一答案，还要把「Key 失效」拖成 3 倍延迟；
- * 3. 全局并发闸门：把「一次渲染 14 个平台 × 多个 Key」的突发建连压到安全水位，
- *    从源头降低抖动概率（重试只是兜底）。
+ * 3. 并发闸门：全局在途上限之外，**再按 origin 单独限流**。一次渲染会把同一平台的
+ *    多个 Key 并行查掉（OpenCode Go 有 5 个 Key 就是 5 条同时建立的连接），
+ *    云函数出口对同一目的地的瞬时 SYN 突发更敏感 —— 2026-11 现场表现是
+ *    「4 个 Key 偶发、5 个 Key 几乎每次刷新都至少一个 `ETIMEDOUT`，有时 4 个一起」。
+ *    把同 origin 在途连接压到 2，失败面从「5 条一起赌」变成「分 3 波各自取证」。
  *
  * 所有调用方都是**只读查询**（余额/额度/套餐），因此重试是幂等的。
  */
@@ -39,6 +42,15 @@ export const TOTAL_BUDGET_MS = 25_000
  * 取 8 落在已验证安全的区间内，同时仍能让 14 个平台并行查询在 2–3 个波次内跑完。
  */
 const MAX_IN_FLIGHT = 8
+
+/**
+ * 同一个 origin 允许的在途请求数。
+ *
+ * 全局 8 只保证总连接数不失控，不保证「不会对同一目的地同时建 5 条」；
+ * 而实测故障恰恰集中在同 origin 的多 Key 并发（见文件头第 3 条）。取 2：
+ * 单平台 5 个 Key 只多花 1–2 秒，却把瞬时 SYN 数从 5 压到 2。
+ */
+const MAX_IN_FLIGHT_PER_HOST = 2
 
 /** 第 N 次重试的退避上限：实际等待 = [0, cap) 的均匀抖动（full jitter，避免多个 Key 同步重发）。 */
 const RETRY_CAP_MS = [250, 750] as const
@@ -101,27 +113,53 @@ export function describeTransportError(cause: unknown, label: string): string {
 }
 
 /**
- * 简单 FIFO 信号量。只做计数，不排队超时——真正的等待上限由每次尝试的超时兜住。
+ * 全局 + 同 host 双重闸门。
+ *
+ * 两个上限同时成立，排队者按 FIFO 顺序逐个检查「这条请求此刻能不能进」，
+ * 因此不会出现「先占全局再等 host」的交叉等待（那会死锁：8 个全局槽全被
+ * 等待同一 host 的请求占住，而该 host 的槽又被等待全局的请求占着）。
+ * 只做计数，不排队超时 —— 真正的等待上限由每次尝试的超时兜住。
  */
 let inFlight = 0
-const waiters: (() => void)[] = []
+const inFlightPerHost = new Map<string, number>()
+const waiters: { host: string; admit: () => void }[] = []
 
-function acquireSlot(): Promise<() => void> {
-  if (inFlight < MAX_IN_FLIGHT) {
-    inFlight++
-    return Promise.resolve(releaseSlot)
+function tryEnter(host: string): boolean {
+  if (inFlight >= MAX_IN_FLIGHT) {
+    return false
+  }
+  const hostInFlight = inFlightPerHost.get(host) ?? 0
+  if (hostInFlight >= MAX_IN_FLIGHT_PER_HOST) {
+    return false
+  }
+  inFlight++
+  inFlightPerHost.set(host, hostInFlight + 1)
+  return true
+}
+
+function acquireSlot(host: string): Promise<() => void> {
+  if (tryEnter(host)) {
+    return Promise.resolve(() => leaveSlot(host))
   }
   return new Promise((resolve) => {
-    waiters.push(() => {
-      inFlight++
-      resolve(releaseSlot)
-    })
+    waiters.push({ host, admit: () => resolve(() => leaveSlot(host)) })
   })
 }
 
-function releaseSlot(): void {
+/** 释放一个槽位，并把这次释放让给队列里第一个此刻可放行的请求。 */
+function leaveSlot(host: string): void {
   inFlight--
-  waiters.shift()?.()
+  const hostInFlight = (inFlightPerHost.get(host) ?? 1) - 1
+  if (hostInFlight > 0) {
+    inFlightPerHost.set(host, hostInFlight)
+  } else {
+    inFlightPerHost.delete(host)
+  }
+  const admitted = waiters.find((waiter) => tryEnter(waiter.host))
+  if (admitted) {
+    waiters.splice(waiters.indexOf(admitted), 1)
+    admitted.admit()
+  }
 }
 
 /** 单次尝试的信号：调用方取消（若有）与本次超时取并集。 */
@@ -154,11 +192,21 @@ export async function fetchWithRetry(
   const timeoutMs = options.timeoutMs ?? ATTEMPT_TIMEOUT_MS
   const maxAttempts = Math.max(1, options.maxAttempts ?? MAX_ATTEMPTS)
   const deadline = Date.now() + TOTAL_BUDGET_MS
-  return attempt(input, init, { label, timeoutMs, maxAttempts, deadline }, 1)
+  return attempt(input, init, { label, host: hostOf(input), timeoutMs, maxAttempts, deadline }, 1)
+}
+
+/** 同 host 限流按 `host:port` 归并；URL 解析失败时退化成同一个桶，不会绕过闸门。 */
+function hostOf(input: string | URL): string {
+  try {
+    return new URL(input instanceof URL ? input.href : input).host
+  } catch {
+    return ''
+  }
 }
 
 interface AttemptConfig {
   label: string
+  host: string
   timeoutMs: number
   maxAttempts: number
   deadline: number
@@ -172,7 +220,7 @@ async function attempt(
   attemptNo: number,
 ): Promise<Response> {
   let cause: unknown
-  const release = await acquireSlot()
+  const release = await acquireSlot(config.host)
   try {
     return await fetch(input, { ...init, signal: attemptSignal(init.signal, config.timeoutMs) })
   } catch (error) {

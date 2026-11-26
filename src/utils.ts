@@ -30,8 +30,19 @@ export function formatReset(ms: number): string {
   return `${hours} 小时 ${minutes} 分后重置`
 }
 
+/**
+ * 时刻文案精确到分钟：`2026/11/30 08:00`。
+ *
+ * 秒对读者没有用 —— 上游给的重置时间本身就只到分钟，多出来的两位永远
+ * 挤压脚注行（`剩余 · 重置于 · 状态说明`），却不提供任何对账价值。
+ * 手写而不用 `toLocaleString`：后者在 Node/浏览器/Hermes 上给出的分隔与补零
+ * 并不一致，跨端快照测试会被无意义地打爆。
+ */
 export function formatDateTime(ms: number): string {
-  return new Date(ms).toLocaleString('zh-CN', { hour12: false })
+  const date = new Date(ms)
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${hours}:${minutes}`
 }
 
 /**
@@ -65,11 +76,16 @@ export function windowStatusLabel(status: string): string {
   return WINDOW_STATUS_LABELS[status] ?? status
 }
 
-/** 状态标签的解释文案（脚注行用）；与 `windowStatusLabel` 成对维护。 */
-export function windowStatusNote(status: string): string {
-  return status === 'rate-limited'
-    ? '该窗口已被上游限流，期间的请求可能被拒绝；百分比仍为已用额度'
-    : `上游返回的窗口状态：${status}`
+/**
+ * 状态标签的解释文案（脚注行用）；与 `windowStatusLabel` 成对维护。
+ *
+ * `rate-limited` 返回 `null`：标题旁的「上游限流中」标签已经把话说完，
+ * 再补一句「该窗口已被上游限流……」只是把同一件事说两遍，还挤占脚注行的宽度
+ * （重置时刻往往会被折行）。未收录的状态仍要原样交代 —— 那时标签是生词，
+ * 读者需要知道它来自上游而不是我们的措辞。
+ */
+export function windowStatusNote(status: string): string | null {
+  return status === 'rate-limited' ? null : `上游返回的窗口状态：${status}`
 }
 
 /**

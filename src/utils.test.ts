@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  formatDateTime,
   formatReset,
   isCompactAccounts,
   maskKey,
@@ -86,6 +87,17 @@ describe('formatReset', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
     expect(formatReset(Date.now() + 3 * 24 * 3_600_000)).toBe('3 天后重置')
+  })
+})
+
+describe('formatDateTime', () => {
+  it('prints the moment down to the minute, never seconds', () => {
+    // 用本地时间构造，避免用例随宿主时区漂移
+    expect(formatDateTime(new Date(2026, 10, 30, 8, 0, 59).getTime())).toBe('2026/11/30 08:00')
+  })
+
+  it('keeps unpadded month/day but zero-pads the clock', () => {
+    expect(formatDateTime(new Date(2026, 8, 5, 9, 7).getTime())).toBe('2026/9/5 09:07')
   })
 })
 
