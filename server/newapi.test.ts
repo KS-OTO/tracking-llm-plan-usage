@@ -414,10 +414,14 @@ describe('fetchNewApi', () => {
   })
 
   it('网络异常直接抛出，不静默降级', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
     vi.stubGlobal('fetch', () => Promise.reject(new Error('ECONNREFUSED')))
-    await expect(
-      fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' }),
-    ).rejects.toThrow(NewApiError)
+    const pending = fetchNewApi({ baseUrl: 'https://ai.example.com/', token: 'sk-test' }).catch(
+      (cause: unknown) => cause,
+    )
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(await pending).toBeInstanceOf(NewApiError)
   })
 
   it('按站点 /api/status 的展示类型折算读数与单位（CNY 站点）', async () => {

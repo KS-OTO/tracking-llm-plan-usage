@@ -12,7 +12,7 @@
  * 因此这里只做三件事，且刻意不做「HTTP 层重试」：
  * 1. 每次尝试独立超时（`AbortSignal.timeout`）：请求不会无限挂住；
  * 2. **仅**在 fetch 抛错（连接层）时退避重试：401/403/4xx/5xx 是上游的确定答复，
- *    重试只会拿到同一答案，还要把「Key 失效」拖成 3 倍延迟；
+ *    重试只会拿到同一答案，还要把「Key 失效」拖成多次尝试的延迟；
  * 3. 并发闸门：全局在途上限之外，**再按 origin 单独限流**。一次渲染会把同一平台的
  *    多个 Key 并行查掉（OpenCode Go 有 5 个 Key 就是 5 条同时建立的连接），
  *    云函数出口对同一目的地的瞬时 SYN 突发更敏感 —— 2026-11 现场表现是
@@ -26,12 +26,13 @@
 export const ATTEMPT_TIMEOUT_MS = 10_000
 
 /** 最多尝试次数（含首次）。 */
-export const MAX_ATTEMPTS = 3
+export const MAX_ATTEMPTS = 5
 
 /**
  * 单次调用的退避预算：超出后不再发起**新的**尝试（已在途的尝试另计）。
  * cloud-functions 的 maxDuration 是 60s（见 edgeone.json），
- * 3 × 10s 尝试 + 两段退避 ≈ 上限 31.5s，留足余量。
+ * 5 × 10s 尝试 + 四段退避 ≈ 上限 57s，因此**预算先于次数生效**：
+ * 上游真的连不上时，第 3、4 次尝试会被预算挡掉，而不是把函数拖到超时。
  */
 export const TOTAL_BUDGET_MS = 25_000
 
@@ -52,8 +53,15 @@ const MAX_IN_FLIGHT = 8
  */
 const MAX_IN_FLIGHT_PER_HOST = 2
 
-/** 第 N 次重试的退避上限：实际等待 = [0, cap) 的均匀抖动（full jitter，避免多个 Key 同步重发）。 */
-const RETRY_CAP_MS = [250, 750] as const
+/**
+ * 第 N 次重试的退避上限：实际等待 = [cap/2, cap] 的均匀抖动。
+ *
+ * 用**带下限**的递增退避而不是 full jitter：线上实测失败是「同一 Key 连续三次尝试
+ * 都在 1–2 秒内失败」（短窗口抖动，不是上游宕机），等待区间若从 0 起算，重试会
+ * 掉进同一个窗口；下限保证每次重试都比上一次更晚、更难与仍在抖动的那段时间重叠。
+ * 抖动上限仍是 cap，多个 Key 同时重试不会排成一列。
+ */
+const RETRY_CAP_MS = [400, 900, 1800, 3600] as const
 
 /** 可等待的退避等待。用 `new Promise` 而不是 `Promise.withResolvers()`（lib 不含该 API）。 */
 function delay(ms: number): Promise<void> {
@@ -103,7 +111,7 @@ export class TransportError extends Error {
  * 传给各 provider 的错误文案：把「重试了几次」与「失败链」一起带出来。
  *
  * provider 用法：`throw new XApiError('NetworkError', describeTransportError(cause, 'X 请求失败'))`
- * → `X 请求失败（已尝试 3 次）: fetch failed <- (ETIMEDOUT)`。
+ * → `X 请求失败（已尝试 5 次）: fetch failed <- (ETIMEDOUT)`。
  */
 export function describeTransportError(cause: unknown, label: string): string {
   if (cause instanceof TransportError) {
@@ -242,7 +250,7 @@ async function attempt(
     throw new TransportError(attemptNo, detail)
   }
 
-  const backoff = Math.min(Math.random() * cap, budgetLeft)
+  const backoff = Math.min(cap / 2 + Math.random() * (cap / 2), budgetLeft)
   console.warn(
     `[transport] ${config.label} 第 ${attemptNo} 次尝试失败（${detail}），${Math.round(backoff)}ms 后重试`,
   )

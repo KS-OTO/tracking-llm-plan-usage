@@ -199,6 +199,7 @@ describe('fetchOpenCodeGoUsage transport retry', () => {
 
   it('gives up after the retry budget and reports the whole cause chain', async () => {
     vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
     let calls = 0
@@ -215,10 +216,10 @@ describe('fetchOpenCodeGoUsage transport retry', () => {
     if (!(error instanceof OpenCodeApiError)) {
       throw new Error(`expected OpenCodeApiError, got ${String(error)}`)
     }
-    expect(error.message).toMatch(/已尝试 3 次/)
+    expect(error.message).toMatch(/已尝试 5 次/)
     expect(error.message).toContain('fetch failed <- (ETIMEDOUT)')
 
-    expect(calls).toBe(3)
+    expect(calls).toBe(5)
   })
 
   it('does not retry a deterministic HTTP error', async () => {

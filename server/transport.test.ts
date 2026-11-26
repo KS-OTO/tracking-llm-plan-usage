@@ -4,6 +4,7 @@ import {
   describeFetchFailure,
   describeTransportError,
   fetchWithRetry,
+  MAX_ATTEMPTS,
   TransportError,
 } from './transport.ts'
 
@@ -39,6 +40,7 @@ async function drainWaves(started: (() => void)[], rounds = 10): Promise<void> {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -78,21 +80,23 @@ describe('fetchWithRetry', () => {
   })
 
   it('throws TransportError with the attempt count once retries are spent', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(transportFailure('ETIMEDOUT')))
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
-    const error: unknown = await fetchWithRetry('https://example.test/usage').catch(
-      (cause: unknown) => cause,
-    )
+    const pending = fetchWithRetry('https://example.test/usage').catch((cause: unknown) => cause)
+    await vi.advanceTimersByTimeAsync(5_000)
+    const error = await pending
 
     expect(error).toBeInstanceOf(TransportError)
     if (!(error instanceof TransportError)) {
       throw new Error('expected TransportError')
     }
-    expect(error.attempts).toBe(3)
-    expect(error.message).toBe('请求失败（已尝试 3 次）: fetch failed <- (ETIMEDOUT)')
-    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(error.attempts).toBe(MAX_ATTEMPTS)
+    expect(error.message).toBe(`请求失败（已尝试 ${MAX_ATTEMPTS} 次）: fetch failed <- (ETIMEDOUT)`)
+    expect(fetch).toHaveBeenCalledTimes(MAX_ATTEMPTS)
   })
 
   it('does not retry an HTTP error response', async () => {
