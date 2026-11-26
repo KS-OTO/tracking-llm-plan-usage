@@ -38,11 +38,22 @@ export function formatReset(ms: number): string {
  * 手写而不用 `toLocaleString`：后者在 Node/浏览器/Hermes 上给出的分隔与补零
  * 并不一致，跨端快照测试会被无意义地打爆。
  */
-export function formatDateTime(ms: number): string {
-  const date = new Date(ms)
+export function formatDateTime(at: number | Date): string {
+  const date = at instanceof Date ? at : new Date(at)
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${formatClock(date)}`
+}
+
+/**
+ * 只需要「几点几分」的场景（页脚「更新于 / 下次刷新」）：`08:00`。
+ *
+ * 与 {@link formatDateTime} 共用同一份补零逻辑，保证全站每一处时刻写法一致；
+ * `toLocaleTimeString` 在不同运行时会给出不同的补零与分隔，测试会被无意义地打爆。
+ */
+export function formatClock(at: number | Date): string {
+  const date = at instanceof Date ? at : new Date(at)
   const hours = String(date.getHours()).padStart(2, '0')
   const minutes = String(date.getMinutes()).padStart(2, '0')
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${hours}:${minutes}`
+  return `${hours}:${minutes}`
 }
 
 /**

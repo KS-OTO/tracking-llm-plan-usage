@@ -22,6 +22,7 @@ import { useThemeStore } from './stores/theme'
 import type { NewApiResponse } from './types'
 import { DEFAULT_SITE_NAME, isFailedAccount } from './types'
 import {
+  formatClock,
   isCompactAccounts,
   pickLogoUrl,
   providerSlug,
@@ -528,12 +529,7 @@ const balanceSections = computed(() =>
   ]).filter((section) => section.hidden !== true),
 )
 
-const lastUpdatedText = computed(() => {
-  if (!lastUpdated.value) {
-    return ''
-  }
-  return lastUpdated.value.toLocaleTimeString('zh-CN', { hour12: false })
-})
+const lastUpdatedText = computed(() => (lastUpdated.value ? formatClock(lastUpdated.value) : ''))
 
 /**
  * 下一次自动刷新的时刻。
@@ -541,12 +537,9 @@ const lastUpdatedText = computed(() => {
  * 为空代表**没有下一次**（自动刷新已关闭，或页面在后台被暂停），
  * 此时文案落到「已暂停」——比显示一个永不到来的时间更诚实。
  */
-const nextRefreshText = computed(() => {
-  if (!nextRefreshAt.value) {
-    return ''
-  }
-  return nextRefreshAt.value.toLocaleTimeString('zh-CN', { hour12: false })
-})
+const nextRefreshText = computed(() =>
+  nextRefreshAt.value ? formatClock(nextRefreshAt.value) : '',
+)
 
 // ---------------------------------------------------------------------------
 // 站点自定义（站点名 / Logo / favicon）：由 /api/status 的 site 字段驱动

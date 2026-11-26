@@ -7,7 +7,7 @@ import { isZhipuPlanAccount } from './ZhipuDetail'
 import { modelDocsUrl } from '../modelDocs'
 import { useDashboardStore } from '../stores/dashboard'
 import { formatCount, formatCurrency, formatTokens } from '../format'
-import { formatReset, providerSlug, sortPlatformSections } from '../utils'
+import { formatClock, formatReset, providerSlug, sortPlatformSections } from '../utils'
 
 const emit = defineEmits<{
   /** 跳转到指定平台卡片：切 Tab + 滚动到锚点。 */
@@ -467,9 +467,7 @@ const summaries = computed<PlatformSummary[]>(() => {
   return sortPlatformSections(out)
 })
 
-const updatedText = computed(() =>
-  lastUpdated.value ? lastUpdated.value.toLocaleTimeString('zh-CN', { hour12: false }) : '',
-)
+const updatedText = computed(() => (lastUpdated.value ? formatClock(lastUpdated.value) : ''))
 
 const incompleteVars = computed(() => status.value.data?.incomplete ?? [])
 
