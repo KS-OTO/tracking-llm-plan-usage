@@ -50,29 +50,29 @@
     "pinia": "^4.1.0",
     "tdesign-icons-vue-next": "^0.4.12",
     "tdesign-vue-next": "^1.20.11",
-    "vue": "^3.5.45",
+    "vue": "^3.5.46",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.65.0",
-    "@tsconfig/node24": "^24.0.5",
-    "@types/bun": "^1.4.4",
+    "@playwright/test": "^1.65.1",
+    "@tsconfig/node24": "^24.0.6",
+    "@types/bun": "^1.4.5",
     "@types/connect": "^3.4.38",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^26.6.6",
-    "@vitejs/plugin-vue": "^6.0.10",
-    "@vue/test-utils": "^2.5.1",
+    "@vitejs/plugin-vue": "^6.0.11",
+    "@vue/test-utils": "^2.6.0",
     "@vue/tsconfig": "^0.9.1",
     "jiti": "^2.7.0",
-    "jsdom": "^31.0.0",
-    "npm-run-all2": "^9.0.4",
+    "jsdom": "^31.0.1",
+    "npm-run-all2": "^9.1.0",
     "typescript": "~6.0.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@8.3.8000",
     "vite-plugin-vue-devtools": "^8.2.1",
     "vite-plus": "1.7.0",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.14",
-    "wrangler": "^4.159.0"
+    "wrangler": "^4.166.0"
   },
   "engines": {
     "node": "^22.22.2 || >=24.15.0"
