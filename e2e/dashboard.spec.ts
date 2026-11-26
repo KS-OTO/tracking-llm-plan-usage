@@ -154,10 +154,10 @@ test.describe('dashboard smoke', () => {
     const stamp = page.locator('.last-updated')
     await expect(stamp).toContainText('更新于', { timeout: 30_000 })
     await expect(stamp).toContainText('下次刷新')
-    // 自动刷新默认开启：应给出具体时刻，而不是「已暂停」。
+    // 自动刷新默认开启：应给出具体时刻（精确到分钟，全站统一不再出现秒）
     // 断言落在 .num 上：文案被拆成多个 span 后，标签与时间之间的空白由 CSS gap 提供，
     // 不再存在于 textContent 里（写在整段文案上的空格断言会随结构微调而腐坏）
-    await expect(page.locator('.last-updated .num').last()).toHaveText(/^\d{1,2}:\d{2}:\d{2}$/)
+    await expect(page.locator('.last-updated .num').last()).toHaveText(/^\d{1,2}:\d{2}$/)
   })
 
   test('platform cards offer a new-tab 可用模型 docs link', async ({ page }) => {
