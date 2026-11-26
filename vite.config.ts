@@ -1,4 +1,5 @@
 import type { NextFunction } from 'connect'
+import { existsSync, readFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { fileURLToPath, URL } from 'node:url'
 
@@ -24,9 +25,34 @@ import { createAppHandler } from './server/app.ts'
  */
 function resolveServerEnv(): Record<string, string | undefined> {
   if (process.env.SKIP_DOTENV === '1') {
-    return { ...process.env }
+    return withoutDotenvKeys(process.env)
   }
   return { ...loadEnv(process.cwd(), '', ''), ...process.env }
+}
+
+/**
+ * 去掉 `.env` 里出现过的键。
+ *
+ * `SKIP_DOTENV=1` 只挡住了本项目自己的 `loadEnv` 调用，挡不住**运行时**：
+ * `bunx vp dev` / `bun run …` 由 Bun 启动，而 Bun 会自动把 `.env` 灌进 `process.env`。
+ * 于是「跳过 .env」在 CI（仓库里没有 `.env`）成立，在本机却把真实密钥与自定义站点名
+ * 一起漏进 E2E —— 断言默认站点名的用例找不到元素，且测试会真去打上游。
+ * 这里按 `.env` 声明过的**键名**删除（不看值），跳过文件才名副其实。
+ */
+function withoutDotenvKeys(source: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  const env = { ...source }
+  for (const file of ['.env', '.env.local']) {
+    if (!existsSync(file)) {
+      continue
+    }
+    for (const match of readFileSync(file, 'utf8').matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/gm)) {
+      const name = match[1]
+      if (name !== undefined) {
+        delete env[name]
+      }
+    }
+  }
+  return env
 }
 
 /**
